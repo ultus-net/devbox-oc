@@ -37,6 +37,7 @@ run "data disk protected" \
 
 run "docs complete"  ./tests/docs_complete.sh
 run "wake wrapper"   ./tools/tests/test_oc.sh
+run "pipeline shape" ./pipelines/tests/test_pipeline_shape.sh
 
 # The integrity test needs a tarball. Without one it must fail unless the
 # operator opts out, which would make this gate meaningless.

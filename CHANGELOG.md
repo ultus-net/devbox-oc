@@ -28,6 +28,10 @@ All notable changes to this project. One entry per landed change, newest first.
   ingress, no scheduled hard stop, and a destroy-protected data disk.
 - Wake-and-connect wrapper that starts the VM, polls health, then opens the TUI.
 - `tests/verify.sh`, one gate that runs every suite then shellchecks every script.
+- Pull-request verification pipeline that gates on the verification suite: checks a
+  PR pipeline has a `pr:` trigger with path filters, does not reference
+  `azureSubscription`, installs shellcheck, runs `tests/verify.sh`, and installs
+  shellcheck before running tests.
 - Operating runbook covering data disk restore, container and OS rollback,
   tailnet rejoin, snapshot pruning, and the idle gate.
 
