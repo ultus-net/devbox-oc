@@ -47,7 +47,9 @@ else
 fi
 
 # Lint every shell script we own. Prefer a shellcheck on PATH so this works on a
-# company build agent; fall back to the local download used during development.
+# company build agent, then a local download. A missing linter FAILS the gate
+# unless SKIP_LINT=1 is set explicitly: a lint gate that can quietly pass having
+# linted nothing is worse than no lint gate, because it buys false confidence.
 mapfile -t scripts < <(
   find host os image tools tests -name '*.sh' -type f 2>/dev/null
   find host/bin -maxdepth 1 -type f 2>/dev/null
@@ -60,7 +62,17 @@ elif [ -x /tmp/shellcheck-v0.10.0/shellcheck ]; then
   shellcheck_bin=/tmp/shellcheck-v0.10.0/shellcheck
 fi
 
-if [ "${#scripts[@]}" -gt 0 ] && [ -n "$shellcheck_bin" ]; then
+if [ "${#scripts[@]}" -eq 0 ]; then
+  printf '== shellcheck\n   SKIPPED: no scripts found\n'
+elif [ -z "$shellcheck_bin" ]; then
+  if [ "${SKIP_LINT:-0}" = "1" ]; then
+    printf '== shellcheck\n   SKIPPED: SKIP_LINT=1 and no shellcheck available\n'
+  else
+    printf '== shellcheck\n   FAILED: no shellcheck on PATH or in /tmp\n'
+    printf '   install shellcheck, or set SKIP_LINT=1 to skip explicitly\n'
+    rc=1
+  fi
+else
   printf '== shellcheck (%s files)\n' "${#scripts[@]}"
   if "$shellcheck_bin" "${scripts[@]}"; then
     printf '   ok\n'
@@ -68,8 +80,6 @@ if [ "${#scripts[@]}" -gt 0 ] && [ -n "$shellcheck_bin" ]; then
     printf '   FAILED\n'
     rc=1
   fi
-elif [ "${#scripts[@]}" -gt 0 ]; then
-  printf '== shellcheck\n   SKIPPED: no shellcheck on PATH and no local copy\n'
 fi
 
 printf '\n'

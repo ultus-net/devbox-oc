@@ -170,8 +170,11 @@ resource "azurerm_linux_virtual_machine" "this" {
 
   lifecycle {
     precondition {
-      condition     = !can(regex("placeholder|__UNSET__|AAAA\\.\\.\\.", file("${path.module}/../os/butane/ucore.ign")))
-      error_message = "os/butane/ucore.ign still holds placeholder values. Regenerate it with ./os/butane/build.sh and real SSH key, vault and ACR values."
+      # Catches a config that was never regenerated. The SSH key is matched by its
+      # trailing comment field, because a base64 key contains no literal dots, so a
+      # pattern like AAAA... can never match one.
+      condition     = !can(regex("placeholder|__UNSET__|devbox-placeholder|00000000-0000-0000-0000-000000000000", file("${path.module}/../os/butane/ucore.ign")))
+      error_message = "os/butane/ucore.ign still holds placeholder values (dummy key, dummy vault, or a zero subscription id). Regenerate it with ./os/butane/build.sh using real values."
     }
   }
 
