@@ -41,6 +41,27 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- Six guard defects from the sixth review round, all reproduced by mutation before
+  and after the fix. `test_quadlet_persistence.sh` matched a path by substring and
+  did not require a write, so it accepted a `chmod` line, a bare `echo` mention, a
+  writer for `${OUT_FILE}_BACKUP`, and a writer for a longer path; three rounds of
+  regex hardening had each fixed one shape and left the class. It now asserts a
+  decidable contract: every `EnvironmentFile=` the quadlet loads must equal either
+  the path `oc-secrets` declares as `OUT_FILE` (quotes, `export`, and a `:-`
+  fallback normalised) or an exact Ignition storage path, and the writer must still
+  carry a write through that variable. The stated limitation is that this proves
+  the reader and the declared writer agree, not that the writer's code path is
+  reached at runtime. The Ignition branch had been computed into a variable nothing
+  read, so it never counted at all. `test_autorebase.sh` and
+  `test_units_have_scripts.sh` derived `enabled` from a hardcoded indent and a
+  line-end anchor, so `enabled: yes` and `enabled: true  # comment` failed while a
+  decoy at the wrong depth could pass; both now derive the key indent from the
+  unit's own `- name:` line and accept any YAML boolean spelling with an optional
+  trailing comment. `test_units_load_their_env.sh` counted a `NAME=x` line inside a
+  heredoc body as a default; heredoc bodies are stripped before assignments are
+  read, column-zero assignments are parsed per semicolon-separated statement, and
+  structural judgement runs on code with expansions and quoted strings removed, so
+  a brace in an expansion is no longer mistaken for a shell block.
 - Five gaps from the fifth review round, one of them a regression introduced by the
   round before. `test_units_load_their_env.sh` had been widened to accept any
   indented assignment as a local default, so `if false; then VAR=x; fi` counted as

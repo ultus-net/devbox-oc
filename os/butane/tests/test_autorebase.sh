@@ -44,6 +44,26 @@ section_of() { printf '%s\n' "$1" | awk -v want="$2" '
   on { print }
 '; }
 
+# The unit-level `enabled:` key, wherever the unit's own indent puts it. A line at
+# the same indent as the `- name:` list item is the unit's YAML; anything deeper is
+# inside `contents: |` and is unit text, not YAML. A hardcoded indent is brittle to
+# a style change, so derive it from the `- name:` line and accept a trailing
+# comment (`enabled: true  # first boot` is valid YAML and compiles to true).
+enabled_flag() {
+  local body="$1" indent value
+  # Keys of the unit mapping sit two spaces past the `- ` list marker.
+  indent="$(printf '%s\n' "$body" | sed -n '1s/^\([[:space:]]*\)- name:.*/\1  /p')"
+  [ -n "$indent" ] || indent="      "
+  value="$(printf '%s\n' "$body" \
+    | sed -n "s/^${indent}enabled:[[:space:]]*\(true\|false\|yes\|no\)[[:space:]]*\(#.*\)\{0,1\}$/\1/p" \
+    | head -1)"
+  case "$value" in
+    true|yes) printf 'true\n' ;;
+    false|no) printf 'false\n' ;;
+    *) return 1 ;;
+  esac
+}
+
 unsigned="$(block_of ucore-unsigned-autorebase.service)" \
   || fail "ucore-unsigned-autorebase.service is not in the Ignition config"
 signed="$(block_of ucore-signed-autorebase.service)" \
@@ -56,10 +76,10 @@ for pair in "unsigned:$unsigned" "signed:$signed"; do
   unit_sec="$(section_of "$body" Unit)"
   [ -n "$service" ] || fail "${label} autorebase unit has no [Service] section"
   [ -n "$unit_sec" ] || fail "${label} autorebase unit has no [Unit] section"
-  # The unit-level key, not any line in the block. A `enabled: true` line inside
+  # The unit-level key, not any line in the block. An `enabled: true` line inside
   # `contents: |` is unit text, not YAML, and satisfies a whole-block grep while
-  # Butane renders no enabled flag at all. The key sits at exactly six spaces.
-  printf '%s\n' "$body" | grep -Eq '^      enabled: true[[:space:]]*$' \
+  # Butane renders no flag at all.
+  [ "$(enabled_flag "$body" || true)" = "true" ] \
     || fail "${label} autorebase unit is present but not enabled"
   directive_fields "$service" 'ExecStart=/usr/bin/rpm-ostree rebase' \
     | grep -q 'rpm-ostree\|ostree-' \

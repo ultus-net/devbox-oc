@@ -79,12 +79,33 @@ if [ -f "$bu" ]; then
   #
   # A unit with no `enabled:` key is not enabled, so the absent case is compared
   # too: skipping it let the artifact enable a unit the source never enables.
+  #
+  # The key's indent is derived from the unit's own `- name:` line plus two, and a
+  # trailing comment is allowed, because both are valid YAML that compiles to the
+  # same flag. A fixed indent or a line-end anchor turns a style change into a
+  # false failure, and a bare `[[:space:]]*` accepts `enabled: true` inside the
+  # `contents: |` block, which is unit text rather than YAML.
   while read -r name; do
     [ -n "$name" ] || continue
     want="$(printf '%s\n' "$units_block" \
       | awk -v u="    - name: ${name}" '$0==u{on=1;next} /^    - name: /{on=0} on' \
-      | sed -n 's/^[[:space:]]*enabled:[[:space:]]*\(true\|false\)[[:space:]]*$/\1/p' | head -1)"
-    want="${want:-false}"
+      | awk '
+          NR == 1 {
+            match($0, /^[[:space:]]*/)
+            key = substr($0, 1, RLENGTH)
+          }
+          index($0, key "enabled:") == 1 {
+            rest = substr($0, length(key) + length("enabled:") + 1)
+            sub(/#.*/, "", rest)
+            gsub(/[[:space:]]/, "", rest)
+            print rest
+            exit
+          }' \
+      | head -1)"
+    case "$want" in
+      true|yes) want=true ;;
+      *) want=false ;;
+    esac
     got="$(jq -r --arg n "$name" \
       '.systemd.units[] | select(.name == $n) | (.enabled // false)' "$ign")"
     [ "$got" = "$want" ] \
@@ -96,11 +117,11 @@ if [ -f "$bu" ]; then
   # file contents. Only checked when the compiler is available, since the gate
   # must run on a machine without one.
   if [ -n "${BUTANE:-}" ] && [ -x "${BUTANE}" ]; then
-    # Build inside the workspace, not the system temp dir: the compile writes a
-    # staged sibling of the target, and the trap has to remove both. A signal
-    # that skips the trap (SIGKILL) still leaves them, but every catchable path
-    # cleans up.
-    reprodir="$(mktemp -d ./ign-repro.XXXXXX)"
+    # Anchor the scratch directory to the Ignition file's own directory, not to
+    # $PWD: the compile writes a staged sibling of its target, and the trap then
+    # has both in one place it can remove. Anchoring to $PWD leaves the directory
+    # outside the repo when the suite is run from a parent directory.
+    reprodir="$(mktemp -d "$(dirname "$ign")/ign-repro.XXXXXX")"
     trap 'rm -rf "$reprodir"' EXIT
     repro="$reprodir/repro.ign"
     if ! "$(dirname "$bu")/build-placeholder.sh" "$repro" >/dev/null 2>&1; then

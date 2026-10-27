@@ -160,6 +160,73 @@ def required_vars(exec_path):
     return set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):\?", text))
 
 
+def strip_heredocs(text):
+    """Drop heredoc bodies, which are data rather than code.
+
+    A `LOCATION=westeurope` line inside a heredoc is text written to a file or
+    stdout, not an assignment, so counting it as a default hides a variable that is
+    never set. oc-snapshot already uses a heredoc, so this is not hypothetical.
+    """
+    out = []
+    delimiter = None
+    strip_tabs = False
+    for line in text.splitlines():
+        if delimiter is not None:
+            candidate = line.lstrip("\t") if strip_tabs else line
+            if candidate == delimiter:
+                delimiter = None
+            out.append("# heredoc body")
+            continue
+        out.append(line)
+        match = re.search(r"<<(-?)\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2", line)
+        if match:
+            strip_tabs = match.group(1) == "-"
+            delimiter = match.group(3)
+    return "\n".join(out)
+
+
+def code_only(line):
+    """The line with expansions and quoted strings removed.
+
+    Structural judgement has to run on code, not on data. `REGISTRY="${ACR_NAME}
+    .azurecr.io"` contains a brace and is not a block, and `echo "if you like"`
+    contains a keyword and is not a conditional, so a raw substring test misreads
+    both.
+    """
+    previous = None
+    while previous != line:
+        previous = line
+        line = re.sub(r"\$\{[^{}]*\}", "", line)
+    line = re.sub(r"\$[A-Za-z_][A-Za-z0-9_]*", "", line)
+    line = re.sub(r"'[^']*'", "''", line)
+    line = re.sub(r'"(\\.|[^"\\])*"', '""', line)
+    return line
+
+
+def top_level_assignments(text):
+    """Names assigned by a statement that runs unconditionally.
+
+    Only a line at column zero can run unconditionally, and only its semicolon-
+    separated segments that are plain assignments or `export`/`readonly` count.
+    A line carrying a control-flow keyword, or a block brace, is a conditional or
+    a function body, so its assignments do not supply a value on every path.
+    """
+    names = set()
+    for line in text.splitlines():
+        if not line or line[0].isspace() or line.lstrip().startswith("#"):
+            continue
+        code = code_only(line)
+        if re.search(r"\b(if|then|else|elif|fi|for|while|until|do|done|case|esac|function)\b", code):
+            continue
+        if "{" in code or "}" in code:
+            continue
+        for segment in line.split(";"):
+            match = re.match(r"\s*(?:export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)=", segment)
+            if match:
+                names.add(match.group(1))
+    return names
+
+
 def unsettable_vars(exec_path):
     """Variables a script reads with no usable local fallback.
 
@@ -186,17 +253,18 @@ def unsettable_vars(exec_path):
     # requirements are satisfied by something outside this config.
     if re.search(r'^\s*\.\s+"?\$\{?[A-Z_]', text, re.M):
         return set()
+    # Heredoc bodies are data, so strip them before reading assignments.
+    text = strip_heredocs(text)
     read = set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", text))
-    # A local default is an assignment at column zero: bare, `export`, or
-    # `readonly`. The column-zero requirement is the load-bearing part. An
-    # indented assignment sits in a conditional branch, so it does not run on
+    # Names a statement assigns unconditionally. Heredoc text is already gone, and
+    # an assignment inside a conditional does not count, because it does not run on
     # every path and cannot supply the value a top-level read needs.
-    local = set(re.findall(
-        r"^(?:export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)=", text, re.M))
-    # `local` and `declare` are function-scoped declarations, conventionally
-    # indented inside the function that reads the name, so they count at any
-    # indent and after a brace on a one-line function. Restricting them to column
-    # zero rejects ordinary shell.
+    local = top_level_assignments(text)
+    # `local` and `declare` are function-scoped, so an indented one only helps a read
+    # inside that function. This scanner cannot follow that, so it accepts them at
+    # any indent, and a top-level read of a name only a function assigns is reported.
+    # That false failure is deliberate: it is visible on the first run, while a
+    # silent unset is not. No shipped script hits it.
     local |= set(re.findall(
         r"(?:^|[\s;{])(?:local|declare)\s+(?:-\w+\s+)*([A-Z_][A-Z0-9_]*)=", text, re.M))
     local |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):=[^}]*\}", text))
