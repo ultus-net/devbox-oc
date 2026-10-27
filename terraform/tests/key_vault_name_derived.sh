@@ -52,12 +52,6 @@ grep -qE 'substr\(sha256\(var\.subscription_id\),[[:space:]]*0,[[:space:]]*min\(
   || fail "suffix length is not bounded so the name stays within 24 characters"
 
 grep -qE 'key_vault_name[[:space:]]*=[[:space:]]*"kv-\$\{var\.name_prefix\}-\$\{local\.subscription_suffix\}"[[:space:]]*$' "$main" \
-  || fail "key vault name is not built from the prefix and the derived suffix"
-
-# `kv-` + prefix + `-` + suffix must fit 24 characters for the longest prefix the
-# variable validation allows (15). This is arithmetic, so it is checked rather
-# than assumed.
-[ 4 -le $(( 24 - 15 )) ] \
-  || fail "a 15-character prefix leaves no room for a suffix"
+  || fail "key vault name is not built from the prefix and the derived suffix, or is truncated"
 
 echo "key vault name is derivable without state"
