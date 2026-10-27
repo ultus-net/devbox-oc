@@ -3,7 +3,9 @@
 set -euo pipefail
 ref="${1:?usage: smoke.sh <image-ref>}"
 
-run() { podman run --rm --entrypoint "" "$ref" "$@"; }
+ENGINE="${ENGINE:-podman}"
+
+run() { "$ENGINE" run --rm --entrypoint "" "$ref" "$@"; }
 
 # 1. The binary exists and runs on this base's libc.
 run opencode --version | grep -q '^opencode v'

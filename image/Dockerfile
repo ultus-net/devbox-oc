@@ -14,7 +14,7 @@
 # Pin by DIGEST. The `46` tag currently resolves to content labelled
 # `org.opencontainers.image.version: rawhide`, so the tag is not a
 # reliable version signal.
-ARG BASE=fedora-toolbox@sha256:2c8a6048963d9006e0d5d01399cb0817f073ccf2e181b97db300db29d1c57a3f
+ARG BASE=registry.fedoraproject.org/fedora-toolbox@sha256:2c8a6048963d9006e0d5d01399cb0817f073ccf2e181b97db300db29d1c57a3f
 
 FROM ${BASE}
 
@@ -54,7 +54,7 @@ RUN set -eux; \
     dnf clean all; \
     url="https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-${OC_VERSION}.tgz"; \
     curl -fsSL --retry 3 --output /tmp/oc.tgz "$url"; \
-    echo "${OC_SHA512}  /tmp/oc.tgz" | base64 -d | od -An -tx1 | tr -d ' \n' > /tmp/oc.sha512.hex; \
+    printf '%s' "${OC_SHA512}" | base64 -d | od -An -tx1 | tr -d ' \n' > /tmp/oc.sha512.hex; \
     actual="$(sha512sum /tmp/oc.tgz | cut -d' ' -f1)"; \
     expected="$(cat /tmp/oc.sha512.hex)"; \
     if [ "$actual" != "$expected" ]; then \
@@ -68,7 +68,8 @@ RUN set -eux; \
     rm /tmp/oc.tgz /tmp/oc.sha512.hex; \
     opencode --version
 
-RUN install -d -m 0755 /etc/containers/registries.conf.d && \
+RUN set -eux; \
+    install -d -m 0755 /etc/containers/registries.conf.d && \
     printf '%s\n' '[registries.search]' 'registries = ["docker.io"]' \
       > /etc/containers/registries.conf.d/010-devbox.conf
 
