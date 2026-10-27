@@ -18,14 +18,22 @@ API="${API:-http://127.0.0.1:4096}"
 ENV_FILE="${ENV_FILE:-/etc/opencode/env}"
 VM_ID_FILE="${VM_ID_FILE:-/etc/devbox/vm-resource-id}"
 STATE="${STATE:-/var/lib/oc-idle/last-busy}"
+PIN_FILE="${PIN_FILE:-/var/lib/oc-idle/pin}"
 IDLE_MIN="${IDLE_MIN:-45}"
 BOOT_GRACE="${BOOT_GRACE:-900}"
 DRY_RUN="${DRY_RUN:-0}"
+UPTIME_OVERRIDE="${UPTIME_OVERRIDE:-}"
 IMDS="http://169.254.169.254/metadata/identity/oauth2/token"
 
 mkdir -p "$(dirname "$STATE")"
 [ -r "$ENV_FILE" ] || { echo "oc-idle: no env file" >&2; exit 0; }
 [ -r "$VM_ID_FILE" ] || { echo "oc-idle: no vm id file" >&2; exit 0; }
+
+# Operator escape hatch. Work the five API signals cannot see lives behind this.
+if [ -e "$PIN_FILE" ]; then
+  printf '%s\n' "$(date +%s)" > "$STATE"
+  exit 0
+fi
 
 # shellcheck disable=SC1090
 . "$ENV_FILE"
@@ -35,19 +43,31 @@ VM_ID="$(cat "$VM_ID_FILE")"
 
 q() { curl -fsS -m 10 -H "Authorization: Bearer $PW" "$API$1"; }
 
-# Five independent signals that each mean "do not stop".
+# Five independent signals that each mean "do not stop". A signal that cannot be
+# read aborts the count: jq prints nothing for empty input, and arithmetic on
+# that empty value silently counts zero, which reads as idle and stops the box.
 count_busy() {
-  local n=0
-  n=$(( n + $(q /api/session/active      | jq '.data | length') ))
-  n=$(( n + $(q /api/shell               | jq '[.data[] | select(.status == "running")] | length') ))
-  n=$(( n + $(q /api/pty                 | jq '[.data[] | select(.status == "running")] | length') ))
-  n=$(( n + $(q /api/permission/request  | jq '(.data // []) | length') ))
-  n=$(( n + $(q /api/form                | jq '(.data // []) | length') ))
+  local n=0 x
+  x="$(q /api/session/active      | jq '.data | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/shell               | jq '[.data[] | select(.status == "running")] | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/pty                 | jq '[.data[] | select(.status == "running")] | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/permission/request  | jq '(.data // []) | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/form                | jq '(.data // []) | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
   printf '%s' "$n"
 }
 
 now="$(date +%s)"
-uptime_s="$(cut -d. -f1 /proc/uptime)"
+uptime_s="${UPTIME_OVERRIDE:-$(cut -d. -f1 /proc/uptime)}"
 
 # Treat boot as busy. The container is still coming up and would look idle.
 if [ "$uptime_s" -lt "$BOOT_GRACE" ]; then
@@ -55,7 +75,8 @@ if [ "$uptime_s" -lt "$BOOT_GRACE" ]; then
   exit 0
 fi
 
-if [ "$(count_busy)" -gt 0 ]; then
+busy="$(count_busy)" || { printf '%s\n' "$now" > "$STATE"; exit 0; }
+if [ "$busy" -gt 0 ]; then
   printf '%s\n' "$now" > "$STATE"
   exit 0
 fi
