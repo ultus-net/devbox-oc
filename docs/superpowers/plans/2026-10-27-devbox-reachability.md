@@ -38,7 +38,7 @@ Checked against upstream sources in this session, so a reviewer can re-check the
 | ucore is a bootc image | `containers.bootc: 1` label | design doc verified-facts table |
 | `image-builder` can emit a VHD from a bootc image | `vhd` is a listed disk image type, `filename: disk.vhd` | `osbuild/image-builder` `data/distrodefs/bootc-generic/imagetypes.yaml` |
 | The legacy `bootc-image-builder` container is a compatibility shim | new work should use `image-builder` | `osbuild/image-builder` `bootc-image-builder/README.md` |
-| ucore's first install rebases twice | `ucore-unsigned-autorebase.service` then `ucore-signed-autorebase.service` | `ublue-os/ucore` `examples/ucore-autorebase.butane` |
+| `az image create` accepts a Hyper-V generation | `--hyper-v-generation` is a documented argument | Azure CLI `vm/_params.py`, image create |
 
 ## Batches
 
@@ -83,16 +83,25 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 
 # tailscaled is a shipped unit, not one we write. Enabling it needs a unit
 # entry with no contents block, or the contents would shadow the real unit.
-block="$(awk '/- name: tailscaled.service/,/^    - name: |^systemd:/' "$bu")"
-[ -n "$block" ] || fail "tailscaled.service is not enabled in the Ignition config"
-printf '%s\n' "$block" | grep -Eq '^\s+enabled: true\s*$' \
+#
+# The block is taken by line number, not an awk range: the range end pattern
+# `^    - name: ` matches the start line itself, so a range collapses to one line
+# and the enabled check reads it as absent.
+start="$(grep -n -- '- name: tailscaled.service' "$bu" | head -1 | cut -d: -f1 || true)"
+[ -n "$start" ] || fail "tailscaled.service is not enabled in the Ignition config"
+block="$(tail -n "+$start" "$bu" | awk 'NR > 1 && /^    - name: /{exit} {print}')"
+[ -n "$block" ] || fail "tailscaled.service block is empty"
+printf '%s\n' "$block" | grep -Eq '^[[:space:]]+enabled: true[[:space:]]*$' \
   || fail "tailscaled.service is present but not enabled"
-printf '%s\n' "$block" | grep -q 'contents:' \
-  && fail "tailscaled.service has a contents block, which would shadow the shipped unit"
+if printf '%s\n' "$block" | grep -q 'contents:'; then
+  fail "tailscaled.service has a contents block, which would shadow the shipped unit"
+fi
 
 # Ordering, not just presence. tailscale up contacts the coordination server, so
 # it needs a socket that is already listening.
-net="$(awk '/- name: oc-tailnet.service/,/^    - name: |^$/' "$bu")"
+nstart="$(grep -n -- '- name: oc-tailnet.service' "$bu" | head -1 | cut -d: -f1 || true)"
+[ -n "$nstart" ] || fail "oc-tailnet.service not found in $bu"
+net="$(tail -n "+$nstart" "$bu" | awk 'NR > 1 && /^    - name: /{exit} {print}')"
 printf '%s\n' "$net" | grep -Eq 'After=.*tailscaled\.service' \
   || fail "oc-tailnet.service does not start after tailscaled.service"
 printf '%s\n' "$net" | grep -Eq 'Requires=.*tailscaled\.service|Wants=.*tailscaled\.service' \
@@ -201,9 +210,10 @@ grep -q 'var\.tailscale_authkey' "$main" \
 
 # The secret name is a contract with host/bin/oc-tailnet-up, which defaults to
 # TS_AUTHKEY_SECRET=tailscale-authkey. Renaming one side silently breaks the join.
-block="$(awk '/resource "azurerm_key_vault_secret" "tailscale_authkey"/,/^}/' "$main")"
-[ -n "$block" ] || fail "no azurerm_key_vault_secret.tailscale_authkey resource"
-printf '%s\n' "$block" | grep -Eq 'name\s*=\s*"tailscale-authkey"' \
+start="$(grep -n 'resource "azurerm_key_vault_secret" "tailscale_authkey"' "$main" | head -1 | cut -d: -f1 || true)"
+[ -n "$start" ] || fail "no azurerm_key_vault_secret.tailscale_authkey resource"
+block="$(tail -n "+$start" "$main" | awk 'NR > 1 && /^}/{exit} {print}')"
+printf '%s\n' "$block" | grep -Eq 'name[[:space:]]*=[[:space:]]*"tailscale-authkey"' \
   || fail "secret name is not the one oc-tailnet-up reads"
 printf '%s\n' "$block" | grep -q 'var\.tailscale_authkey' \
   || fail "the secret does not carry the variable's value"
@@ -433,38 +443,42 @@ git commit -m "fix(os): build the image from ucore, not plain Fedora CoreOS"
 
 ---
 
-### Task 4: D4 Remove the second environment file the quadlet reads
+### Task 4: D4 Guard every quadlet EnvironmentFile against having no writer
 
-**Files:** `host/quadlet/opencode.container` (modify), `os/butane/ucore.bu` (modify), `host/tests/test_quadlet_persistence.sh` (extend)
+**Files:** `host/tests/test_quadlet_persistence.sh` (extend)
 
-**Interfaces:** the container reads one env file, `/etc/opencode/env`, written by `oc-secrets`.
+**Interfaces:** none. A guard only.
 
-The defect: the quadlet declares `EnvironmentFile=/etc/opencode/env`, and
-`oc-secrets` writes exactly that. Nothing writes a second file. This entry is
-correct as written; the task exists to pin the contract, because the same class of
-bug (a config referencing a file no component produces) caused D2, and a guard is
-cheaper than the next occurrence.
+The quadlet's `EnvironmentFile=/etc/opencode/env` is correct: `oc-secrets` writes
+exactly that path. But the same class of defect as D2, a config naming something no
+component produces, would fail at boot as an unset variable rather than a missing
+file. This pins the contract before the next occurrence, and pins the password
+variable name to both sides.
 
 - [ ] **Step 1: Extend the quadlet test**
 
 Add to `host/tests/test_quadlet_persistence.sh`, before the final `echo`:
 
 ```bash
-# Every EnvironmentFile the quadlet names must be written by a script we ship.
+# Every EnvironmentFile the quadlet names must be written by a component we ship.
 # A reference to a file nothing produces is how the tailnet key went missing, and
-# the failure surfaces at boot as an unreadable variable, not as a missing file.
+# the failure surfaces at boot as a variable that is merely unset, not as a
+# missing-file error.
 while read -r path; do
-  grep -rqF "$path" host/bin os/butane/ucore.bu \
+  grep -rqF "$path" "$(dirname "$q")/../bin" "$(dirname "$q")/../../os/butane/ucore.bu" \
     || fail "no component writes the quadlet's EnvironmentFile: $path"
 done < <(grep -E '^EnvironmentFile=' "$q" | cut -d= -f2)
 
-# The container's password variable comes from the env file, so the writer and the
-# reader must agree on the name.
-grep -q '^OPENCODE_PASSWORD=' host/bin/oc-secrets \
+# The container's password comes from that file, so the writer and the reader must
+# agree on the name. oc-secrets writes it with printf rather than a literal line,
+# so match the variable name in a write, not a line start.
+grep -q "OPENCODE_PASSWORD=" "$(dirname "$q")/../bin/oc-secrets" \
   || fail "oc-secrets does not write OPENCODE_PASSWORD"
+grep -q 'OPENCODE_PASSWORD' "$(dirname "$q")/../bin/oc-idle-check" \
+  || fail "oc-idle-check does not read the password oc-secrets writes"
 ```
 
-- [ ] **Step 2: Run it to verify it passes for the right reason**
+- [ ] **Step 2: Run it to prove it passes for the right reason**
 
 Run: `./host/tests/test_quadlet_persistence.sh`
 Expected: `persistent data is on the data disk`
@@ -474,19 +488,10 @@ Then prove the guard is not vacuous: temporarily change the quadlet to
 `FAIL: no component writes the quadlet's EnvironmentFile: /etc/opencode/missing.env`.
 Revert the change. A guard never observed failing is not a guard.
 
-- [ ] **Step 3: Fix the reader that disagrees with the writer, if any**
-
-`host/bin/oc-secrets` writes `OPENCODE_PASSWORD`. `host/bin/oc-idle-check` sources
-the file and reads `OPENCODE_PASSWORD`. If either has drifted, align the reader to
-the writer, not the other way round.
-
-Check: `grep -n 'OPENCODE_PASSWORD' host/bin/oc-secrets host/bin/oc-idle-check`
-Expected: both present, same name, no fallback default in the reader.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add host/quadlet/opencode.container host/tests/test_quadlet_persistence.sh
+git add host/tests/test_quadlet_persistence.sh
 git commit -m "test(host): assert every quadlet EnvironmentFile has a writer"
 ```
 
