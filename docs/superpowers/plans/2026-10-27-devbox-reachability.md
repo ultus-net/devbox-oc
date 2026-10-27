@@ -19,7 +19,7 @@ that were built and tested in isolation.
 |---|---|---|---|
 | 1 | `tailscaled` is never enabled, and nothing orders it before `oc-tailnet.service` | `tailscale up` fails at boot, so the box is unreachable over the tailnet. Only a Bastion session recovers it. | P1 |
 | 2 | `var.tailscale_authkey` is declared and documented, but no resource ever writes it to Key Vault | `oc-tailnet-up` reads a secret that does not exist, so defect 1's failure becomes permanent rather than transient | P1 |
-| 3 | `os/build-os-image.sh` publishes Fedora's plain CoreOS VHD, not ucore | The VM boots plain FCOS. Every ucore assumption breaks: podman is `docker`, `tailscaled` is absent, `rpm-ostreed-automatic.timer` is not enabled, and the `bootc` model the design depends on is not what runs | P1 |
+| 3 | Nothing rebases the box off the Fedora CoreOS image it installs from onto ucore | The VM runs plain FCOS. Every ucore assumption breaks: `tailscaled` is absent, `rpm-ostreed-automatic.timer` is not enabled, and zincati runs in place of ucore's update path | P1 |
 
 Batches D and E below close those. Batch F records what the operator must run,
 unchanged from the follow-on plan.
@@ -37,9 +37,11 @@ Checked against upstream sources in this session, so a reviewer can re-check the
 | ucore enables added services only on request | "most added services are installed but not enabled automatically" | `projectucore.org/docs/services/` |
 | `jq` is in the Fedora CoreOS base | `jq 1.8.1-3.fc44.x86_64` in the lockfile | `coreos/fedora-coreos-config` `manifest-lock.x86_64.json` |
 | ucore is a bootc image | `containers.bootc: 1` label | design doc verified-facts table |
-| `image-builder` can emit a VHD from a bootc image | `vhd` is a listed disk image type, `filename: disk.vhd` | `osbuild/image-builder` `data/distrodefs/bootc-generic/imagetypes.yaml` |
-| The legacy `bootc-image-builder` container is a compatibility shim | new work should use `image-builder` | `osbuild/image-builder` `bootc-image-builder/README.md` |
-| `az image create` accepts a Hyper-V generation | `--hyper-v-generation` is a documented argument | Azure CLI `vm/_params.py`, image create |
+| ucore documents a two-stage first-boot rebase | unverified reference, reboot, then signed reference, reboot | `projectucore.org/docs/rebasing/` |
+| Stage 2 needs a policy that only ucore installs | "its installed signing policy enables the signed-reference step" | same page |
+| The ucore-minimal `stable` tag resolves to the design's digest | `sha256:7906a70e…` | ghcr manifest, checked this session |
+| ucore-minimal is cosign-signed | `.sig` tag resolves to a signature manifest | ghcr tag list, checked this session |
+| The design's digest is **ucore-minimal**, not `ucore` | `ucore` returns 404 for that digest | ghcr manifest, checked this session |
 
 ## Batches
 
@@ -344,167 +346,190 @@ Expected: `Success! The configuration is valid.`
 
 ---
 
-### Task 3: D3 Build the OS image from the ucore image, not plain CoreOS
+### Task 3: D3 Rebase the host onto ucore on first boot
 
-**Files:** `os/build-os-image.sh` (rewrite), `os/tests/test_build_os_image.sh` (extend), `CHANGELOG.md` (modify)
+**Files:** `os/butane/ucore.bu` (modify), `os/butane/tests/test_autorebase.sh` (create), `tests/verify.sh` (modify), `docs/runbook.md` (modify)
 
-**Interfaces:** same outputs. Last stdout line stays a `/providers/Microsoft.Compute/images/...` id, so `pipelines/devbox-os.yml` and the Terraform `os_image_id` contract do not change.
+**Interfaces:** the published Azure image stays Fedora CoreOS, so `os/build-os-image.sh` and the `os_image_id` contract do not change. Ignition gains two units that rebase the box onto ucore and reboot.
 
-The defect: the script downloads `coreos-installer download --stream stable --platform azure`,
-which is Fedora's plain CoreOS VHD. The design consumes ucore. A VM booted from
-that image is not the OS this repo configures: no `tailscaled` package, no
-`podman-restart.service` contract, `zincati` instead of `rpm-ostreed-automatic.timer`.
+The defect: Fedora publishes no ucore Azure VHD, and design decision 1 forbids
+forking ucore. So the box necessarily installs from Fedora's own CoreOS VHD, and
+something has to move it onto ucore. Nothing did. A VM booted from that image runs
+plain FCOS: no `tailscaled` package, zincati instead of `rpm-ostreed-automatic.timer`,
+and none of the assumptions every host unit makes.
 
-ucore publishes no Azure VHD, and the design forbids forking the image. So build
-one from the published container with `image-builder`, which is the supported
-path for turning any bootc image into a disk image.
+The design already records the fix (`design:96`: "two-stage autorebase, two
+reboots, needs network") and accepts the cost (`design:145`). The units were simply
+never written.
 
-- [ ] **Step 1: Extend the test to require the ucore source**
+An earlier draft of this task replaced the build script with an
+`image-builder` step instead. That was wrong twice over: it contradicted the design,
+and it pinned a digest belonging to `ucore-minimal` under the `ucore` repository
+name, which returns 404. The build script is unchanged.
 
-Add to `os/tests/test_build_os_image.sh`, before the final `echo`:
+- [ ] **Step 1: Write the failing test**
 
 ```bash
-# The published image must be derived from ucore, not from plain Fedora CoreOS.
-# A plain FCOS boot gives no tailscaled, no podman autostart contract, and
-# zincati instead of the ucore update path, so every host unit fails quietly.
-grep -q 'ghcr.io/ublue-os/ucore' "$script" \
-  || fail "build script does not reference the ucore image"
-grep -q 'image-builder' "$script" \
-  || fail "build script does not use image-builder to produce a bootc disk image"
-if grep -q 'coreos-installer download' "$script"; then
-  fail "build script still downloads the plain Fedora CoreOS VHD"
-fi
+#!/usr/bin/env bash
+# os/butane/tests/test_autorebase.sh
+#
+# ucore documents a two-stage first-boot rebase: an unverified reference, reboot,
+# then a signed reference, reboot. Stage 2 cannot run first, because the signing
+# policy it needs is only present after booting ucore.
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+bu="${1:-$here/../ucore.bu}"
+fail() { echo "FAIL: $1" >&2; exit 1; }
 
-# The source must be pinned by digest, matching the design's consume-by-digest rule.
-grep -Eq 'ghcr\.io/ublue-os/ucore@sha256:[0-9a-f]{64}' "$script" \
-  || fail "ucore image is not pinned by digest"
+[ -f "$bu" ] || fail "no such file: $bu"
 
-echo "os image is built from the pinned ucore image"
+# Take a unit's block by line number. An awk range whose end pattern matches the
+# start line collapses to one line and reads as absent.
+block_of() {
+  local name="$1" start
+  start="$(grep -n -- "- name: ${name}\$" "$bu" | head -1 | cut -d: -f1 || true)"
+  [ -n "$start" ] || return 1
+  tail -n "+$start" "$bu" | awk 'NR > 1 && /^    - name: /{exit} {print}'
+}
+
+unsigned="$(block_of ucore-unsigned-autorebase.service)" \
+  || fail "ucore-unsigned-autorebase.service is not in the Ignition config"
+signed="$(block_of ucore-signed-autorebase.service)" \
+  || fail "ucore-signed-autorebase.service is not in the Ignition config"
+
+for pair in "unsigned:$unsigned" "signed:$signed"; do
+  label="${pair%%:*}"
+  body="${pair#*:}"
+  printf '%s\n' "$body" | grep -Eq '^[[:space:]]+enabled: true[[:space:]]*$' \
+    || fail "${label} autorebase unit is present but not enabled"
+  printf '%s\n' "$body" | grep -Eq '^[[:space:]]*ExecStart=/usr/bin/rpm-ostree rebase ' \
+    || fail "${label} autorebase unit does not rebase"
+  printf '%s\n' "$body" | grep -Eq '^[[:space:]]*ExecStart=/usr/bin/systemctl reboot[[:space:]]*$' \
+    || fail "${label} autorebase unit does not reboot into the new deployment"
+  printf '%s\n' "$body" | grep -Eq '^[[:space:]]*ExecStart=/usr/bin/touch /etc/ucore-autorebase/' \
+    || fail "${label} autorebase unit writes no marker, so it can reboot-loop"
+done
+
+printf '%s\n' "$unsigned" \
+  | grep -Eq 'rpm-ostree rebase .*ostree-unverified-registry:ghcr\.io/ublue-os/ucore-minimal:stable' \
+  || fail "stage 1 does not rebase to the unverified ucore-minimal reference"
+printf '%s\n' "$signed" \
+  | grep -Eq 'rpm-ostree rebase ostree-image-signed:docker://ghcr\.io/ublue-os/ucore-minimal:stable' \
+  || fail "stage 2 does not rebase to the signed ucore-minimal reference"
+
+printf '%s\n' "$unsigned" | grep -q 'ConditionPathExists=!/etc/ucore-autorebase/unverified' \
+  || fail "stage 1 has no marker condition, so it reruns after it already ran"
+printf '%s\n' "$signed" | grep -q 'ConditionPathExists=/etc/ucore-autorebase/unverified' \
+  || fail "stage 2 does not wait for stage 1's marker"
+printf '%s\n' "$signed" | grep -q 'ConditionPathExists=!/etc/ucore-autorebase/signed' \
+  || fail "stage 2 has no marker condition, so it reruns after it already ran"
+
+grep -Eq '^[[:space:]]*- path: /etc/ucore-autorebase[[:space:]]*$' "$bu" \
+  || fail "the marker directory /etc/ucore-autorebase is not created"
+
+echo "the two-stage ucore autorebase is configured"
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `./os/tests/test_build_os_image.sh`
-Expected: `FAIL: build script does not reference the ucore image`
+Run: `chmod +x os/butane/tests/test_autorebase.sh && ./os/butane/tests/test_autorebase.sh`
+Expected: `FAIL: ucore-unsigned-autorebase.service is not in the Ignition config`
 
-- [ ] **Step 3: Rewrite the build script**
+- [ ] **Step 3: Add the marker directory**
 
-Replace the download-and-upload body of `os/build-os-image.sh` with a
-bootc-image-builder step. Keep the precondition style, the `DRY_RUN` contract, and
-the provenance line. The digest is the design's recorded one.
-
-```bash
-#!/usr/bin/env bash
-# Turn the published ucore bootc image into an Azure managed image.
-#
-# Fedora publishes an Azure VHD for plain CoreOS, and ucore publishes none. Booting
-# plain CoreOS gives a host this repo's Ignition does not match: no tailscaled
-# package, no podman autostart contract, and zincati instead of ucore's update path.
-#
-# image-builder is the supported way to produce a disk image from a bootc image.
-# The source is pinned by digest and consumed unmodified, per design decision 1.
-set -euo pipefail
-
-# Digest recorded in the design's verified-facts table. Bumping it is a deliberate
-# change that rolls every VM, not a routine refresh.
-UCORE_IMAGE="${UCORE_IMAGE:-ghcr.io/ublue-os/ucore@sha256:7906a70efe7482704fdb232c7e5d2a3068a0c5520ef46d3f7f6b9f8fc0e899b9}"
-# Pinned by digest, not `:latest`. The pipeline runs weekly on a cron, so a moving
-# tag would swap the builder underneath an unchanged config and make the published
-# image non-reproducible with nothing in the diff to review.
-IMAGE_BUILDER="${IMAGE_BUILDER:-ghcr.io/osbuild/image-builder-cli@sha256:37b7c22483b03013f54030094683d8af8a83ee642c2a4dc9a51dcd9a79be6b6f}"
-RG="${RG:?RG is required}"
-STORAGE_ACCOUNT="${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
-CONTAINER="${CONTAINER:-images}"
-LOCATION="${LOCATION:-westeurope}"
-DRY_RUN="${DRY_RUN:-0}"
-
-command -v podman >/dev/null || { echo "podman not installed; image-builder needs a privileged container" >&2; exit 1; }
-command -v az >/dev/null || { echo "az not installed" >&2; exit 1; }
-
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
-
-echo "building a vhd from ${UCORE_IMAGE}" >&2
-if [ "$DRY_RUN" != "1" ]; then
-  mkdir -p "$work/output"
-  # --privileged and the container-storage mount are what image-builder documents
-  # for the container path. The output VHD is the only artifact we keep.
-  podman run --rm --privileged \
-    --security-opt label=type:unconfined_t \
-    --volume "$work/output:/output" \
-    --volume /var/lib/containers/storage:/var/lib/containers/storage \
-    "$IMAGE_BUILDER" build \
-    --output-dir /output \
-    --bootc-ref "$UCORE_IMAGE" \
-    vhd
-  vhd="$(find "$work/output" -name '*.vhd' -print -quit)"
-  [ -f "$vhd" ] || { echo "no vhd produced" >&2; exit 1; }
-  # Provenance next to the artifact. This is what an auditor asks for.
-  sha256sum "$vhd" | tee "$vhd.sha256" >&2
-fi
-
-name="devbox-ucore-$(date -u +%Y%m%d)"
-blob="${name}.vhd"
-
-if [ "$DRY_RUN" = "1" ]; then
-  echo "dry run: would build $UCORE_IMAGE and upload to $STORAGE_ACCOUNT/$CONTAINER as $blob"
-  echo "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/${RG}/providers/Microsoft.Compute/images/${name}"
-  exit 0
-fi
-
-az storage blob upload --account-name "$STORAGE_ACCOUNT" -c "$CONTAINER" \
-  -f "$vhd" -n "$blob" --overwrite --only-show-errors
-az image create -g "$RG" -n "$name" --location "$LOCATION" --os-type Linux \
-  --hyper-v-generation V2 \
-  --source "https://${STORAGE_ACCOUNT}.blob.core.windows.net/${CONTAINER}/${blob}" \
-  --only-show-errors -o none
-
-az image show -g "$RG" -n "$name" --query id -o tsv
-```
-
-- [ ] **Step 4: Fix the pipeline's container engine**
-
-`pipelines/devbox-os.yml` installs `coreos-installer` from a pinned image, which is
-no longer used. Delete that step and its comment.
-
-Do not symlink docker to podman. A symlink accepts `--version` and then fails on the
-flags image-builder needs: docker rejects `--security-opt label=type:...` (an SELinux
-option) and has no `/var/lib/containers/storage`. Install real podman instead, and
-print its version so the agent records what actually ran:
+In `os/butane/ucore.bu`, under `storage:`, after the `disks:` block:
 
 ```yaml
-      - script: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends podman
-          podman --version
-        displayName: install podman for image-builder
+  # The autorebase units gate on marker files in this directory. Ignition creates
+  # it, and /etc survives a rebase, so the markers outlive the OS switch they record.
+  directories:
+    - path: /etc/ucore-autorebase
+      mode: 0755
 ```
 
-The `AzureCLI@2` wrapper and its `RG`/`STORAGE_ACCOUNT` exports stay.
+- [ ] **Step 4: Add both units**
+
+In `os/butane/ucore.bu`, after the `podman-auto-update.timer` entry:
+
+```yaml
+    - name: ucore-unsigned-autorebase.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Rebase from FCOS to the ucore image, then reboot
+        ConditionPathExists=!/etc/ucore-autorebase/unverified
+        ConditionPathExists=!/etc/ucore-autorebase/signed
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        Type=oneshot
+        StandardOutput=journal+console
+        ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-unverified-registry:ghcr.io/ublue-os/ucore-minimal:stable
+        ExecStart=/usr/bin/touch /etc/ucore-autorebase/unverified
+        ExecStart=/usr/bin/systemctl disable ucore-unsigned-autorebase.service
+        ExecStart=/usr/bin/systemctl reboot
+        [Install]
+        WantedBy=multi-user.target
+    - name: ucore-signed-autorebase.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Switch to the signed ucore reference, then reboot
+        ConditionPathExists=/etc/ucore-autorebase/unverified
+        ConditionPathExists=!/etc/ucore-autorebase/signed
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        Type=oneshot
+        StandardOutput=journal+console
+        ExecStart=/usr/bin/rpm-ostree rebase ostree-image-signed:docker://ghcr.io/ublue-os/ucore-minimal:stable
+        ExecStart=/usr/bin/touch /etc/ucore-autorebase/signed
+        ExecStart=/usr/bin/systemctl disable ucore-signed-autorebase.service
+        ExecStart=/usr/bin/systemctl reboot
+        [Install]
+        WantedBy=multi-user.target
+```
+
+Do not order stage 1 after any `oc-*` unit. On that first boot the box is still
+plain FCOS, so those units cannot work before the rebase stage 1 performs.
+`network-online.target` is the only ordering it needs.
 
 - [ ] **Step 5: Run the test again**
 
-Run: `./os/tests/test_build_os_image.sh`
-Expected: `os image is built from the pinned ucore image`
+Run: `./os/butane/tests/test_autorebase.sh`
+Expected: `the two-stage ucore autorebase is configured`
 
-- [ ] **Step 6: Record it in the changelog**
+- [ ] **Step 6: Allow the shipped binaries in the existing unit test**
 
-Under `## Unreleased` → `### Fixed`:
+`os/butane/tests/test_units_have_scripts.sh` asserts every `ExecStart` target is a
+file the config provides. `rpm-ostree`, `systemctl` and `touch` ship in the OS
+image, so exempt them from that check, or the new units fail it for a false reason.
 
-```markdown
-- The OS image is now built from the pinned ucore bootc image with
-  `image-builder`, not from Fedora's plain CoreOS VHD. The previous script
-  published an OS without `tailscaled`, without ucore's podman autostart
-  contract, and with zincati in place of ucore's update path.
-```
+- [ ] **Step 7: Add the suite to the gate**
 
-- [ ] **Step 7: Commit**
+In `tests/verify.sh`, after the `tailscale enabled` run:
 
 ```bash
-git add os/build-os-image.sh os/tests/test_build_os_image.sh pipelines/devbox-os.yml CHANGELOG.md
-git commit -m "fix(os): build the image from ucore, not plain Fedora CoreOS"
+run "ucore autorebase"    ./os/butane/tests/test_autorebase.sh
 ```
+
+- [ ] **Step 8: Regenerate the committed Ignition**
+
+```bash
+./os/butane/build-placeholder.sh
+jq -r '.systemd.units[] | select(.name == "ucore-signed-autorebase.service") | .enabled' os/butane/ucore.ign
+```
+
+Expected: `true`. Terraform ships the `.ign`, not the `.bu`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add os/butane/ucore.bu os/butane/ucore.ign os/butane/tests/test_autorebase.sh \
+        os/butane/tests/test_units_have_scripts.sh tests/verify.sh docs/runbook.md
+git commit -m "fix(os): rebase the host onto ucore on first boot"
+```
+
 
 ---
 

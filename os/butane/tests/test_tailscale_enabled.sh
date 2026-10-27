@@ -33,12 +33,17 @@ fi
 
 # Ordering, not just presence. tailscale up contacts the coordination server, so
 # it needs a socket that is already listening.
+#
+# Both patterns are anchored to the directive, not the bare word. An unanchored
+# grep is satisfied by a commented-out `#After=...` line, which would report
+# success while the unit still starts before the daemon.
 nstart="$(grep -n -- '- name: oc-tailnet.service' "$bu" | head -1 | cut -d: -f1 || true)"
 [ -n "$nstart" ] || fail "oc-tailnet.service not found in $bu"
 net="$(tail -n "+$nstart" "$bu" | awk 'NR > 1 && /^    - name: /{exit} {print}')"
-printf '%s\n' "$net" | grep -Eq 'After=.*tailscaled\.service' \
+printf '%s\n' "$net" | grep -Eq '^[[:space:]]*After=.*tailscaled\.service' \
   || fail "oc-tailnet.service does not start after tailscaled.service"
-printf '%s\n' "$net" | grep -Eq 'Requires=.*tailscaled\.service|Wants=.*tailscaled\.service' \
+printf '%s\n' "$net" \
+  | grep -Eq '^[[:space:]]*(Requires|Wants)=.*tailscaled\.service' \
   || fail "oc-tailnet.service does not want or require tailscaled.service"
 
 echo "tailscaled is enabled and orders the tailnet join"

@@ -16,9 +16,9 @@ All notable changes to this project. One entry per landed change, newest first.
   on the host.
 - Image pipeline that builds, smoke-gates before promotion, promotes to `:prod`,
   and records the resolved digest for rollback.
-- OS image publish script and pipeline, building a VHD from the pinned ucore
-  bootc image with `image-builder`. Fedora publishes no CoreOS image in the Azure
-  marketplace, and Fedora's own VHD is plain CoreOS rather than ucore.
+- OS image publish script and pipeline, using Fedora's own Azure VHD because
+  Fedora publishes no CoreOS image in the Azure marketplace, plus the two-stage
+  Ignition autorebase that lands the box on ucore on first boot.
 - Butane source and a compiled Ignition document, plus the podman quadlet that
   runs the container with every persistent path on the data disk.
 - Idempotent tailnet join with a durable, non-ephemeral node and SSH over tailnet
@@ -45,15 +45,20 @@ All notable changes to this project. One entry per landed change, newest first.
   enabled, so the tailnet join had no daemon to talk to and the box was
   Bastion-only. The Tailscale auth key was a required variable that no resource
   wrote to Key Vault, and `oc-tailnet.service` never loaded the env file that names
-  the vault, so the join ran with no key source at all. And the OS pipeline
-  published Fedora's plain CoreOS VHD instead of ucore, so the host ran an OS with
-  no `tailscaled` package, zincati in place of ucore's update path, and none of the
-  assumptions every host unit makes. Each now has a guard that was observed failing
-  before its fix.
+  the vault, so the join ran with no key source at all. And nothing ever rebased the
+  box off the Fedora CoreOS image it installs from onto ucore, so the host ran an OS
+  with no `tailscaled` package, zincati in place of ucore's update path, and none of
+  the assumptions every host unit makes. Each defect now has a guard, and every one
+  of those guards was observed failing before its fix.
 - The quadlet's `EnvironmentFile` is now guarded: every file it names must have a
-  component that writes it, and the password variable must match on both sides.
-  A config pointing at a file nothing produces is how the tailnet key went
-  missing, and it fails at boot as an unset variable rather than a missing file.
+  component that writes it. A config pointing at a file nothing produces is how the
+  tailnet key went missing, and it fails at boot as an unset variable rather than a
+  missing file. The guard matches an uncommented line, so commenting one out does
+  not satisfy it.
+- The Tailscale secret name is now checked across the three places that must agree:
+  the Ignition build default, the Terraform secret, and the compiled `ucore.ign`
+  that Terraform actually ships. Checking only the source would leave a fix that
+  never reaches the host.
 - The Key Vault name is derived from the subscription id instead of a random
   suffix, so Ignition can be generated before the first apply. A random suffix
   made first deployment circular: Ignition needs the name, the name needed the
@@ -64,9 +69,8 @@ All notable changes to this project. One entry per landed change, newest first.
   accept. Corrected to `on_these_days`.
 - Persistent session data was mounted from a podman named volume, which lands on
   the OS disk and would be lost on every VM rebuild. Now bind mounts under `/srv`.
-- `get.coreos-installer.dev` does not resolve, and Fedora's Azure VHD is plain
-  CoreOS rather than ucore. The OS pipeline now builds from the pinned ucore
-  image with `image-builder`, and no longer uses `coreos-installer` at all.
+- `get.coreos-installer.dev` does not resolve, so the OS pipeline extracts the
+  installer from the pinned upstream container instead of downloading it.
 - Four test assertions could not fail: a fake curl that assumed the URL was the
   last argument, JSON defaults that broke on brace expansion, a pipeline subshell
   that swallowed `exit 1`, and a digest check that returned `echo`'s status.

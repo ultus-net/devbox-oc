@@ -16,19 +16,25 @@ jobs:
       storageAccount: stdevboxocimages
       location: westeurope
     steps:
-      # Install real podman. A symlink from docker would accept `--version` and then
-      # fail on the flags image-builder needs: docker rejects `--security-opt
-      # label=type:...` (SELinux) and has no `/var/lib/containers/storage`.
-      # The version is printed so the agent records what actually ran.
+      # get.coreos-installer.dev does not resolve (verified: NXDOMAIN), so the
+      # upstream container is the source. Pinned per the no-latest constraint.
+      #
+      # Extract into a directory that persists across steps and advertise it with
+      # the Azure Pipelines logging command, not $GITHUB_PATH, which does not exist
+      # here. build-os-image.sh runs in a later step and needs the binary on PATH.
       - script: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends podman
-          podman --version
-          podman info --format '{{.Host.Security.SELinuxEnabled}}' || true
-        displayName: install podman for image-builder
+          bindir="$(Pipeline.Workspace)/bin"
+          mkdir -p "$bindir"
+          docker run --rm --entrypoint cat \
+            quay.io/coreos/coreos-installer:v0.27.0 /usr/bin/coreos-installer \
+            > "$bindir/coreos-installer"
+          chmod +x "$bindir/coreos-installer"
+          echo "##vso[task.prependpath]$bindir"
+          "$bindir/coreos-installer" --version
+        displayName: install coreos-installer from the pinned upstream image
       - task: AzureCLI@2
-        displayName: build the ucore vhd and publish a managed image
+        displayName: publish managed image
         inputs:
           azureSubscription: devbox-image
           scriptType: bash

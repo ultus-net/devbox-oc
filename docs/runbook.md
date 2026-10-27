@@ -39,9 +39,10 @@ Never commit `terraform.tfvars`; it is gitignored for that reason.
 
 ### 2. Publish the OS image
 
-Fedora publishes no ucore image in the Azure marketplace, and Fedora's own Azure
-VHD is plain CoreOS rather than ucore. So the first step builds a VHD from the
-pinned ucore bootc image with `image-builder`, and publishes it as a managed image.
+Fedora publishes no CoreOS image in the Azure marketplace, so the first step
+publishes Fedora's own CoreOS VHD as a managed image. That image is plain CoreOS,
+not ucore, so the Ignition configuration rebases the box onto ucore on first boot.
+Stage 6 walks through that.
 
 ```sh
 az pipelines run --name devbox-os            # or: ./os/build-os-image.sh
@@ -52,14 +53,14 @@ The last line of output is the image resource ID. Put it in `os_image_id`.
 Before either path runs, set the pipeline's `resourceGroup` and `storageAccount`
 variables in `pipelines/devbox-os.yml`. Storage account names are globally
 unique, so the placeholder there is certainly wrong. The script path needs
-`podman` and `az` on PATH, and needs to run privileged because `image-builder`
-mounts loop devices; the pipeline provides a podman-compatible engine, so prefer
-the pipeline. Run `DRY_RUN=1 ./os/build-os-image.sh` to print the image id it
-would create without building or uploading anything.
+`coreos-installer` and `az` on PATH and `RG` and `STORAGE_ACCOUNT` exported; the
+pipeline installs `coreos-installer` from a pinned image, so prefer the pipeline.
+Run `DRY_RUN=1 ./os/build-os-image.sh` to print the image id it would create
+without downloading or uploading anything. That works before a storage account
+exists, because the dry run answers before it requires one.
 
-The source is pinned by digest in the script. Bumping `UCORE_IMAGE` is a
-deliberate change that rolls every VM, so treat it as reviewed work rather than a
-routine refresh.
+The upstream stream is `STREAM`, defaulting to `stable`. It selects which Fedora
+CoreOS VHD is published, and the Ignition rebase is independent of it.
 
 ### 3. Generate Ignition with real values
 
@@ -124,21 +125,40 @@ follows `:prod`, so the image reaches the host without a redeploy.
 
 ### 6. Verify first boot
 
-The image is a disk built from the ucore bootc image, so the box is ucore on its
-first boot with no rebase stage. Prove that before trusting anything above it:
+The published image is Fedora CoreOS, so first boot is not one boot. Ignition
+rebases the box onto ucore in two stages, and each stage reboots:
 
 ```sh
 az vm start -g "$RG" -n "$VM"
-# console via Bastion Developer until the tailnet is up:
+
+# stage 1: plain CoreOS -> unverified ucore reference, then reboot
+ssh core@devbox "sudo journalctl -u ucore-unsigned-autorebase -n 40"
+
+# stage 2: unverified -> signed ucore reference, then reboot
+ssh core@devbox "sudo journalctl -u ucore-signed-autorebase -n 40"
+```
+
+Expect the box to be unreachable for several minutes and to reboot twice. That is
+normal, not a failed deploy. Reach it over Bastion Developer during this window;
+the tailnet is not up yet.
+
+Stage 2 cannot run until the box has booted ucore, because only the ucore image
+installs the container-signing policy that accepts a signed reference. If stage 2
+fails with a policy error, stage 1 did not complete: check its journal first.
+
+Then prove the booted OS really is ucore, not the plain CoreOS image it started
+from:
+
+```sh
 ssh core@devbox "sudo rpm-ostree status"
 ```
 
-The booted deployment must name `ghcr.io/ublue-os/ucore`. If it names
-`fedora-coreos`, the published image is the old plain-CoreOS artifact. Rebuild it
-with `./os/build-os-image.sh` and re-apply. Every host unit below depends on ucore
-packages, so nothing else works until this is right.
+The booted deployment must name `ghcr.io/ublue-os/ucore-minimal`. Every host unit
+below depends on ucore packages, so nothing else works until this is right. If the
+box is still on `fedora-coreos`, the rebase did not run: check
+`systemctl status ucore-unsigned-autorebase`.
 
-Then confirm the devbox units and the daemon the tailnet path needs:
+Finally confirm the devbox units and the daemon the tailnet path needs:
 
 ```sh
 ssh core@devbox "systemctl is-active tailscaled oc-secrets oc-tailnet opencode"

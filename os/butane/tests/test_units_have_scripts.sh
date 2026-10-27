@@ -16,9 +16,15 @@ for p in /usr/local/sbin/oc-secrets /usr/local/sbin/oc-acr-login \
   jq -e --arg p "$p" '.storage.files | map(.path) | index($p)' "$ign" >/dev/null \
     || fail "not baked into the image: $p"
 done
-# Every ExecStart must point at a path the config actually provides.
+# Every ExecStart must point at a path the config actually provides, unless it is
+# a binary the OS image already ships. rpm-ostree is the rebase tool; it is not
+# something this repo bakes in, and requiring it here would be a false failure.
+SHIPPED_BINARIES='/usr/bin/rpm-ostree /usr/bin/systemctl /usr/bin/touch'
 for exe in $(jq -r '.systemd.units[]?.contents // empty' "$ign" \
              | grep -oE '^ExecStart=[^ ]+' | cut -d= -f2 | sort -u); do
+  case " $SHIPPED_BINARIES " in
+    *" $exe "*) continue ;;
+  esac
   jq -e --arg p "$exe" '.storage.files | map(.path) | index($p)' "$ign" >/dev/null \
     || fail "unit runs a missing executable: $exe"
 done
@@ -31,4 +37,16 @@ done < <(jq -r '.storage.files[].path | select(startswith("/usr/local/sbin/") an
 [ "$(mode_of /usr/local/sbin/lib-imds.sh)" = "420" ] || fail "lib-imds.sh is not 0644"
 [ "$(mode_of /etc/containers/systemd/opencode.container)" = "420" ] \
   || fail "quadlet is not 0644"
+
+# Terraform ships this compiled artifact, not ucore.bu. Source-level tests alone
+# leave the deployed host broken when only the .bu was changed, so the two units
+# whose absence made the box unreachable are checked here as well.
+jq -e '.systemd.units[] | select(.name == "tailscaled.service") | .enabled' "$ign" >/dev/null \
+  || fail "tailscaled.service is not enabled in the compiled Ignition"
+
+net="$(jq -r '.systemd.units[] | select(.name == "oc-tailnet.service") | .contents // empty' "$ign")"
+[ -n "$net" ] || fail "oc-tailnet.service has no contents in the compiled Ignition"
+printf '%s\n' "$net" | grep -Eq '^EnvironmentFile=/etc/devbox/oc-secrets\.env$' \
+  || fail "oc-tailnet.service does not load the env file naming its vault in the compiled Ignition"
+
 echo "all units reference baked-in scripts"

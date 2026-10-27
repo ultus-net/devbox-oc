@@ -1,70 +1,58 @@
 #!/usr/bin/env bash
-# Turn the published ucore bootc image into an Azure managed image.
-#
-# Fedora publishes an Azure VHD for plain CoreOS, and ucore publishes none. Booting
-# plain CoreOS gives a host this repo's Ignition does not match: no tailscaled
-# package, no ucore podman autostart contract, and zincati in place of ucore's
-# update path. Every host unit assumes ucore, so the image has to be built from it.
-#
-# image-builder produces a disk image from any bootc image, which is the supported
-# way to get ucore onto Azure without forking it (design decision 1). The source is
-# pinned by digest, so a rebuild is reproducible and a bump is deliberate.
+# Download the Fedora CoreOS Azure VHD, upload it, and create a managed image.
+# Fedora publishes no CoreOS image in the Azure marketplace, so this step exists.
 set -euo pipefail
 
-# Digest from the design's verified-facts table (ucore-minimal stable). Bumping it
-# rolls every VM, so it is a reviewed change, not a routine refresh.
-UCORE_IMAGE="${UCORE_IMAGE:-ghcr.io/ublue-os/ucore@sha256:7906a70efe7482704fdb232c7e5d2a3068a0c5520ef46d3f7f6b9f8fc0e899b9}"
-# Pinned by digest, not `:latest`. The pipeline runs weekly on a cron, so a moving
-# tag would swap the builder underneath an unchanged config and make the published
-# image non-reproducible with nothing in the diff to review.
-IMAGE_BUILDER="${IMAGE_BUILDER:-ghcr.io/osbuild/image-builder-cli@sha256:37b7c22483b03013f54030094683d8af8a83ee642c2a4dc9a51dcd9a79be6b6f}"
-RG="${RG:?RG is required}"
-STORAGE_ACCOUNT="${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
+STREAM="${STREAM:-stable}"
+DRY_RUN="${DRY_RUN:-0}"
 CONTAINER="${CONTAINER:-images}"
 LOCATION="${LOCATION:-westeurope}"
-DRY_RUN="${DRY_RUN:-0}"
 
-command -v podman >/dev/null || { echo "podman not installed; image-builder needs a privileged container" >&2; exit 1; }
+# The dry run exists so an operator can see the image id it would create before
+# a resource group or storage account exists. Checking those first would make the
+# documented command fail, so the dry run answers before any of them are required.
+if [ "$DRY_RUN" = "1" ]; then
+  # No external command here on purpose. The dry run must work on a machine with
+  # nothing installed yet, which is where the operator sees it first.
+  name="devbox-fcos-${STREAM}-<yyyymmdd>"
+  echo "dry run: would upload a FCOS ${STREAM} vhd to <storage-account>/${CONTAINER} as ${name}.vhd"
+  echo "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/<rg>/providers/Microsoft.Compute/images/${name}"
+  exit 0
+fi
+
+RG="${RG:?RG is required}"
+STORAGE_ACCOUNT="${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
+
+command -v coreos-installer >/dev/null || { echo "coreos-installer not installed; see docs/runbook.md" >&2; exit 1; }
 command -v az >/dev/null || { echo "az not installed" >&2; exit 1; }
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-echo "building a vhd from ${UCORE_IMAGE}" >&2
-vhd=""
-if [ "$DRY_RUN" != "1" ]; then
-  mkdir -p "$work/output"
-  # --privileged and the container-storage mount are what image-builder documents
-  # for its container path: it needs to mount loop devices and read the source
-  # image out of the same storage it runs from.
-  podman run --rm --privileged \
-    --security-opt label=type:unconfined_t \
-    --volume "$work/output:/output" \
-    --volume /var/lib/containers/storage:/var/lib/containers/storage \
-    "$IMAGE_BUILDER" build \
-    --output-dir /output \
-    --bootc-ref "$UCORE_IMAGE" \
-    vhd
-  vhd="$(find "$work/output" -name '*.vhd' -print -quit)"
-  [ -f "$vhd" ] || { echo "no vhd produced" >&2; exit 1; }
-  # Provenance next to the artifact. This is what an auditor asks for.
-  sha256sum "$vhd" | tee "$vhd.sha256" >&2
-fi
+echo "downloading FCOS ${STREAM} azure vhd" >&2
+coreos-installer download --decompress --stream "$STREAM" --platform azure \
+  --format vhd.xz --directory "$work"
 
-name="devbox-ucore-$(date -u +%Y%m%d)"
+# Exactly one artifact, or the upload would silently ship an arbitrary file. A
+# second .vhd means the download directory is not what this script assumes.
+mapfile -t vhds < <(find "$work" -name '*.vhd')
+[ "${#vhds[@]}" -eq 1 ] || {
+  echo "expected exactly one vhd, found ${#vhds[@]}: ${vhds[*]:-none}" >&2
+  exit 1
+}
+vhd="${vhds[0]}"
+
+# Provenance next to the artifact. This is what an auditor asks for. It is printed
+# rather than written into $work, which the EXIT trap deletes, so the operator
+# keeps the hash without this script leaving a file behind.
+sha256sum "$vhd" >&2
+
+name="devbox-fcos-${STREAM}-$(date -u +%Y%m%d)"
 blob="${name}.vhd"
-
-if [ "$DRY_RUN" = "1" ]; then
-  echo "dry run: would build ${UCORE_IMAGE} and upload to ${STORAGE_ACCOUNT}/${CONTAINER} as ${blob}"
-  echo "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/${RG}/providers/Microsoft.Compute/images/${name}"
-  exit 0
-fi
 
 az storage blob upload --account-name "$STORAGE_ACCOUNT" -c "$CONTAINER" \
   -f "$vhd" -n "$blob" --overwrite --only-show-errors
-# Gen2: image-builder emits a UEFI layout with an ESP, so the VM must be Gen2.
 az image create -g "$RG" -n "$name" --location "$LOCATION" --os-type Linux \
-  --hyper-v-generation V2 \
   --source "https://${STORAGE_ACCOUNT}.blob.core.windows.net/${CONTAINER}/${blob}" \
   --only-show-errors -o none
 

@@ -19,8 +19,18 @@ grep -qE '^variable "tailscale_authkey"' "$main" \
   || fail "tailscale_authkey is no longer an input"
 
 # It must be consumed, not merely declared.
-grep -q 'var\.tailscale_authkey' "$main" \
-  || fail "var.tailscale_authkey is declared but no resource consumes it"
+# It must be consumed as a value, not merely mentioned. A comment that names the
+# variable, plus a hardcoded literal, would satisfy an unanchored grep while the
+# secret holds a string the operator never supplied.
+tffiles=("$main")
+if [ -d "$(dirname "$main")" ]; then
+  while IFS= read -r f; do
+    [ "$f" = "$main" ] || tffiles+=("$f")
+  done < <(find "$(dirname "$main")" -maxdepth 1 -name '*.tf' -print)
+fi
+grep -hE '^[[:space:]]*value[[:space:]]*=[[:space:]]*var\.tailscale_authkey[[:space:]]*$' \
+  "${tffiles[@]}" >/dev/null \
+  || fail "var.tailscale_authkey is declared but no secret carries it as a value"
 
 # The secret name is a contract with host/bin/oc-tailnet-up, which defaults to
 # TS_AUTHKEY_SECRET=tailscale-authkey. Renaming one side silently breaks the join.
@@ -29,7 +39,7 @@ start="$(grep -n 'resource "azurerm_key_vault_secret" "tailscale_authkey"' "$mai
 block="$(tail -n "+$start" "$main" | awk 'NR > 1 && /^}/{exit} {print}')"
 printf '%s\n' "$block" | grep -Eq 'name[[:space:]]*=[[:space:]]*"tailscale-authkey"' \
   || fail "secret name is not the one oc-tailnet-up reads"
-printf '%s\n' "$block" | grep -q 'var\.tailscale_authkey' \
+printf '%s\n' "$block" | grep -Eq '^[[:space:]]*value[[:space:]]*=[[:space:]]*var\.tailscale_authkey[[:space:]]*$' \
   || fail "the secret does not carry the variable's value"
 
 # The role assignment must exist before the secret, or the apply races and fails

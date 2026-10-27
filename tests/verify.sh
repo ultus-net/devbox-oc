@@ -20,10 +20,12 @@ run "idle gate"           ./host/tests/test_oc-idle-check.sh
 run "secrets and ACR"     ./host/tests/test_oc-secrets.sh
 run "tailnet join"        ./host/tests/test_tailnet_up.sh
 run "OS image publish"    ./os/tests/test_build_os_image.sh
+run "OS image single vhd" ./os/tests/test_build_os_image_one_vhd.sh
 run "container digest"    ./image/tests/test_digest_record.sh
 run "quadlet persistence" ./host/tests/test_quadlet_persistence.sh
 run "ignition units"      ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.ign
 run "tailscale enabled"   ./os/butane/tests/test_tailscale_enabled.sh
+run "ucore autorebase"    ./os/butane/tests/test_autorebase.sh
 run "units load their env" ./os/butane/tests/test_units_load_their_env.sh
 
 # Terraform guards. These test the assertions themselves against fixtures, since
@@ -40,6 +42,8 @@ run "vault name derivable without state" \
   ./terraform/tests/key_vault_name_derived.sh
 run "auth key stored" \
   ./terraform/tests/authkey_is_stored.sh
+run "auth key name matches build" \
+  ./terraform/tests/authkey_name_matches_build.sh
 run "variables documented" \
   ./terraform/tests/variables_documented.sh
 

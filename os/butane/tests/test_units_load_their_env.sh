@@ -27,6 +27,7 @@ command -v python3 >/dev/null 2>&1 || fail "python3 is required and absent"
 python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 
 python3 - "$bu" "$bindir" <<'PY'
+import os
 import re
 import sys
 
@@ -55,20 +56,108 @@ for entry in (config.get("storage") or {}).get("files") or []:
 
 units = (config.get("systemd") or {}).get("units") or []
 
+# Scripts written inline by the config, keyed by basename, so an ExecStart that
+# points at one is checked like a host/bin script rather than skipped.
+inline_scripts = {}
+for entry in (config.get("storage") or {}).get("files") or []:
+    path = entry.get("path") or ""
+    inline = (entry.get("contents") or {}).get("inline") or ""
+    if inline:
+        inline_scripts[path.rsplit("/", 1)[-1]] = inline
+
 def script_vars(exec_path):
-    """Variables a script references, following its lib-imds.sh include."""
+    """Variables a script references, following its lib-imds.sh include.
+
+    A script can live in host/bin or inline in the Butane config, so both are
+    consulted. A path that resolves to neither yields no variables, which would
+    make the unit look satisfied. Raise instead: a silently skipped script is the
+    vacuity this guard exists to avoid.
+    """
     base = exec_path.rsplit("/", 1)[-1]
-    sources = [f"{bindir}/{base}", f"{bindir}/lib-imds.sh"]
+    texts = []
+
+    # Binaries the OS image ships are not ours to inspect. Every other ExecStart
+    # must resolve, or the unit's requirements go unchecked.
+    if exec_path in {"/usr/bin/rpm-ostree", "/usr/bin/systemctl", "/usr/bin/touch"}:
+        return set()
+
+    main = f"{bindir}/{base}"
+    if os.path.isfile(main):
+        with open(main) as handle:
+            texts.append(handle.read())
+    elif base in inline_scripts:
+        texts.append(inline_scripts[base])
+
+    if not texts:
+        raise SystemExit(
+            f"FAIL: {exec_path} resolves to neither {bindir} nor an inline script, "
+            "so its variables cannot be checked"
+        )
+
     seen = set()
-    for source in sources:
-        try:
-            with open(source) as handle:
-                text = handle.read()
-        except OSError:
-            continue
+    for text in texts:
+        seen |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*)", text))
+        seen |= set(re.findall(r"\$([A-Z_][A-Z0-9_]*)", text))
+    lib = f"{bindir}/lib-imds.sh"
+    if os.path.isfile(lib):
+        with open(lib) as handle:
+            text = handle.read()
         seen |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*)", text))
         seen |= set(re.findall(r"\$([A-Z_][A-Z0-9_]*)", text))
     return seen
+
+
+# A config with no units or no env files would make every loop below a no-op and
+# the guard would report success without checking anything.
+if not units:
+    raise SystemExit(f"FAIL: {bu_path} declares no systemd units to check")
+if not env_files:
+    raise SystemExit(f"FAIL: {bu_path} writes no env file, so nothing can be checked")
+
+
+# Names the host system supplies. The unit sets some inline, systemd passes
+# others, so their absence from an env file is not a defect.
+SYSTEM_PROVIDED = {
+    "HOME",
+    "PATH",
+    "STATE_DIR",
+    "AUTH_KEY_FILE",
+    "LOGIN_SERVER",
+    "API",
+    "ENV_FILE",
+    "STATE",
+    "PIN_FILE",
+    "OUT_FILE",
+    "OUT",
+    "SECRET_NAME",
+    "IMAGE",
+    "CONTAINER_NAME",
+}
+
+
+def inline_assignments(unit_contents):
+    """Variable names a unit's own Environment= lines define."""
+    names = set()
+    for line in unit_contents.splitlines():
+        if not line.startswith("Environment="):
+            continue
+        for item in line.split("=", 1)[1].split():
+            if "=" in item:
+                names.add(item.split("=", 1)[0])
+    return names
+
+
+def required_vars(exec_path):
+    """Variables the script demands with ${VAR:?}, which fail when unset."""
+    base = exec_path.rsplit("/", 1)[-1]
+    if base in inline_scripts:
+        text = inline_scripts[base]
+    elif os.path.isfile(f"{bindir}/{base}"):
+        with open(f"{bindir}/{base}") as handle:
+            text = handle.read()
+    else:
+        return set()
+    return set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):\?", text))
 
 failures = []
 for unit in units:
@@ -87,19 +176,52 @@ for unit in units:
         if line.startswith("ExecStart=") and len(line.split("=", 1)) == 2
     ]
     needed = set()
+    required = set()
     for exec_path in execs:
         needed |= script_vars(exec_path)
+        required |= required_vars(exec_path)
     if not needed:
         continue
+
+    # `${VAR:?}` makes a script refuse to run when VAR is unset, so a loaded env
+    # file that no longer defines it is as fatal as not loading the file at all.
+    # System-provided names are skipped: the unit sets them, or systemd passes them.
+    provided = set()
+    for env_path in loaded:
+        provided |= env_files.get(env_path, set())
+    provided |= inline_assignments(contents)
+    for var in sorted(required - provided - SYSTEM_PROVIDED):
+        failures.append(
+            f"{name} runs a script that requires {var}, "
+            "but nothing loaded by the unit defines it"
+        )
+
     for env_path, names in env_files.items():
         if env_path in loaded:
             continue
-        missing = sorted(needed & names)
+        missing = sorted((needed | required) & names)
         if missing:
             failures.append(
                 f"{name} runs a script needing {', '.join(missing)} "
                 f"but does not load {env_path}"
             )
+
+# Every variable an env file defines must still be read by some script. A rename
+# on one side only leaves an orphan here, which is otherwise silent: the file
+# defines a name nothing uses, and the script reads a name nothing defines.
+all_referenced = set()
+for unit in units:
+    for line in (unit.get("contents") or "").splitlines():
+        if line.startswith("ExecStart=") and len(line.split("=", 1)) == 2:
+            path = line.split("=", 1)[1].split()[0]
+            all_referenced |= script_vars(path)
+for path, names in env_files.items():
+    orphans = sorted(names - all_referenced)
+    for var in orphans:
+        failures.append(
+            f"{path} defines {var}, which no script reads: "
+            "the definition and the reader have drifted apart"
+        )
 
 if failures:
     for failure in failures:
