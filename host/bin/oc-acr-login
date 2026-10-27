@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Exchange the VM's managed identity for an ACR refresh token and write
+# /etc/containers/auth.json. Keeps the ACR admin account disabled.
+set -euo pipefail
+ACR_NAME="${ACR_NAME:?ACR_NAME is required}"
+OUT="${OUT:-/etc/containers/auth.json}"
+REGISTRY="${ACR_NAME}.azurecr.io"
+
+# shellcheck disable=SC1090,SC1091
+. "$(dirname "$0")/lib-imds.sh"
+
+umask 077
+install -d -m 0700 "$(dirname "$OUT")"
+
+token="$(imds_token https://management.azure.com/)"
+creds="$(curl -fsS -m 20 -X POST \
+  --data-urlencode "grant_type=access_token" \
+  --data-urlencode "service=${REGISTRY}" \
+  --data-urlencode "access_token=${token}" \
+  "https://${REGISTRY}/oauth2/exchange")"
+refresh="$(printf '%s' "$creds" | jq -r '.refresh_token')"
+if [ -z "$refresh" ] || [ "$refresh" = "null" ]; then
+  echo "oc-acr-login: no refresh token" >&2
+  exit 1
+fi
+
+tmp="$(mktemp "$(dirname "$OUT")/.auth.XXXXXX")"
+printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$REGISTRY" \
+  "$(printf '00000000-0000-0000-0000-000000000000:%s' "$refresh" | base64 -w0)" > "$tmp"
+mv "$tmp" "$OUT"
+chmod 0600 "$OUT"
