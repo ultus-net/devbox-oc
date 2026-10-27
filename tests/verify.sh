@@ -36,6 +36,7 @@ run "data disk protected" \
   ./terraform/tests/data_disk_protected.sh
 
 run "docs complete"  ./tests/docs_complete.sh
+run "wake wrapper"   ./tools/tests/test_oc.sh
 
 # The integrity test needs a tarball. Without one it must fail unless the
 # operator opts out, which would make this gate meaningless.
