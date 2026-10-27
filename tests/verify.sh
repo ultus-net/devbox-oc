@@ -37,6 +37,8 @@ run "data disk protected" \
   ./terraform/tests/data_disk_protected.sh
 run "vault name derivable without state" \
   ./terraform/tests/key_vault_name_derived.sh
+run "auth key stored" \
+  ./terraform/tests/authkey_is_stored.sh
 run "variables documented" \
   ./terraform/tests/variables_documented.sh
 

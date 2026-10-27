@@ -224,6 +224,20 @@ resource "azurerm_key_vault_secret" "opencode_password" {
   depends_on = [azurerm_role_assignment.deployer_kv_admin]
 }
 
+# The tailnet join reads this by name at boot. host/bin/oc-tailnet-up defaults
+# TS_AUTHKEY_SECRET to "tailscale-authkey", so the name is a contract.
+#
+# Without this resource the variable was accepted and dropped, so the secret the
+# host asks for was never written. The first boot then failed with a Key Vault 404
+# that reads like a permissions problem rather than a missing resource.
+resource "azurerm_key_vault_secret" "tailscale_authkey" {
+  name         = "tailscale-authkey"
+  value        = var.tailscale_authkey
+  key_vault_id = azurerm_key_vault.this.id
+
+  depends_on = [azurerm_role_assignment.deployer_kv_admin]
+}
+
 resource "azurerm_role_assignment" "vm_kv_reader" {
   scope                = azurerm_key_vault.this.id
   role_definition_name = "Key Vault Secrets User"

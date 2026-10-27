@@ -25,7 +25,7 @@ output "data_disk_id" {
 
 output "key_vault_name" {
   value       = azurerm_key_vault.this.name
-  description = "Vault holding the server password."
+  description = "Vault holding the server password and the tailnet auth key."
 }
 
 output "next_steps" {
