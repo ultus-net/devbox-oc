@@ -34,6 +34,8 @@ run "no scheduled stop" \
   ./terraform/tests/no_scheduled_stop.sh
 run "data disk protected" \
   ./terraform/tests/data_disk_protected.sh
+run "vault name derivable without state" \
+  ./terraform/tests/key_vault_name_derived.sh
 
 run "docs complete"  ./tests/docs_complete.sh
 run "wake wrapper"   ./tools/tests/test_oc.sh
@@ -51,7 +53,7 @@ fi
 # unless SKIP_LINT=1 is set explicitly: a lint gate that can quietly pass having
 # linted nothing is worse than no lint gate, because it buys false confidence.
 mapfile -t scripts < <(
-  find host os image tools tests -name '*.sh' -type f 2>/dev/null
+  find host os image tools tests terraform -name '*.sh' -type f 2>/dev/null
   find host/bin -maxdepth 1 -type f 2>/dev/null
 )
 

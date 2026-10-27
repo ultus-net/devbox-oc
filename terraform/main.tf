@@ -117,7 +117,14 @@ resource "azurerm_network_interface" "vm" {
 }
 
 resource "azurerm_key_vault" "this" {
-  name                       = substr("kv-${var.name_prefix}-${random_string.suffix.result}", 0, 24)
+  # Deterministic, not random. Ignition needs this name *before* the apply that
+  # creates the vault, so it must be computable from tfvars alone. A random
+  # suffix would make the deployment circular: generate Ignition, which needs the
+  # vault name, which only exists after the apply that needs the Ignition.
+  #
+  # The suffix is derived from the subscription id, so two subscriptions with the
+  # same prefix do not collide, while a re-apply computes the same name.
+  name                       = local.key_vault_name
   resource_group_name        = azurerm_resource_group.this.name
   location                   = azurerm_resource_group.this.location
   tenant_id                  = data.azurerm_client_config.current.tenant_id
@@ -126,12 +133,6 @@ resource "azurerm_key_vault" "this" {
   soft_delete_retention_days = 7
   rbac_authorization_enabled = true
   tags                       = var.tags
-}
-
-resource "random_string" "suffix" {
-  length  = 6
-  special = false
-  upper   = false
 }
 
 resource "azurerm_linux_virtual_machine" "this" {
@@ -239,6 +240,12 @@ resource "azurerm_role_assignment" "vm_disk_snapshot" {
 locals {
   acr_resource_group = var.acr_resource_group == "" ? azurerm_resource_group.this.name : var.acr_resource_group
   acr_id             = "/subscriptions/${var.subscription_id}/resourceGroups/${local.acr_resource_group}/providers/Microsoft.ContainerRegistry/registries/${var.acr_name}"
+
+  # Key Vault names must be globally unique and 3 to 24 characters. The suffix is
+  # derived from the subscription id rather than randomised so Ignition can be
+  # generated before the first apply. Terraform state is not consulted.
+  subscription_suffix = substr(sha256(var.subscription_id), 0, 6)
+  key_vault_name      = substr("kv-${var.name_prefix}-${local.subscription_suffix}", 0, 24)
 }
 
 # Pull permission for the VM's managed identity.

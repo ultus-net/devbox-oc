@@ -24,6 +24,8 @@ All notable changes to this project. One entry per landed change, newest first.
   identity.
 - Terraform that boots from the published managed image with Ignition, with no
   public IP and an explicit deny for inbound internet traffic.
+- Guard test asserting the Key Vault name stays derivable from tfvars, so a
+  revert to a random suffix fails the gate rather than the first deploy.
 - Guard tests for the three invariants that are easy to regress: no public
   ingress, no scheduled hard stop, and a destroy-protected data disk.
 - Wake-and-connect wrapper that starts the VM, polls health, then opens the TUI.
@@ -33,6 +35,10 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The Key Vault name is derived from the subscription id instead of a random
+  suffix, so Ignition can be generated before the first apply. A random suffix
+  made first deployment circular: Ignition needs the name, the name needed the
+  apply, and the apply needs the Ignition.
 - `srv-data.mount` was rejected by systemd, because a mount unit's `Where=` must
   match its filename. Renamed to `srv.mount`.
 - The Logic App recurrence used `week_days`, which the azurerm provider does not
