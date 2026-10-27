@@ -24,6 +24,17 @@ run "container digest"    ./image/tests/test_digest_record.sh
 run "quadlet persistence" ./host/tests/test_quadlet_persistence.sh
 run "ignition units"      ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.ign
 
+# Terraform guards. These test the assertions themselves against fixtures, since
+# a real plan needs a subscription.
+run "no public ingress (violation detected)" \
+  bash -c './terraform/tests/no_public_ip.sh terraform/tests/fixtures/violation_public_ip.json && exit 1 || exit 0'
+run "no public ingress (clean passes)" \
+  ./terraform/tests/no_public_ip.sh terraform/tests/fixtures/clean.json
+run "no scheduled stop" \
+  ./terraform/tests/no_scheduled_stop.sh
+run "data disk protected" \
+  ./terraform/tests/data_disk_protected.sh
+
 # The integrity test needs a tarball. Without one it must fail unless the
 # operator opts out, which would make this gate meaningless.
 if [ -f /tmp/ocinspect/oc.tgz ]; then

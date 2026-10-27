@@ -29,7 +29,7 @@ output "key_vault_name" {
 }
 
 output "next_steps" {
-  value = <<-EOT
+  value       = <<-EOT
     1. Point DNS-independent clients at the tailnet name:
          opencode --server https://<host>.<tailnet>.ts.net
     2. Pair the desktop app:

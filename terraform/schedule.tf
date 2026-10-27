@@ -38,7 +38,7 @@ resource "azurerm_logic_app_trigger_recurrence" "weekday_morning" {
   schedule {
     at_these_hours   = [tonumber(split(":", var.schedule_start_utc)[0])]
     at_these_minutes = [tonumber(split(":", var.schedule_start_utc)[1])]
-    week_days        = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    on_these_days    = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
   }
 }
 

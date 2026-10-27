@@ -135,20 +135,17 @@ resource "random_string" "suffix" {
 }
 
 resource "azurerm_linux_virtual_machine" "this" {
-  name                            = "vm-${var.name_prefix}"
-  resource_group_name             = azurerm_resource_group.this.name
-  location                        = azurerm_resource_group.this.location
-  size                            = var.vm_size
-  admin_username                  = var.admin_username
-  disable_password_authentication = true
-  tags                            = var.tags
+  name                = "vm-${var.name_prefix}"
+  resource_group_name = azurerm_resource_group.this.name
+  location            = azurerm_resource_group.this.location
+  size                = var.vm_size
+  # `core` is the Fedora CoreOS default account. Ignition sets its
+  # authorized_keys, so there is no admin_ssh_key block and no password auth
+  # to disable.
+  admin_username = "core"
+  tags           = var.tags
 
   network_interface_ids = [azurerm_network_interface.vm.id]
-
-  admin_ssh_key {
-    username   = var.admin_username
-    public_key = var.ssh_public_key
-  }
 
   identity {
     type = "SystemAssigned"
@@ -160,29 +157,11 @@ resource "azurerm_linux_virtual_machine" "this" {
     disk_size_gb         = 64
   }
 
-  source_image_reference {
-    publisher = "Canonical"
-    offer     = "ubuntu-24_04-lts"
-    sku       = "server"
-    version   = "latest"
-  }
+  # A managed image built from Fedora's own Azure VHD. Never a marketplace URN.
+  source_image_id = var.os_image_id
 
-  # Build the resource id from names, never from this resource's own id, or
-  # custom_data becomes a dependency cycle.
-  custom_data = base64encode(templatefile("${path.module}/../cloud-init/cloud-init.yaml.tftpl", {
-    oc_image           = var.oc_image
-    vault_name         = azurerm_key_vault.this.name
-    resource_group     = azurerm_resource_group.this.name
-    vm_name            = "vm-${var.name_prefix}"
-    subscription_id    = var.subscription_id
-    data_disk_lun      = 0
-    tz                 = "Europe/London"
-    oc_tcp_port        = 4096
-    idle_minutes       = 45
-    compose_dir        = "/srv/devbox"
-    acr_login_server   = var.acr_name == "" ? "" : "${var.acr_name}.azurecr.io"
-    enable_nat_gateway = var.enable_nat_gateway
-  }))
+  # Ignition, not cloud-init. Fedora CoreOS consumes Ignition only.
+  custom_data = base64encode(file("${path.module}/../os/butane/ucore.ign"))
 
   # No ignore_changes here on purpose. A bootstrap change rolls the VM, and
   # the data disk survives because it is a separate, protected resource.

@@ -26,15 +26,14 @@ variable "vm_size" {
   default     = "Standard_B2as_v2"
 }
 
-variable "admin_username" {
+variable "os_image_id" {
   type        = string
-  description = "Local break-glass account. SSH access in normal operation is via Tailscale."
-  default     = "azureuser"
-}
+  description = "Managed image ID of the published ucore image. Never a marketplace URN."
 
-variable "ssh_public_key" {
-  type        = string
-  description = "Public key for the local admin account. Prefer Microsoft Entra SSH login instead where supported."
+  validation {
+    condition     = can(regex("^/subscriptions/.+/providers/Microsoft.Compute/images/.+$", var.os_image_id))
+    error_message = "Must be a managed image resource ID, not a marketplace reference."
+  }
 }
 
 variable "vnet_cidr" {
@@ -42,7 +41,6 @@ variable "vnet_cidr" {
   description = "VNet address space."
   default     = "10.42.0.0/16"
 }
-
 variable "vm_subnet_cidr" {
   type        = string
   description = "Subnet for the VM. No public IP, no inbound rules."
@@ -85,11 +83,6 @@ variable "acr_resource_group" {
   default     = ""
 }
 
-variable "oc_image" {
-  type        = string
-  description = "Immutable image reference the host runs. Pin by digest, never latest."
-}
-
 variable "opencode_password" {
   type        = string
   description = "OpenCode server password. Stored in Key Vault; never written to state-consuming outputs."
@@ -112,12 +105,6 @@ variable "schedule_start_utc" {
   type        = string
   description = "Weekday start time, HH:MM in UTC. Empty disables the scheduled start."
   default     = "06:45"
-}
-
-variable "schedule_stop_utc" {
-  type        = string
-  description = "Hard stop, HH:MM in UTC. Empty disables it. The idle gate is the primary shutdown path."
-  default     = ""
 }
 
 variable "tags" {
