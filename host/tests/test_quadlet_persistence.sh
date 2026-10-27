@@ -42,4 +42,21 @@ unit_section="$(awk '/^\[Unit\]/{on=1;next} /^\[/{on=0} on' "$q")"
 printf '%s\n' "$unit_section" | grep -Eq '^Requires=.*oc-secrets\.service' \
   || fail "quadlet does not require oc-secrets.service in its [Unit] section"
 
+# Every EnvironmentFile the quadlet names must be written by a component we ship.
+# A reference to a file nothing produces is how the tailnet key went missing, and
+# the failure surfaces at boot as a variable that is merely unset, not as a
+# missing-file error.
+while read -r path; do
+  grep -rqF "$path" "$(dirname "$q")/../bin" "$(dirname "$q")/../../os/butane/ucore.bu" \
+    || fail "no component writes the quadlet's EnvironmentFile: $path"
+done < <(grep -E '^EnvironmentFile=' "$q" | cut -d= -f2)
+
+# The container's password comes from that file, so the writer and the reader must
+# agree on the name. oc-secrets writes it with printf rather than a literal line,
+# so match the variable name in a write, not a line start.
+grep -q "OPENCODE_PASSWORD=" "$(dirname "$q")/../bin/oc-secrets" \
+  || fail "oc-secrets does not write OPENCODE_PASSWORD"
+grep -q 'OPENCODE_PASSWORD' "$(dirname "$q")/../bin/oc-idle-check" \
+  || fail "oc-idle-check does not read the password oc-secrets writes"
+
 echo "persistent data is on the data disk"
