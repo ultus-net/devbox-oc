@@ -31,7 +31,7 @@ Batch A needs no Azure access and no container engine. Batch B requires the oper
 
 ## Batch A
 
-### A1: Supply the required variables without reading source
+### Task 1: A1 Supply the required variables without reading source
 
 **Files:** `terraform/terraform.tfvars.example` (create), `.gitignore` (modify), `terraform/tests/variables_documented.sh` (create)
 
@@ -93,7 +93,7 @@ Expected: `all required variables documented`
 
 Commit: `feat(terraform): document the required variables in a copyable example`
 
-### A2: First-deployment runbook
+### Task 2: A2 First-deployment runbook
 
 **Files:** `docs/runbook.md` (modify), `tests/docs_complete.sh` (modify)
 
@@ -121,7 +121,7 @@ State the two commands an operator runs to confirm success at each stage.
 Run: `./tests/docs_complete.sh` → `docs complete`
 Commit: `docs: first deployment path from clone to connected client`
 
-### A3: Run the gate on every pull request
+### Task 3: A3 Run the gate on every pull request
 
 **Files:** `pipelines/devbox-verify.yml` (create), `pipelines/tests/test_pipeline_shape.sh` (create)
 
@@ -146,7 +146,7 @@ run `./tests/verify.sh`. No service connection.
 Run: `./pipelines/tests/test_pipeline_shape.sh` → passes
 Commit: `feat(pipeline): gate pull requests on the verification suite`
 
-### A4: A failed bootstrap must not serve traffic
+### Task 4: A4 A failed bootstrap must not serve traffic
 
 Closes the parked review finding.
 
@@ -196,7 +196,7 @@ session and verify it deallocates (`oc-idle-check` logs "idle for 45m").
 
 ## Batch C: close-out
 
-### C1: Licence and final changelog
+### Task 5: C1 Licence and final changelog
 
 Add a licence, and move the `Unreleased` entries to a dated release once Batch B
 passes. Per the repo standards, open work items belong in the forge's tracker; when
