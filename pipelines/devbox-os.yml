@@ -16,25 +16,16 @@ jobs:
       storageAccount: stdevboxocimages
       location: westeurope
     steps:
-      # get.coreos-installer.dev does not resolve (verified: NXDOMAIN), so the
-      # upstream container is the source. Pinned per the no-latest constraint.
-      #
-      # Extract into a directory that persists across steps and advertise it with
-      # the Azure Pipelines logging command, not $GITHUB_PATH, which does not exist
-      # here. build-os-image.sh runs in a later step and needs the binary on PATH.
+      # image-builder drives a container engine and needs it privileged. The agent
+      # ships docker, so expose it under the name the script and image-builder
+      # expect rather than installing a second engine alongside it.
       - script: |
           set -euo pipefail
-          bindir="$(Pipeline.Workspace)/bin"
-          mkdir -p "$bindir"
-          docker run --rm --entrypoint cat \
-            quay.io/coreos/coreos-installer:v0.27.0 /usr/bin/coreos-installer \
-            > "$bindir/coreos-installer"
-          chmod +x "$bindir/coreos-installer"
-          echo "##vso[task.prependpath]$bindir"
-          "$bindir/coreos-installer" --version
-        displayName: install coreos-installer from the pinned upstream image
+          sudo ln -sf "$(command -v docker)" /usr/local/bin/podman
+          podman --version
+        displayName: expose a podman-compatible engine for image-builder
       - task: AzureCLI@2
-        displayName: publish managed image
+        displayName: build the ucore vhd and publish a managed image
         inputs:
           azureSubscription: devbox-image
           scriptType: bash
