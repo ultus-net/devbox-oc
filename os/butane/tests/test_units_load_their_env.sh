@@ -187,12 +187,18 @@ def unsettable_vars(exec_path):
     if re.search(r'^\s*\.\s+"?\$\{?[A-Z_]', text, re.M):
         return set()
     read = set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", text))
-    # Any assignment form counts as a local default: bare, `export`, `readonly`,
-    # `declare`, and `local`. Matching only the bare form reports a false failure
-    # on a script that sets its own default with `export NAME=x`.
+    # A local default is an assignment at column zero: bare, `export`, or
+    # `readonly`. The column-zero requirement is the load-bearing part. An
+    # indented assignment sits in a conditional branch, so it does not run on
+    # every path and cannot supply the value a top-level read needs.
     local = set(re.findall(
-        r"^\s*(?:export\s+|readonly\s+|declare\s+(?:-\w+\s+)*|local\s+(?:-\w+\s+)*)?"
-        r"([A-Z_][A-Z0-9_]*)=", text, re.M))
+        r"^(?:export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)=", text, re.M))
+    # `local` and `declare` are function-scoped declarations, conventionally
+    # indented inside the function that reads the name, so they count at any
+    # indent and after a brace on a one-line function. Restricting them to column
+    # zero rejects ordinary shell.
+    local |= set(re.findall(
+        r"(?:^|[\s;{])(?:local|declare)\s+(?:-\w+\s+)*([A-Z_][A-Z0-9_]*)=", text, re.M))
     local |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):=[^}]*\}", text))
     local |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):-[^}][^}]*\}", text))
     return read - local - SYSTEM_PROVIDED

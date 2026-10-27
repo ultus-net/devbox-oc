@@ -57,16 +57,59 @@ env_paths="$(printf '%s\n' "$container_section" | sed -n 's/^EnvironmentFile=//p
 [ -n "$env_paths" ] \
   || fail "quadlet loads no EnvironmentFile in [Container], so the container has no password"
 
-# A writer is a non-comment line that mentions the path. Grepping the raw file
-# accepts a `# TODO: write /etc/.../x.env` note, which produces nothing at boot
-# and reports the reference as satisfied.
+# A writer is a component that actually produces the file, not one that names it.
+# Three weaker checks each reported a missing file as satisfied: a comment, a bare
+# `echo "see <path>"` mention, and a substring match where a writer for
+# `/etc/opencode/env-backup` satisfied `/etc/opencode/env`. All three ship a
+# container with no password, so the check has to see a write.
+#
+# Two ways count. Ignition writes the file directly when ucore.bu declares it as
+# a storage path. Otherwise a host script must assign the path to a variable and
+# then write through that variable, which is how oc-secrets writes its output.
 writes_path() {
-  local needle="$1" dir f
+  local needle="$1" dir f var
   dir="$(dirname "$q")"
-  for f in "$dir"/../bin/* "$dir"/../../os/butane/ucore.bu; do
+
+  # Ignition: an exact storage path, not a prefix of a longer one.
+  if awk -v n="$needle" '
+      /^[[:space:]]*- path:[[:space:]]*/ {
+        line = $0
+        sub(/^[[:space:]]*- path:[[:space:]]*/, "", line)
+        sub(/[[:space:]]+$/, "", line)
+        if (line == n) { found = 1; exit }
+      }
+      END { exit !found }' "$dir/../../os/butane/ucore.bu"; then
+    return 0
+  fi
+
+  for f in "$dir"/../bin/*; do
     [ -f "$f" ] || continue
-    awk -v n="$needle" 'index($0, n) && $0 !~ /^[[:space:]]*#/ { found = 1; exit } END { exit !found }' "$f" \
-      && return 0
+    # Variables assigned this exact path, and not a longer path with it as a prefix.
+    while read -r var; do
+      [ -n "$var" ] || continue
+      # A write is a redirection or a command that replaces a file, applied to the
+      # variable. chmod and a bare read do not produce the file.
+      if awk -v v="$var" '
+          $0 ~ /^[[:space:]]*#/ { next }
+          (index($0, "$" v) || index($0, "${" v "}")) &&
+          ($0 ~ /[^>]>>?[[:space:]]/ || $0 ~ /(^|[[:space:]])(mv|install|cp|tee)[[:space:]]/) { found = 1; exit }
+          END { exit !found }' "$f"; then
+        return 0
+      fi
+    done < <(awk -v n="$needle" '
+        /^[[:space:]]*#/ { next }
+        /^[A-Z_][A-Z0-9_]*=/ {
+          line = $0
+          if (index(line, n)) {
+            pos = index(line, n)
+            rest = substr(line, pos + length(n), 1)
+            # Exact token: the path must not continue into a longer filename.
+            if (rest == "" || rest !~ /[A-Za-z0-9._-]/) {
+              sub(/=.*/, "", line)
+              print line
+            }
+          }
+        }' "$f")
   done
   return 1
 }

@@ -56,7 +56,10 @@ for pair in "unsigned:$unsigned" "signed:$signed"; do
   unit_sec="$(section_of "$body" Unit)"
   [ -n "$service" ] || fail "${label} autorebase unit has no [Service] section"
   [ -n "$unit_sec" ] || fail "${label} autorebase unit has no [Unit] section"
-  printf '%s\n' "$body" | grep -Eq '^[[:space:]]+enabled: true[[:space:]]*$' \
+  # The unit-level key, not any line in the block. A `enabled: true` line inside
+  # `contents: |` is unit text, not YAML, and satisfies a whole-block grep while
+  # Butane renders no enabled flag at all. The key sits at exactly six spaces.
+  printf '%s\n' "$body" | grep -Eq '^      enabled: true[[:space:]]*$' \
     || fail "${label} autorebase unit is present but not enabled"
   directive_fields "$service" 'ExecStart=/usr/bin/rpm-ostree rebase' \
     | grep -q 'rpm-ostree\|ostree-' \

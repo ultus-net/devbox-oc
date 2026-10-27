@@ -41,6 +41,22 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- Five gaps from the fifth review round, one of them a regression introduced by the
+  round before. `test_units_load_their_env.sh` had been widened to accept any
+  indented assignment as a local default, so `if false; then VAR=x; fi` counted as
+  a definition and the silent-unset case passed again; assignments now have to be
+  at column zero, while `local` and `declare` stay accepted anywhere because they
+  are function-scoped by nature. `test_quadlet_persistence.sh` still accepted a
+  path that was only read or mentioned, and matched it as a substring, so a writer
+  for `/etc/opencode/env-backup` satisfied `/etc/opencode/env`; it now requires
+  either an exact Ignition storage path or a host script that assigns the exact
+  path and writes through that variable. `test_units_have_scripts.sh` skipped the
+  enablement comparison for units with no `enabled:` key, so the artifact could
+  enable a unit the source never enables. `test_autorebase.sh` searched the whole
+  unit block for `enabled: true`, which an `enabled: true` line inside `contents: |`
+  satisfied while Butane rendered no flag. The artifact check left its temp
+  directory behind on any path that skipped the explicit cleanup, and now cleans up
+  through an EXIT trap.
 - Seven more guard gaps, found by the next review round and confirmed the same
   way: mutation applied, guard watched passing, then watched failing. Three were
   section-blind, which is the same defect class as the comment-blind checks fixed

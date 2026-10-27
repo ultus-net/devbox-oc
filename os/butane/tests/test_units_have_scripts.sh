@@ -76,12 +76,15 @@ if [ -f "$bu" ]; then
 
   # Enablement is a source attribute that has to survive compilation. Asserting it
   # against the .bu alone never proves the shipped artifact enables anything.
+  #
+  # A unit with no `enabled:` key is not enabled, so the absent case is compared
+  # too: skipping it let the artifact enable a unit the source never enables.
   while read -r name; do
     [ -n "$name" ] || continue
     want="$(printf '%s\n' "$units_block" \
       | awk -v u="    - name: ${name}" '$0==u{on=1;next} /^    - name: /{on=0} on' \
       | sed -n 's/^[[:space:]]*enabled:[[:space:]]*\(true\|false\)[[:space:]]*$/\1/p' | head -1)"
-    [ -n "$want" ] || continue
+    want="${want:-false}"
     got="$(jq -r --arg n "$name" \
       '.systemd.units[] | select(.name == $n) | (.enabled // false)' "$ign")"
     [ "$got" = "$want" ] \
@@ -93,16 +96,21 @@ if [ -f "$bu" ]; then
   # file contents. Only checked when the compiler is available, since the gate
   # must run on a machine without one.
   if [ -n "${BUTANE:-}" ] && [ -x "${BUTANE}" ]; then
-    repro="$(mktemp)"
+    # Build inside the workspace, not the system temp dir: the compile writes a
+    # staged sibling of the target, and the trap has to remove both. A signal
+    # that skips the trap (SIGKILL) still leaves them, but every catchable path
+    # cleans up.
+    reprodir="$(mktemp -d ./ign-repro.XXXXXX)"
+    trap 'rm -rf "$reprodir"' EXIT
+    repro="$reprodir/repro.ign"
     if ! "$(dirname "$bu")/build-placeholder.sh" "$repro" >/dev/null 2>&1; then
-      rm -f "$repro"
       fail "build-placeholder.sh failed, so the committed artifact cannot be reproduced"
     fi
     if ! diff <(jq -S . "$repro") <(jq -S . "$ign") >/dev/null; then
-      rm -f "$repro"
       fail "the committed Ignition differs from what build-placeholder.sh produces"
     fi
-    rm -f "$repro"
+    rm -rf "$reprodir"
+    trap - EXIT
   else
     echo "SKIP: no BUTANE set, artifact reproducibility unchecked" >&2
   fi
