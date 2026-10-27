@@ -33,8 +33,11 @@ printf '%s\n' "$block" | grep -q 'var\.tailscale_authkey' \
   || fail "the secret does not carry the variable's value"
 
 # The role assignment must exist before the secret, or the apply races and fails
-# with an authorization error that reads like a permissions problem.
-printf '%s\n' "$block" | grep -q 'deployer_kv_admin' \
+# with an authorization error that reads like a permissions problem. Match the
+# depends_on list itself: a bare mention in a comment would satisfy a looser check
+# without ordering anything.
+printf '%s\n' "$block" \
+  | grep -Eq 'depends_on[[:space:]]*=[[:space:]]*\[[^]]*azurerm_role_assignment\.deployer_kv_admin' \
   || fail "secret does not depend on the deployer's Key Vault role assignment"
 
 echo "the tailscale auth key is stored where the host reads it"

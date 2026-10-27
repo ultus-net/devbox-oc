@@ -44,11 +44,12 @@ All notable changes to this project. One entry per landed change, newest first.
 - Three defects made a correctly deployed box unreachable. `tailscaled` was never
   enabled, so the tailnet join had no daemon to talk to and the box was
   Bastion-only. The Tailscale auth key was a required variable that no resource
-  wrote to Key Vault, so the join read a secret that did not exist. And the OS
-  pipeline published Fedora's plain CoreOS VHD instead of ucore, so the host ran
-  an OS with no `tailscaled` package, zincati in place of ucore's update path, and
-  none of the assumptions every host unit makes. Each now has a guard that was
-  observed failing before its fix.
+  wrote to Key Vault, and `oc-tailnet.service` never loaded the env file that names
+  the vault, so the join ran with no key source at all. And the OS pipeline
+  published Fedora's plain CoreOS VHD instead of ucore, so the host ran an OS with
+  no `tailscaled` package, zincati in place of ucore's update path, and none of the
+  assumptions every host unit makes. Each now has a guard that was observed failing
+  before its fix.
 - The quadlet's `EnvironmentFile` is now guarded: every file it names must have a
   component that writes it, and the password variable must match on both sides.
   A config pointing at a file nothing produces is how the tailnet key went

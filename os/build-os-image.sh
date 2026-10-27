@@ -14,7 +14,10 @@ set -euo pipefail
 # Digest from the design's verified-facts table (ucore-minimal stable). Bumping it
 # rolls every VM, so it is a reviewed change, not a routine refresh.
 UCORE_IMAGE="${UCORE_IMAGE:-ghcr.io/ublue-os/ucore@sha256:7906a70efe7482704fdb232c7e5d2a3068a0c5520ef46d3f7f6b9f8fc0e899b9}"
-IMAGE_BUILDER="${IMAGE_BUILDER:-ghcr.io/osbuild/image-builder-cli:latest}"
+# Pinned by digest, not `:latest`. The pipeline runs weekly on a cron, so a moving
+# tag would swap the builder underneath an unchanged config and make the published
+# image non-reproducible with nothing in the diff to review.
+IMAGE_BUILDER="${IMAGE_BUILDER:-ghcr.io/osbuild/image-builder-cli@sha256:37b7c22483b03013f54030094683d8af8a83ee642c2a4dc9a51dcd9a79be6b6f}"
 RG="${RG:?RG is required}"
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
 CONTAINER="${CONTAINER:-images}"

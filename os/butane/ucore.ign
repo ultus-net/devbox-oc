@@ -172,7 +172,7 @@
         "name": "tailscaled.service"
       },
       {
-        "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\nAfter=network-online.target oc-secrets.service tailscaled.service\nWants=network-online.target tailscaled.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\n# Joins only when no state exists, then advertises the loopback port.\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",
+        "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\nAfter=network-online.target oc-secrets.service tailscaled.service\nWants=network-online.target tailscaled.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\n# A unit does not inherit another unit's EnvironmentFile. Without this the\n# join runs with TS_AUTHKEY_SECRET and VAULT_NAME unset, skips Key Vault\n# entirely, and fails with \"no auth key\" on every fresh boot.\nEnvironmentFile=/etc/devbox/oc-secrets.env\n# Joins only when no state exists, then advertises the loopback port.\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "oc-tailnet.service"
       },

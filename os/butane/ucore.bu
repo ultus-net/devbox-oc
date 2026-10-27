@@ -186,6 +186,10 @@ systemd:
         [Service]
         Type=oneshot
         RemainAfterExit=yes
+        # A unit does not inherit another unit's EnvironmentFile. Without this the
+        # join runs with TS_AUTHKEY_SECRET and VAULT_NAME unset, skips Key Vault
+        # entirely, and fails with "no auth key" on every fresh boot.
+        EnvironmentFile=/etc/devbox/oc-secrets.env
         # Joins only when no state exists, then advertises the loopback port.
         ExecStart=/usr/local/sbin/oc-tailnet-up
         ExecStart=/usr/local/sbin/oc-tailnet

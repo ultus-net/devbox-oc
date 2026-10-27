@@ -33,6 +33,7 @@ Checked against upstream sources in this session, so a reviewer can re-check the
 | `tailscale` is installed in ucore-minimal | `dnf -y --enable-repo=tailscale-stable install tailscale` | `ublue-os/ucore` `ucore/install-ucore-minimal.sh` |
 | The tailscale repo is vendored disabled | `enabled=0` in `ucore/system_files/minimal/etc/yum.repos.d/tailscale.repo` | same repo |
 | The RPM ships the unit but enables nothing | `/lib/systemd/system/tailscaled.service` is in the file list, no preset entry | `pkgs.tailscale.com/stable/fedora/x86_64` repodata filelists |
+| `tailscaled.service` is `Type=notify` | so `After=tailscaled.service` waits for readiness, not just for start | `tailscale/tailscale` `cmd/tailscaled/tailscaled.service` |
 | ucore enables added services only on request | "most added services are installed but not enabled automatically" | `projectucore.org/docs/services/` |
 | `jq` is in the Fedora CoreOS base | `jq 1.8.1-3.fc44.x86_64` in the lockfile | `coreos/fedora-coreos-config` `manifest-lock.x86_64.json` |
 | ucore is a bootc image | `containers.bootc: 1` label | design doc verified-facts table |
@@ -170,16 +171,25 @@ git commit -m "fix(os): enable tailscaled and order the tailnet join after it"
 
 ---
 
-### Task 2: D2 Write the Tailscale auth key into Key Vault
+### Task 2: D2 Make the auth key reach the host, not just Key Vault
 
-**Files:** `terraform/main.tf` (modify), `terraform/outputs.tf` (modify), `terraform/tests/authkey_is_stored.sh` (create), `tests/verify.sh` (modify)
+**Files:** `terraform/main.tf` (modify), `terraform/outputs.tf` (modify), `os/butane/ucore.bu` (modify), `terraform/tests/authkey_is_stored.sh` (create), `os/butane/tests/test_units_load_their_env.sh` (create), `tests/verify.sh` (modify)
 
-**Interfaces:** produces `azurerm_key_vault_secret.tailscale_authkey` named `tailscale-authkey`, the name `oc-tailnet-up` already defaults to.
+**Interfaces:** produces `azurerm_key_vault_secret.tailscale_authkey` named `tailscale-authkey`, and an `oc-tailnet.service` that loads the env file naming that vault.
 
-The defect: `var.tailscale_authkey` is required and documented, and
-`terraform.tfvars.example` tells the operator to set it, but no resource consumes
-it. Terraform accepts the value and drops it. On boot, `oc-tailnet-up` requests
-`tailscale-authkey` and gets 404.
+The defect has two halves, and fixing only the first leaves the box just as
+unreachable:
+
+1. `var.tailscale_authkey` is required and documented, and
+   `terraform.tfvars.example` tells the operator to set it, but no resource
+   consumes it. Terraform accepts the value and drops it.
+2. `oc-tailnet.service` has no `EnvironmentFile=`. A systemd unit does not inherit
+   another unit's `EnvironmentFile`, so `TS_AUTHKEY_SECRET` and `VAULT_NAME` are
+   unset, `oc-tailnet-up` skips its Key Vault branch entirely, and it dies with
+   "no auth key". The Terraform secret would then exist and never be fetched.
+
+Both get a guard. The second is why the plan also adds a source-level check that no
+unit runs a script needing variables from an env file it does not load.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -219,8 +229,11 @@ printf '%s\n' "$block" | grep -q 'var\.tailscale_authkey' \
   || fail "the secret does not carry the variable's value"
 
 # The role assignment must exist before the secret, or the apply races and fails
-# with an authorization error that reads like a permissions problem.
-printf '%s\n' "$block" | grep -q 'deployer_kv_admin' \
+# with an authorization error that reads like a permissions problem. Match the
+# depends_on list itself: a bare mention in a comment would satisfy a looser check
+# without ordering anything.
+printf '%s\n' "$block" \
+  | grep -Eq 'depends_on[[:space:]]*=[[:space:]]*\[[^]]*azurerm_role_assignment\.deployer_kv_admin' \
   || fail "secret does not depend on the deployer's Key Vault role assignment"
 
 echo "the tailscale auth key is stored where the host reads it"
@@ -263,7 +276,33 @@ Expected: `the tailscale auth key is stored where the host reads it`
   description = "Vault holding the server password and the tailnet auth key."
 ```
 
-- [ ] **Step 6: Add the suite to the gate**
+- [ ] **Step 6: Add the unit guard and load the env file**
+
+Create `os/butane/tests/test_units_load_their_env.sh`. It parses `ucore.bu` with
+python3-yaml, maps each `*.env` file to the variables it defines, maps each
+`ExecStart` to the variables its script references (following `lib-imds.sh`), and
+fails when a unit runs a script needing variables from an env file it does not
+load. Every input comes from the config and the scripts, so the check covers units
+that do not exist yet.
+
+It must fail before the config change:
+
+Run: `chmod +x os/butane/tests/test_units_load_their_env.sh && ./os/butane/tests/test_units_load_their_env.sh`
+Expected: `FAIL: oc-tailnet.service runs a script needing TS_AUTHKEY_SECRET, VAULT_NAME but does not load /etc/devbox/oc-secrets.env`
+
+Then add the missing line to `oc-tailnet.service` in `os/butane/ucore.bu`, in the
+`[Service]` section:
+
+```yaml
+        # A unit does not inherit another unit's EnvironmentFile. Without this the
+        # join runs with TS_AUTHKEY_SECRET and VAULT_NAME unset, skips Key Vault
+        # entirely, and fails with "no auth key" on every fresh boot.
+        EnvironmentFile=/etc/devbox/oc-secrets.env
+```
+
+Run the guard again. Expected: `every unit loads the env file its scripts need`.
+
+- [ ] **Step 7: Add both suites to the gate**
 
 In `tests/verify.sh`, after the `vault name derivable without state` run block:
 
@@ -272,13 +311,33 @@ run "auth key stored" \
   ./terraform/tests/authkey_is_stored.sh
 ```
 
-- [ ] **Step 7: Validate and commit**
+And after the `tailscale enabled` run:
+
+```bash
+run "units load their env" \
+  ./os/butane/tests/test_units_load_their_env.sh
+```
+
+- [ ] **Step 8: Regenerate the committed Ignition**
+
+```bash
+BUTANE=/path/to/butane ./os/butane/build-placeholder.sh
+jq -r '.systemd.units[] | select(.name=="oc-tailnet.service") | .contents' os/butane/ucore.ign \
+  | grep EnvironmentFile
+```
+
+Expected: `EnvironmentFile=/etc/devbox/oc-secrets.env`. Both the `.bu` and the
+generated `.ign` must carry it: Terraform reads the `.ign`.
+
+- [ ] **Step 9: Validate and commit**
 
 ```bash
 terraform -chdir=terraform fmt -check
 terraform -chdir=terraform validate
-git add terraform/main.tf terraform/outputs.tf terraform/tests/authkey_is_stored.sh tests/verify.sh
-git commit -m "fix(terraform): store the tailscale auth key the host reads at boot"
+git add terraform/main.tf terraform/outputs.tf terraform/tests/authkey_is_stored.sh \
+        os/butane/ucore.bu os/butane/ucore.ign \
+        os/butane/tests/test_units_load_their_env.sh tests/verify.sh
+git commit -m "fix: deliver the tailscale auth key to the unit that needs it"
 ```
 
 Expected: `Success! The configuration is valid.`
@@ -349,7 +408,10 @@ set -euo pipefail
 # Digest recorded in the design's verified-facts table. Bumping it is a deliberate
 # change that rolls every VM, not a routine refresh.
 UCORE_IMAGE="${UCORE_IMAGE:-ghcr.io/ublue-os/ucore@sha256:7906a70efe7482704fdb232c7e5d2a3068a0c5520ef46d3f7f6b9f8fc0e899b9}"
-IMAGE_BUILDER="${IMAGE_BUILDER:-ghcr.io/osbuild/image-builder-cli:latest}"
+# Pinned by digest, not `:latest`. The pipeline runs weekly on a cron, so a moving
+# tag would swap the builder underneath an unchanged config and make the published
+# image non-reproducible with nothing in the diff to review.
+IMAGE_BUILDER="${IMAGE_BUILDER:-ghcr.io/osbuild/image-builder-cli@sha256:37b7c22483b03013f54030094683d8af8a83ee642c2a4dc9a51dcd9a79be6b6f}"
 RG="${RG:?RG is required}"
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
 CONTAINER="${CONTAINER:-images}"
@@ -400,20 +462,23 @@ az image create -g "$RG" -n "$name" --location "$LOCATION" --os-type Linux \
 az image show -g "$RG" -n "$name" --query id -o tsv
 ```
 
-- [ ] **Step 4: Update the pipeline step name**
+- [ ] **Step 4: Fix the pipeline's container engine**
 
-`pipelines/devbox-os.yml` installs `coreos-installer` from a pinned image. It is no
-longer used. Delete that step and the comment above it, and note the new
-precondition:
+`pipelines/devbox-os.yml` installs `coreos-installer` from a pinned image, which is
+no longer used. Delete that step and its comment.
+
+Do not symlink docker to podman. A symlink accepts `--version` and then fails on the
+flags image-builder needs: docker rejects `--security-opt label=type:...` (an SELinux
+option) and has no `/var/lib/containers/storage`. Install real podman instead, and
+print its version so the agent records what actually ran:
 
 ```yaml
-      # image-builder drives podman, so the agent needs a container engine and a
-      # privileged build. ubuntu-latest ships docker; map it to the podman name
-      # image-builder expects rather than installing a second engine.
       - script: |
           set -euo pipefail
-          ./os/build-os-image.sh | tee image-id.txt
-        displayName: build the ucore VHD and publish a managed image
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends podman
+          podman --version
+        displayName: install podman for image-builder
 ```
 
 The `AzureCLI@2` wrapper and its `RG`/`STORAGE_ACCOUNT` exports stay.
