@@ -33,9 +33,10 @@ flowchart LR
 
 | Layer | Built by | Updated by |
 |---|---|---|
-| OS image (`ucore-minimal`) | upstream, consumed by digest | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
+| OS image (`ucore-minimal`) | our pipeline, from the pinned ucore bootc image | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
 | Container image | `pipelines/devbox-image.yml` into ACR | `podman auto-update` on the `:prod` tag, gated by the idle check |
 | Data disk | not built | nightly incremental snapshot |
+| Tailnet path | `tailscaled` enabled by Ignition, then `oc-tailnet.service` | both must be up; without them the box is Bastion-only |
 
 Fusing the first two would make every OpenCode release an OS rebuild plus a
 reboot. They stay separate on purpose.

@@ -29,4 +29,11 @@ done
 # surprised when the box stops under a connected client.
 grep -riq "not protected" "$root/README.md" || fail "README does not state what the idle gate does not protect"
 
+# The published image is built from ucore. An operator needs a command that proves
+# the booted OS is ucore and not the plain CoreOS image this repo used to publish.
+grep -riq "rpm-ostree status" "$root/docs/runbook.md" \
+  || fail "runbook does not tell the operator how to confirm the booted OS is ucore"
+grep -riq "tailscaled" "$root/docs/runbook.md" \
+  || fail "runbook does not name tailscaled, the unit most likely to be down"
+
 echo "docs complete"
