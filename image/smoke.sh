@@ -17,6 +17,6 @@ run id -u dev | grep -qx 1000
 for t in git jq rg fd curl; do run command -v "$t" >/dev/null; done
 
 # 4. It does not run as root.
-test "$(podman image inspect "$ref" --format '{{.Config.User}}')" = "dev"
+test "$("$ENGINE" image inspect "$ref" --format '{{.Config.User}}')" = "dev"
 
 echo "smoke ok: $ref"

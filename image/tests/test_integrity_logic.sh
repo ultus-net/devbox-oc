@@ -8,6 +8,9 @@
 # build. This proves it without Docker or Podman.
 set -euo pipefail
  
+cleanup() { rm -f "${temp_tarball:-}" "${corrupt:-}"; }
+trap cleanup EXIT
+
 OC_SHA512='o8EJ0ZsT4dzDKN+0mpG2EKbNGzJyp+F1++Av28UReRVfiEv+N34eZEnN/unkiMoerKHad6W6Ii7k4ukTnPNmNQ=='
 tarball="${1:-/tmp/ocinspect/oc.tgz}"
 
@@ -30,7 +33,6 @@ check() {
 if [ ! -f "$tarball" ]; then
   if command -v curl >/dev/null 2>&1; then
     temp_tarball="$(mktemp)"
-    trap 'rm -f "$temp_tarball"' EXIT
     if curl -fsSL --retry 3 --output "$temp_tarball" \
       "https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-2.1.4.tgz"; then
       tarball="$temp_tarball"
@@ -44,27 +46,14 @@ if [ ! -f "$tarball" ]; then
   fi
 fi
 
-expected_digest_file="$(printf '%s' "$OC_SHA512" | base64 -d | od -An -tx1 | tr -d ' \n')"
-tarball_sha="$(sha512sum "$tarball" | cut -d' ' -f1)"
-
 echo "checking $tarball against the digest from Dockerfile..."
 
-if [ "$tarball_sha" = "$expected_digest_file" ]; then
-  echo "integrity check PASSES"
-else
-  echo "integrity check FAILS (base64 mismatch)" >&2
-  exit 1
-fi
+check "$OC_SHA512" "$tarball" || { echo "integrity check FAILS" >&2; exit 1; }
+echo "integrity check PASSES"
 
 # Negative control: a corrupted tarball must not match.
 corrupt="$(mktemp)"
-trap 'rm -f "$corrupt"' EXIT
 cp "$tarball" "$corrupt"
 printf 'x' >> "$corrupt"
-corrupt_sha="$(sha512sum "$corrupt" | cut -d' ' -f1)"
-
-if [ "$corrupt_sha" = "$expected_digest_file" ]; then
-  echo "negative control FAILED: corrupted input still matched" >&2
-  exit 1
-fi
+check "$OC_SHA512" "$corrupt" && { echo "negative control FAILED: corrupted input still matched" >&2; exit 1; }
 echo "negative control passes: corruption is detected"
