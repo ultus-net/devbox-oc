@@ -33,6 +33,7 @@ RUN set -eux; \
     dnf install -y --setopt=install_weak_deps=False \
       bash \
       ca-certificates \
+      containers-common \
       curl \
       fd-find \
       findutils \
@@ -66,6 +67,10 @@ RUN set -eux; \
     install -m 0755 /tmp/package/bin/opencode /usr/local/bin/opencode; \
     rm /tmp/oc.tgz /tmp/oc.sha512.hex; \
     opencode --version
+
+RUN install -d -m 0755 /etc/containers/registries.conf.d && \
+    printf '%s\n' '[registries.search]' 'registries = ["docker.io"]' \
+      > /etc/containers/registries.conf.d/010-devbox.conf
 
 COPY toolchains.txt /tmp/toolchains.txt
 RUN set -eux; \
