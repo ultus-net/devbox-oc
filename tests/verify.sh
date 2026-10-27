@@ -35,6 +35,8 @@ run "no scheduled stop" \
 run "data disk protected" \
   ./terraform/tests/data_disk_protected.sh
 
+run "docs complete"  ./tests/docs_complete.sh
+
 # The integrity test needs a tarball. Without one it must fail unless the
 # operator opts out, which would make this gate meaningless.
 if [ -f /tmp/ocinspect/oc.tgz ]; then
