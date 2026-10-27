@@ -41,6 +41,32 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- Six guard tests passed on mutations that reproduced the exact production
+  failures they claim to prevent. Each was confirmed by making the mutation and
+  watching the guard report success, then fixed and re-confirmed as failing.
+  `test_autorebase.sh` compared marker names to literals, so renaming stage 1's
+  marker passed while leaving a reboot loop; it now binds the marker a stage
+  writes to the marker the next stage reads. `test_quadlet_persistence.sh` grepped
+  `EnvironmentFile=` anywhere in the file, so commenting it out, deleting it, or
+  moving it into `[Unit]` all passed; it now reads the `[Container]` section only.
+  `test_tailscale_enabled.sh` was section-blind, so `After=` in `[Service]` passed
+  even though systemd ignores it. Both autorebase units could lose `[Install]` and
+  still pass, leaving each unit `static` and never enabled. `test_units_have_scripts.sh`
+  checked two named units in the compiled `ucore.ign` and never compared it to
+  `ucore.bu`, so the whole autorebase pair could vanish from the artifact. And
+  `authkey_is_stored.sh` accepted a commented-out `depends_on`, contradicting its
+  own comment.
+- `tailscaled.service` enablement did not survive the rebase onto ucore. Ignition's
+  `enabled: true` writes only a preset line, and systemd applies presets once, on
+  the first boot, which is still Fedora CoreOS with no `tailscaled` package. The
+  preset was applied to nothing, so the unit reported `disabled` on the booted
+  host and the tailnet worked only because `oc-tailnet.service` carries an
+  unconditional `Wants=`. The signed-autorebase stage now enables the unit on a
+  boot where it exists.
+- `test_units_load_their_env.sh` only checked `${VAR:?}` syntax, so a variable the
+  script reads with no fallback could be dropped from the env file its unit loads
+  and the guard would still pass. It now checks reads with no local default too,
+  and skips scripts that source an env file written at runtime.
 - Three defects made a correctly deployed box unreachable. `tailscaled` was never
   enabled, so the tailnet join had no daemon to talk to and the box was
   Bastion-only. The Tailscale auth key was a required variable that no resource

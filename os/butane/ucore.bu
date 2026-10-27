@@ -257,6 +257,12 @@ systemd:
         Type=oneshot
         StandardOutput=journal+console
         ExecStart=/usr/bin/rpm-ostree rebase ostree-image-signed:docker://ghcr.io/ublue-os/ucore-minimal:stable
+        # Enablement above is preset-only, and the preset ran on the FCOS boot
+        # where this unit did not exist yet. Enabling here creates the real
+        # symlink, so is-enabled tells the truth on the booted host. This runs
+        # before the marker is written: a failure then retries on the next boot
+        # instead of marking a half-done stage as complete.
+        ExecStart=/usr/bin/systemctl enable tailscaled.service
         ExecStart=/usr/bin/touch /etc/ucore-autorebase/signed
         ExecStart=/usr/bin/systemctl disable ucore-signed-autorebase.service
         ExecStart=/usr/bin/systemctl reboot

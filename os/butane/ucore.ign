@@ -100,7 +100,7 @@
         "path": "/etc/containers/systemd/opencode.container",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/4RVQW8bRw+9z68goMN3kXedL0WLqthD4jiIUSQ27MQBYhgIvUNpB54dbkjuKuqvL2ZWkt3CQC+Shhy+IR/JpwV0rFb/GNFHspoHSi17qlpOhiGRuIVbwEVSwxjJgzHUZG199GutOzXqfQ3KMLDvMf1PYUOJBI0FhNArBKvgjVvAEzCsQyQYkyeZIQ8483cNQWFAUfKACggJLUw5INgSOlRI7BZw/pPaG0OxJWDykGgiAc0GBUw760LaVO7uSwp2796RthIGC5yay4HSGXsCTxM8VfsVk2mTyLYsjyecYkhUGcqGzL1ZG8nLPuD2RKkVMq2UZAotuQXMAcAp7oDFkyhYN5egFXwN1vFocE0/xiCkzRIQ1hgyzX/SDm5xjAZrsrYDlgx3dg2RNyGBWogRItkM+MRpqRy2wTpIDAOqbln8TA3DMMboFtAKeUoWMOoyNy0Y5JwpU1oIK/czcPCRYINGB2KJciuUVAMnsNyBQdiotQreY4jQRs4dC0mN0K/yq3telvl3Zi4y+sodq36BOXd3dqjo3l30uKEGW/E0PfDPIWJLHUdPUuFfo1ArVeB6dq4GYe+OwZ+wp+Yw0u5qfIhBuysWa179/7fqtDqtXq1+Of391/LhztMUhFNPyd6HSE0ZykN0TWl6fqP5cPnxvKk77im/7W45jj01tcpUCw2sq6Nvf/7mFnCzJ+7d20LxJvIDRjDmmDtnBDGPeGa2I/BoCD7oY+4Rwu1HEHoYQ/TwSDSoW+RbfQWfSmvygvTkYSqJrMA6NIiYvB7wLm8KWvWPXI/1aYdCz5KuIrcYZ/Px1urby8Etp3XYPI+eLf8ZWKp+4dVsfh78ZjT+Mng0aoQ2QU12zi3g+6w3gKPxyVj83+d1KxRlUmgLIU8QhPW/diW3JctERxit2y3dIhNtXdAsPdvMX4+PtN/ZAg4DWgeKawJB60gyzQl4sNAHtdBW8Lm80Q+sWQGKxhVIoTK5Hjr0wIn+AC88DHnbgsGWx5hdE4FQz1NW2pzAZkTBZESV+1DSPOt9U48q9UzUQ0hHmuDkZCLJ87W/e5GMZMLYvD7Vvelz6IlHa14dLddkEkib1/tzEdMrksC+xLm7m3kr7901FXlpMG5xlz37v4X7oprk3+4aT+usWgfF/DsAAP//4ofBXl4GAAA="
+          "source": "data:;base64,H4sIAAAAAAAC/4RVQW/bSA+9z68goMN3caTk62IX64UOaZqiwaJNkLQp0CBAaQ1tDTIaqiQl1/vrFyPZTnYRYC+2hxy+IR/J5wJaVqt+DOgjWcU9pYY9lQ0nw5BIXOEKuEpqGCN5MIaKrKmOfq10p0adr0AZevYdpv8pbCiRoLGAEHqFYCWcuwKegWEdIsGQPMkMecCZvysICj2KkgdUQEhoYcwBwRbQokJiV8DlT2ruDMUWgMlDopEENBsUMO2sDWlTuocvKdije0faSOgtcKqve0oX7Ak8jfBc7VdMpnUi27I8nXCKIVFpKBsyd742ktd9wM2JUiNkWirJGBpyBcwBwCnugMWTKFg7l6AlfA3W8mBwSz+GIKT1AhDWGDLNf9IO7nGIBmuypgWWDHdxC5E3IYFaiBEi2Qz4zOlUOWyDtZAYelTdsviZGoZ+iNEV0Ah5ShYw6iI3LRjknClTOhE23c/AwUeCDRodiCXKrVBSDZzAcgd6YaPGSniPIUITOXcsJDVCv8yv7nlZ5N+ZucjoS3es+hXm3MPFoaJHd9XhhmpsxNO44p+4akr8axBqpAxczcZlL+zdMegTdlQfRtndDKsYtL1hsfrs/7+Vp+Vpebb85fT3X6cPd5nGIJw6SvY+RKqnYTxEV5TGlzfqD9cfL+uq5Y7y2+6e49BRXamMlVDPujz69udvroC7PWHv3k7UbiKvMIIxx9wxI4h5tDOjLYFHQ/BBn3JvEO4/gtBqCNHDE1Gvrsi3uhI+TS3Ji9GRh3FKZAnWokHE5PWAd303oZX/yPVYn7Yo9CLpMnKDcTYfby2/vR7ccFqHzcvo2fKfgVPVr7yazS+DzwfjL71Ho1poE9Rk51wB32edARyMT4bJ/31es4miTAptIeTJgbD+147ktmR5aAmjtbuFKzLR1gbNkrPN/HX4RPtdncChR2tBcU0gaC1JpjkB9xa6oBaaEj5Pb3Q9a978SdsmSKE+YkMeWvTAif4AL9z3ecuCwZaHmF0jgVDHY1bYnMBmQMFkRKX7MKV50fm6GlSqmahVSEea4ORkJMnztb97lYxkxFi/OdW96XPoiAerz46WWzIJpPWb/XkS0RuSwH6Kcw938zY+uluaZKXGuMVd9uz/Dh4ntST/dld7Wme1Oijl3wEAAP//bzvqNlYGAAA="
         },
         "mode": 420
       },
@@ -108,7 +108,7 @@
         "path": "/etc/devbox/oc-secrets.env",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/0zMPW4CMRDF8X5P8QRtnBtQrNBKkfJRgEmUajV4B42zlgfZYwK3j1akoP69//vsD29+/Ojfh818cRNfjnp150SBRdPEpeu3uztTKHd+1DW+ook2g0msMGEYxZTZ8KMxQ6giK2a+oWorgaEZhFPhKjjq9QmUp24NDe6/c+2ME8VU8RtNsMoKaibLxeq58/uxP/iX1+F73A/b3eA3S1YDJXbLbOZb9xcAAP//qZPjcNMAAAA="
+          "source": "data:;base64,H4sIAAAAAAAC/yyMu2oDMRBFe33FxW6j/IELYQSBPApbTki1zMpjpOyiCauRY/99EOv23HvOpzu9heHDvfvdma+j3Ox0tTRG4/aHFVNc1qXTLb6yJmkKTblCE0Mpz4UVP5ILElUUwcR3VGlLZEgB4bJwTRjl9gQqZ7OFRPvwbPvFhfJc8Zc1YVME1DT1xObZhOPgTuHl1X8PR78/+LDrWo00s+23ie/mPwAA//9IO/bVwwAAAA=="
         },
         "mode": 384
       },
@@ -123,8 +123,8 @@
       {
         "path": "/etc/devbox/oc-snapshot.env",
         "contents": {
-          "compression": "",
-          "source": "data:,DISK_ID%3Ddc-placeholder%0ARG%3Drg-devbox-placeholder%0ASUBSCRIPTION_ID%3D00000000-0000-0000-0000-000000000000%0A"
+          "compression": "gzip",
+          "source": "data:;base64,H4sIAAAAAAAC/4yOywrCMBBF9/mXOP5AN7ZQgvig0bW0ySiD6ISZJPj5Ij5WLnoWd3UPnM759cl1DWiZNAilTHxXWH6wf+YLCCoXCdgLl6QgFxuxTvyAJFwpoihsKAgrn/Oi5VsqGSGSXhXeRxvHPJqhb36q8ceVbwe3P7jd9tU1J8Q8AwAA//9Gp9ZsxQAAAA=="
         },
         "mode": 384
       }
@@ -202,7 +202,7 @@
         "name": "ucore-unsigned-autorebase.service"
       },
       {
-        "contents": "[Unit]\nDescription=Switch to the signed ucore reference, then reboot\nConditionPathExists=/etc/ucore-autorebase/unverified\nConditionPathExists=!/etc/ucore-autorebase/signed\nAfter=network-online.target\nWants=network-online.target\n[Service]\nType=oneshot\nStandardOutput=journal+console\nExecStart=/usr/bin/rpm-ostree rebase ostree-image-signed:docker://ghcr.io/ublue-os/ucore-minimal:stable\nExecStart=/usr/bin/touch /etc/ucore-autorebase/signed\nExecStart=/usr/bin/systemctl disable ucore-signed-autorebase.service\nExecStart=/usr/bin/systemctl reboot\n[Install]\nWantedBy=multi-user.target\n",
+        "contents": "[Unit]\nDescription=Switch to the signed ucore reference, then reboot\nConditionPathExists=/etc/ucore-autorebase/unverified\nConditionPathExists=!/etc/ucore-autorebase/signed\nAfter=network-online.target\nWants=network-online.target\n[Service]\nType=oneshot\nStandardOutput=journal+console\nExecStart=/usr/bin/rpm-ostree rebase ostree-image-signed:docker://ghcr.io/ublue-os/ucore-minimal:stable\n# Enablement above is preset-only, and the preset ran on the FCOS boot\n# where this unit did not exist yet. Enabling here creates the real\n# symlink, so is-enabled tells the truth on the booted host. This runs\n# before the marker is written: a failure then retries on the next boot\n# instead of marking a half-done stage as complete.\nExecStart=/usr/bin/systemctl enable tailscaled.service\nExecStart=/usr/bin/touch /etc/ucore-autorebase/signed\nExecStart=/usr/bin/systemctl disable ucore-signed-autorebase.service\nExecStart=/usr/bin/systemctl reboot\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "ucore-signed-autorebase.service"
       }

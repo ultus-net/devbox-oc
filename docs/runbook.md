@@ -162,6 +162,7 @@ Finally confirm the devbox units and the daemon the tailnet path needs:
 
 ```sh
 ssh core@devbox "systemctl is-active tailscaled oc-secrets oc-tailnet opencode"
+ssh core@devbox "systemctl is-enabled tailscaled"
 ssh core@devbox "sudo podman ps --format '{{.Names}} {{.Status}}'"
 ```
 
@@ -170,6 +171,13 @@ All four units must report `active` and the container must be `healthy`. If
 `sudo journalctl -u oc-secrets -n 40`. If `tailscaled` is not active there is no
 tailnet path and the box needs Bastion: check
 `sudo journalctl -u tailscaled -n 40`.
+
+`is-active` alone does not prove enablement is right: `oc-tailnet` carries an
+unconditional `Wants=tailscaled`, so the daemon starts whether or not it is
+enabled. `is-enabled` must say `enabled`. If it says `disabled`, the
+signed-autorebase stage did not complete: check
+`sudo journalctl -u ucore-signed-autorebase -n 40`, then enable it by hand with
+`sudo systemctl enable --now tailscaled` before pairing a client.
 
 ### 7. Connect a client
 

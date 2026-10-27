@@ -49,4 +49,26 @@ net="$(jq -r '.systemd.units[] | select(.name == "oc-tailnet.service") | .conten
 printf '%s\n' "$net" | grep -Eq '^EnvironmentFile=/etc/devbox/oc-secrets\.env$' \
   || fail "oc-tailnet.service does not load the env file naming its vault in the compiled Ignition"
 
+# Every unit the source declares must reach the artifact. Checking two named
+# units by hand leaves the rest able to vanish: the autorebase pair can be
+# dropped from the .ign and the box still boots plain FCOS, which is the failure
+# this whole file exists to catch.
+bu="${BU:-$(cd "$(dirname "$0")/.." && pwd)/ucore.bu}"
+if [ -f "$bu" ]; then
+  # Only the systemd section declares units. Taking every `- name:` line in the
+  # file also accepts the user list, whose entries are not units.
+  units_block="$(sed -n '/^systemd:/,$p' "$bu")"
+  [ -n "$units_block" ] || fail "ucore.bu has no systemd section"
+  missing=""
+  while read -r name; do
+    [ -n "$name" ] || continue
+    jq -e --arg n "$name" '.systemd.units | map(.name) | index($n)' "$ign" >/dev/null \
+      || missing="$missing $name"
+  done < <(printf '%s\n' "$units_block" | grep -oE '^    - name: [A-Za-z0-9@._-]+' | sed 's/^    - name: //')
+  [ -z "$missing" ] \
+    || fail "declared in ucore.bu but absent from the compiled Ignition:$missing"
+else
+  echo "SKIP: no ucore.bu next to the ignition file, unit parity unchecked" >&2
+fi
+
 echo "all units reference baked-in scripts"

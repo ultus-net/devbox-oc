@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # host/tests/test_quadlet_persistence.sh
 set -euo pipefail
-q="$(cd "$(dirname "$0")/../.." && pwd)/host/quadlet/opencode.container"
+q="${1:-$(cd "$(dirname "$0")/../.." && pwd)/host/quadlet/opencode.container}"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 [ -f "$q" ] || fail "quadlet missing"
 
@@ -46,10 +46,21 @@ printf '%s\n' "$unit_section" | grep -Eq '^Requires=.*oc-secrets\.service' \
 # A reference to a file nothing produces is how the tailnet key went missing, and
 # the failure surfaces at boot as a variable that is merely unset, not as a
 # missing-file error.
+#
+# Read from [Container] only. podman's generator reads EnvironmentFile= there; the
+# same key in [Unit] is parsed by systemd, ignored for the container, and the
+# workload starts with no OPENCODE_PASSWORD while billing continues. Match the
+# directive at line start too, or a commented-out line names a file it never loads.
+container_section="$(awk '/^\[Container\]/{on=1;next} /^\[/{on=0} on' "$q")"
+[ -n "$container_section" ] || fail "quadlet has no [Container] section"
+env_paths="$(printf '%s\n' "$container_section" | sed -n 's/^EnvironmentFile=//p')"
+[ -n "$env_paths" ] \
+  || fail "quadlet loads no EnvironmentFile in [Container], so the container has no password"
 while read -r path; do
+  [ -n "$path" ] || continue
   grep -rqF "$path" "$(dirname "$q")/../bin" "$(dirname "$q")/../../os/butane/ucore.bu" \
     || fail "no component writes the quadlet's EnvironmentFile: $path"
-done < <(grep -E '^EnvironmentFile=' "$q" | cut -d= -f2)
+done <<< "$env_paths"
 
 # The container's password comes from that file, so the writer and the reader must
 # agree on the name. oc-secrets writes it with printf rather than a literal line,

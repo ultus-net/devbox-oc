@@ -159,6 +159,39 @@ def required_vars(exec_path):
         return set()
     return set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):\?", text))
 
+
+def unsettable_vars(exec_path):
+    """Variables a script reads with no usable local fallback.
+
+    Only scripts that read no external env file at runtime are checked. A script
+    that sources `$ENV_FILE` takes its values from a file oc-secrets writes on the
+    host, which this config cannot see, so treating those variables as undefined
+    would be a false failure. Everything else must resolve locally or from an env
+    file the unit loads.
+
+    A `${VAR:-}` with an empty default is not a fallback: it is the pattern the
+    tailnet join used while silently skipping Key Vault.
+    """
+    base = exec_path.rsplit("/", 1)[-1]
+    if exec_path in {"/usr/bin/rpm-ostree", "/usr/bin/systemctl", "/usr/bin/touch"}:
+        return set()
+    if base in inline_scripts:
+        text = inline_scripts[base]
+    elif os.path.isfile(f"{bindir}/{base}"):
+        with open(f"{bindir}/{base}") as handle:
+            text = handle.read()
+    else:
+        return set()
+    # A leading dot plus an expansion is a runtime include, so this script's
+    # requirements are satisfied by something outside this config.
+    if re.search(r'^\s*\.\s+"?\$\{?[A-Z_]', text, re.M):
+        return set()
+    read = set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", text))
+    local = set(re.findall(r"^([A-Z_][A-Z0-9_]*)=", text, re.M))
+    local |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):=[^}]*\}", text))
+    local |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):-[^}][^}]*\}", text))
+    return read - local - SYSTEM_PROVIDED
+
 failures = []
 for unit in units:
     contents = unit.get("contents") or ""
@@ -177,9 +210,11 @@ for unit in units:
     ]
     needed = set()
     required = set()
+    unsettable = set()
     for exec_path in execs:
         needed |= script_vars(exec_path)
         required |= required_vars(exec_path)
+        unsettable |= unsettable_vars(exec_path)
     if not needed:
         continue
 
@@ -193,6 +228,14 @@ for unit in units:
     for var in sorted(required - provided - SYSTEM_PROVIDED):
         failures.append(
             f"{name} runs a script that requires {var}, "
+            "but nothing loaded by the unit defines it"
+        )
+
+    # A variable read with no fallback and no definition is the silent half of the
+    # same defect: the script runs, the value is empty, and it misbehaves later.
+    for var in sorted(unsettable - provided - required):
+        failures.append(
+            f"{name} runs a script that reads {var} with no default, "
             "but nothing loaded by the unit defines it"
         )
 
