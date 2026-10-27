@@ -14,7 +14,7 @@ Copy these paths, unchanged except for the two edits below:
 | `os/` | the OS image pipeline script and the Butane/Ignition source |
 | `host/` | the scripts and quadlet baked into the OS image |
 | `terraform/` | all Azure resources |
-| `pipelines/` | the two pipeline fragments |
+| `pipelines/` | the OS image, container image, and pull-request gate definitions |
 | `tools/` | the operator's wake-and-connect wrapper |
 | `tests/` | the verification gate |
 | `docs/` | runbook and vendoring notes |
@@ -30,11 +30,11 @@ Copy these paths, unchanged except for the two edits below:
 
 ## Two edits required at vendoring time
 
-1. **Point the pipeline paths at the new location.** Both pipeline files assume
-   they sit at the repository root. In a larger repo they will live under
+1. **Point the pipeline paths at the new location.** All three pipeline files
+   assume they sit at the repository root. In a larger repo they will live under
    something like `infra/devbox/`, so every `./image/`, `./os/`, `./host/` and
-   `./terraform/` reference needs that prefix. The `trigger: paths:` block needs
-   it too, or the pipeline will never fire.
+   `./terraform/` reference needs that prefix. The `trigger: paths:` and
+   `pr: paths:` blocks need it too, or the pipelines will never fire.
 
 2. **Choose where Terraform state lives.** If the platform team owns the resource
    group, delete `terraform/` entirely and vendor only `image/`, `os/`, `host/`,

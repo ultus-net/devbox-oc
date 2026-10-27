@@ -17,6 +17,14 @@ for topic in restore rollback tailnet snapshot vendoring; do
   grep -riq "$topic" "$root/docs" "$root/README.md" || fail "no documentation for: $topic"
 done
 
+# Deployment topics are scoped to the runbook, not the whole docs tree. A
+# recursive scan would pass vacuously, because the plan documents in
+# docs/superpowers already contain these words.
+for topic in "first deploy" regenerate "pair --url"; do
+  grep -riq -- "$topic" "$root/docs/runbook.md" \
+    || fail "runbook has no first-deployment coverage for: $topic"
+done
+
 # The idle contract must state what is NOT protected, or an operator will be
 # surprised when the box stops under a connected client.
 grep -riq "not protected" "$root/README.md" || fail "README does not state what the idle gate does not protect"

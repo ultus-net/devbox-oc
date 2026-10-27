@@ -1,7 +1,7 @@
 # Devbox runbook
 
-Operating procedures for the devbox. Written for the case where something has
-already gone wrong.
+Operating procedures for the devbox: first deployment, and the case where
+something has already gone wrong.
 
 Replace the placeholders with your own values:
 
@@ -10,6 +10,137 @@ RG=rg-devbox-oc
 VM=vm-devbox-oc
 DISK=disk-devbox-oc-data
 ```
+
+## First deploy, from clone to a connected client
+
+The order below is not arbitrary. Each stage produces a value the next one
+consumes, and two of them fail loudly if run out of order.
+
+### 1. Fill in the variables
+
+```sh
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+$EDITOR terraform/terraform.tfvars
+```
+
+Everything in the example is commented out, so a copied file sets nothing and
+`terraform plan` fails with `No value for required variable`. That is deliberate:
+an obvious failure beats a silently inherited placeholder.
+
+The two values easiest to get wrong:
+
+- `acr_name` must already exist and match `^[a-z0-9]{5,50}$`. Leaving it empty
+  removes the only image pull path.
+- `os_image_id` is a managed image resource ID. Stage 2 prints it.
+
+Set `opencode_password` and `tailscale_authkey` from your secret store, or as
+`TF_VAR_opencode_password` and `TF_VAR_tailscale_authkey` environment variables.
+Never commit `terraform.tfvars`; it is gitignored for that reason.
+
+### 2. Publish the OS image
+
+Fedora publishes no CoreOS image in the Azure marketplace, so the first step
+builds one from Fedora's own VHD.
+
+```sh
+az pipelines run --name devbox-os            # or: ./os/build-os-image.sh
+```
+
+The last line of output is the image resource ID. Put it in `os_image_id`.
+
+Before either path runs, set the pipeline's `resourceGroup` and `storageAccount`
+variables in `pipelines/devbox-os.yml`. Storage account names are globally
+unique, so the placeholder there is certainly wrong. The script path needs
+`coreos-installer` and `az` on PATH and `RG` and `STORAGE_ACCOUNT` exported;
+the pipeline installs `coreos-installer` from a pinned image, so prefer the
+pipeline. Run `DRY_RUN=1 ./os/build-os-image.sh` to print the image id it would
+create without uploading anything.
+
+### 3. Generate Ignition with real values
+
+The repository ships `os/butane/ucore.ign` compiled from placeholders. Terraform
+refuses to plan against it, through a precondition that matches `placeholder`,
+`devbox-placeholder` and a zero subscription ID. That guard exists because a
+placeholder config would otherwise boot a VM whose SSH key is a well-known dummy.
+
+```sh
+# Terraform resolves the names below, so init first. Init downloads providers
+# only; it creates nothing in Azure.
+terraform -chdir=terraform init
+
+export SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+export RG=rg-devbox-oc
+export ACR_NAME=youracr
+export SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)"
+
+# Both names are derived from tfvars, not read from state. `terraform output`
+# fails here, because nothing has been created yet.
+export VAULT_NAME="$(terraform -chdir=terraform console <<<'local.key_vault_name' | tr -d '"')"
+export DISK_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.Compute/disks/disk-devbox-oc-data"
+
+./os/butane/build.sh
+```
+
+`VAULT_NAME` is `kv-<name_prefix>-<six hex of sha256(subscription_id)>`, and
+`DISK_ID` follows from `name_prefix` plus the subscription. Neither needs state,
+which is the whole point: Ignition must exist before the apply that creates the
+resources Ignition refers to. A randomly suffixed vault name would make that
+circular, so the suffix is derived instead.
+
+### 4. Apply
+
+```sh
+terraform -chdir=terraform init
+terraform -chdir=terraform plan -out=tfplan     # confirm no public IP appears
+terraform -chdir=terraform apply tfplan
+```
+
+If the plan fails with the placeholder message from stage 3, `ucore.ign` was not
+regenerated. Go back; do not bypass the guard.
+
+### 5. Build and promote the container image
+
+```sh
+az pipelines run --name devbox-image
+```
+
+This builds, smoke-gates against the real image, promotes to `:prod`, and commits
+the resolved digest to `image/prod-digest.txt`. The box's `podman auto-update`
+follows `:prod`, so the image reaches the host without a redeploy.
+
+### 6. Verify first boot
+
+```sh
+az vm start -g "$RG" -n "$VM"
+# then over the tailnet:
+ssh core@devbox "sudo systemctl is-active oc-secrets oc-tailnet opencode"
+ssh core@devbox "sudo podman ps --format '{{.Names}} {{.Status}}'"
+```
+
+All three units must report `active` and the container must be `healthy`. If
+`opencode` is not active, `oc-secrets` failed first: check
+`sudo journalctl -u oc-secrets -n 40`.
+
+### 7. Connect a client
+
+```sh
+opencode pair --url https://devbox.<tailnet>.ts.net   # desktop app
+opencode --server https://devbox.<tailnet>.ts.net     # TUI
+```
+
+Set `OPENCODE_PASSWORD` from Key Vault for the TUI. The pairing link is
+single-use and expires in five minutes.
+
+### 8. Confirm the cost model
+
+Leave the box alone with no session for fifty minutes, then check:
+
+```sh
+ssh core@devbox "sudo journalctl -t oc-idle -n 5"
+```
+
+Expect `idle for 45m, deallocating`. If the log is empty, the gate is not running:
+`systemctl list-timers oc-idle.timer`.
 
 ## What is on the box, and what survives
 
