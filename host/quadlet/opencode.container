@@ -7,6 +7,11 @@
 Description=OpenCode dev container
 Wants=network-online.target
 After=network-online.target oc-secrets.service
+# After= only orders the units. Without Requires=, a failed Key Vault fetch or
+# ACR login still lets the container start with no password and no pull
+# credentials, so it serves nothing and the idle gate never sees a session to
+# protect. Fail closed instead: no secrets, no workload.
+Requires=oc-secrets.service
 
 [Container]
 Image=__ACR__.azurecr.io/devbox:prod

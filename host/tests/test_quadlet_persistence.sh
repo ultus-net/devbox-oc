@@ -30,4 +30,11 @@ done < <(grep -E '^Volume=' "$q")
 
 # The session DB path specifically must be persisted.
 grep -q '/home/dev/.local/share/opencode' "$q" || fail "session data is not persisted"
+
+# `After=` only orders the units. If the secret bootstrap fails, the container
+# would start with no OPENCODE_PASSWORD and no ACR auth, then serve nothing and
+# never idle-stop. Requires= makes a failed bootstrap refuse to start the unit.
+grep -Eq '^Requires=.*oc-secrets\.service' "$q" \
+  || fail "quadlet does not require oc-secrets.service"
+
 echo "persistent data is on the data disk"

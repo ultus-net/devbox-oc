@@ -88,14 +88,39 @@ count_busy() {
 now="$(date +%s)"
 uptime_s="${UPTIME_OVERRIDE:-$(cut -d. -f1 /proc/uptime)}"
 
+# Sessions live in the container. If it is not running there is nothing to
+# protect, and the probe below will fail merely because nothing is listening.
+#
+# This case needs handling: the quadlet carries Requires=oc-secrets.service, so a
+# failed Key Vault fetch or ACR login leaves the container down on purpose. Without
+# this check the unreadable API reads as "possibly busy", the busy stamp refreshes
+# every five minutes, and the box runs all day serving nothing.
+container_up() {
+  [ "${CONTAINER_CHECK:-1}" = "1" ] || return 0
+  systemctl is-active --quiet opencode.service
+}
+
+# A failed probe with the container up is still treated as busy. A half-started
+# container must never trigger a deallocation.
+probe_busy() {
+  local n
+  if ! n="$(count_busy)"; then
+    if container_up; then
+      return 0
+    fi
+    echo "oc-idle: API unreadable and the container is not running" >&2
+    return 1
+  fi
+  [ "$n" -gt 0 ]
+}
+
 # Treat boot as busy. The container is still coming up and would look idle.
 if [ "$uptime_s" -lt "$BOOT_GRACE" ]; then
   printf '%s\n' "$now" > "$STATE"
   exit 0
 fi
 
-busy="$(count_busy)" || { printf '%s\n' "$now" > "$STATE"; exit 0; }
-if [ "$busy" -gt 0 ]; then
+if probe_busy; then
   printf '%s\n' "$now" > "$STATE"
   exit 0
 fi
@@ -106,7 +131,7 @@ last="$(cat "$STATE" 2>/dev/null || printf '%s' "$now")"
 # Second look, to close the race where a session starts between the probe and
 # the deallocation call.
 sleep 60
-if [ "$(count_busy)" -gt 0 ]; then
+if probe_busy; then
   printf '%s\n' "$(date +%s)" > "$STATE"
   exit 0
 fi

@@ -56,11 +56,16 @@ All notable changes to this project. One entry per landed change, newest first.
   last argument, JSON defaults that broke on brace expansion, a pipeline subshell
   that swallowed `exit 1`, and a digest check that returned `echo`'s status.
 - An idle-gate script committed mode 0644 made every test pass vacuously.
+- A failed secret bootstrap used to serve nothing while still billing. The quadlet
+  now carries `Requires=oc-secrets.service`, and the idle gate treats an unreadable
+  API as idle when the container is not running, so the box stops either way.
 
 ### Known gaps
 
 - No `terraform plan` or `apply` has run: no subscription available here.
 - The container image has never been built: no container engine available here.
-- Both pipeline files parse as YAML but have never executed.
+- All three pipeline files parse as YAML but have never executed.
 - `pipelines/devbox-image.yml` and `pipelines/devbox-os.yml` carry placeholder
   registry and storage account names that must be set before first use.
+- `systemd-analyze verify` cannot check the quadlet: it rejects a `.container`
+  file, because the podman generator, not systemd, produces the unit.

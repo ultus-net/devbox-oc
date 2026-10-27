@@ -41,7 +41,13 @@ EOF
 exec /bin/date "$@"
 EOF
   printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/sleep"   # skip the 60s second look
-  chmod +x "$tmp/bin/curl" "$tmp/bin/date" "$tmp/bin/sleep"
+  # Fake systemctl so the container state is a test input, not the host's.
+  cat > "$tmp/bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "is-active" ]] && exit "${CONTAINER_ACTIVE:-0}"
+exit 0
+EOF
+  chmod +x "$tmp/bin/curl" "$tmp/bin/date" "$tmp/bin/sleep" "$tmp/bin/systemctl"
 }
 
 # A last-busy old enough that every test would deallocate if its guard failed.
@@ -102,5 +108,19 @@ RESP='{"data":[]}' NOW=1700001000 run_gate
 setup; stale
 RESP='{"data":[]}' VM_ID_OVERRIDE="garbage" run_gate
 [ ! -s "$tmp/arm-calls" ] || fail "T7 deallocated with an unusable vm id"
+
+# T8: the container is down because the secret bootstrap failed, and the API is
+# therefore unreadable. Nothing can be running, so the box must still stop. Without
+# this the probe error reads as "possibly busy" forever and the VM bills all day.
+setup; stale
+RESP='{"data":[]}' FAIL_EPS='session/active' CONTAINER_ACTIVE=3 run_gate
+[ "$(wc -l < "$tmp/arm-calls")" -eq 1 ] \
+  || fail "T8 did not deallocate when the container was down"
+
+# T9: the same unreadable API, but the container is up. A half-started container
+# may hold a session, so this must NOT deallocate.
+setup; stale
+RESP='{"data":[]}' FAIL_EPS='session/active' CONTAINER_ACTIVE=0 run_gate
+[ ! -s "$tmp/arm-calls" ] || fail "T9 deallocated while the container was up"
 
 echo "all idle-gate tests passed"

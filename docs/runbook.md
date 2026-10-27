@@ -279,6 +279,20 @@ The box deallocates itself after 45 idle minutes. It stays up while any of these
 is true: a running session, a running shell, an open terminal, a pending approval,
 or a pending form.
 
+A failed secret bootstrap is not one of those, and it needs care. The quadlet
+carries `Requires=oc-secrets.service`, so if Key Vault or the ACR login fails the
+container never starts and nothing is listening on port 4096. The gate then
+distinguishes two cases:
+
+| Container | API answer | Gate behaviour |
+|---|---|---|
+| running | unreadable | stays up, because a half-started container may hold a session |
+| not running | unreadable | idle, so the box deallocates and stops billing |
+
+That second row is why the gate asks `systemctl is-active opencode.service`
+instead of treating every probe failure as busy. A box that refuses to serve must
+not also refuse to stop.
+
 To hold the box awake for work the gate cannot see, create the pin file, and
 remove it when done:
 
