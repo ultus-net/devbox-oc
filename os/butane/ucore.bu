@@ -168,13 +168,21 @@ systemd:
         Persistent=true
         [Install]
         WantedBy=timers.target
+    # ucore installs the tailscale RPM but enables no service, and it vendors the
+    # repo disabled. Without this the join below has no daemon to talk to, and the
+    # box has no reachable path on first boot.
+    #
+    # No contents: this enables the shipped unit. A contents block would shadow
+    # /lib/systemd/system/tailscaled.service.
+    - name: tailscaled.service
+      enabled: true
     - name: oc-tailnet.service
       enabled: true
       contents: |
         [Unit]
         Description=Join the tailnet and serve OpenCode over TLS
-        After=network-online.target oc-secrets.service
-        Wants=network-online.target
+        After=network-online.target oc-secrets.service tailscaled.service
+        Wants=network-online.target tailscaled.service
         [Service]
         Type=oneshot
         RemainAfterExit=yes

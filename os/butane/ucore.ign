@@ -168,7 +168,11 @@
         "name": "oc-snapshot.timer"
       },
       {
-        "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\nAfter=network-online.target oc-secrets.service\nWants=network-online.target\n[Service]\nType=oneshot\nRemainAfterExit=yes\n# Joins only when no state exists, then advertises the loopback port.\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",
+        "enabled": true,
+        "name": "tailscaled.service"
+      },
+      {
+        "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\nAfter=network-online.target oc-secrets.service tailscaled.service\nWants=network-online.target tailscaled.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\n# Joins only when no state exists, then advertises the loopback port.\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "oc-tailnet.service"
       },
