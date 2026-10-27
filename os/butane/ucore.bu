@@ -1,0 +1,194 @@
+# os/butane/ucore.bu
+#
+# Placeholders are filled in by build.sh, which then runs Butane with
+# --files-dir at the repo root, so every local: path is relative to the root.
+variant: fcos
+version: 1.5.0
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+        - __SSH_PUBKEY__
+storage:
+  disks:
+    - device: /dev/disk/azure/scsi1/lun0
+      wipe_table: false
+      partitions:
+        - label: data
+          number: 1
+  filesystems:
+    - device: /dev/disk/by-partlabel/data
+      format: ext4
+      label: data
+      wipe_filesystem: false
+  files:
+    - path: /usr/local/sbin/oc-secrets
+      mode: 0755
+      contents:
+        local: host/bin/oc-secrets
+    - path: /usr/local/sbin/oc-acr-login
+      mode: 0755
+      contents:
+        local: host/bin/oc-acr-login
+    - path: /usr/local/sbin/oc-idle-check
+      mode: 0755
+      contents:
+        local: host/bin/oc-idle-check
+    - path: /usr/local/sbin/oc-snapshot
+      mode: 0755
+      contents:
+        local: host/bin/oc-snapshot
+    - path: /usr/local/sbin/oc-tailnet
+      mode: 0755
+      contents:
+        local: host/bin/oc-tailnet
+    - path: /usr/local/sbin/oc-tailnet-up
+      mode: 0755
+      contents:
+        local: host/bin/oc-tailnet-up
+    - path: /usr/local/sbin/lib-imds.sh
+      mode: 0644
+      contents:
+        local: host/bin/lib-imds.sh
+    - path: /usr/local/sbin/oc-paths
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/sh
+          set -eu
+          install -d -o 1000 -g 1000 \
+            /srv/repos /srv/opencode/share /srv/opencode/config /srv/opencode/state
+    # Rendered from host/quadlet/opencode.container by build.sh, so the ACR name
+    # is substituted before the quadlet is baked in.
+    - path: /etc/containers/systemd/opencode.container
+      mode: 0644
+      contents:
+        local: os/butane/.opencode.container.ign.tmp
+    - path: /etc/devbox/oc-secrets.env
+      mode: 0600
+      contents:
+        inline: |
+          VAULT_NAME=__VAULT_NAME__
+          ACR_NAME=__ACR_NAME__
+    - path: /etc/devbox/oc-idle.env
+      mode: 0600
+      contents:
+        inline: |
+          IDLE_MIN=45
+          BOOT_GRACE=900
+    - path: /etc/devbox/oc-snapshot.env
+      mode: 0600
+      contents:
+        inline: |
+          DISK_ID=__DISK_ID__
+          RG=__RG__
+          SUBSCRIPTION_ID=__SUBSCRIPTION_ID__
+systemd:
+  units:
+    # A mount unit's name must match its Where= path, so /srv is srv.mount.
+    - name: srv.mount
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Devbox data disk
+        [Mount]
+        What=/dev/disk/by-label/data
+        Where=/srv
+        Type=ext4
+        Options=defaults,noatime,nofail
+        [Install]
+        WantedBy=local-fs.target
+    - name: oc-secrets.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Write OpenCode env and ACR auth from Key Vault
+        After=network-online.target srv.mount
+        Wants=network-online.target
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        EnvironmentFile=/etc/devbox/oc-secrets.env
+        ExecStart=/usr/local/sbin/oc-secrets
+        ExecStart=/usr/local/sbin/oc-acr-login
+        [Install]
+        WantedBy=multi-user.target
+    - name: oc-paths.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Create persistent directory layout on the data disk
+        After=srv.mount
+        Requires=srv.mount
+        Before=opencode.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/local/sbin/oc-paths
+        [Install]
+        WantedBy=multi-user.target
+    - name: oc-idle.service
+      contents: |
+        [Unit]
+        Description=Probe for idleness
+        After=opencode.service
+        [Service]
+        Type=oneshot
+        EnvironmentFile=/etc/devbox/oc-idle.env
+        ExecStart=/usr/local/sbin/oc-idle-check
+    - name: oc-idle.timer
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Check idleness every 5 minutes
+        [Timer]
+        OnBootSec=20min
+        OnUnitActiveSec=5min
+        [Install]
+        WantedBy=timers.target
+    - name: oc-snapshot.service
+      contents: |
+        [Unit]
+        Description=Snapshot the data disk
+        After=srv.mount
+        [Service]
+        Type=oneshot
+        EnvironmentFile=/etc/devbox/oc-snapshot.env
+        ExecStart=/usr/local/sbin/oc-snapshot
+    - name: oc-snapshot.timer
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Nightly data disk snapshot
+        [Timer]
+        OnCalendar=*-*-* 02:00:00 UTC
+        Persistent=true
+        [Install]
+        WantedBy=timers.target
+    - name: oc-tailnet.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Join the tailnet and serve OpenCode over TLS
+        After=network-online.target oc-secrets.service
+        Wants=network-online.target
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        # Joins only when no state exists, then advertises the loopback port.
+        ExecStart=/usr/local/sbin/oc-tailnet-up
+        ExecStart=/usr/local/sbin/oc-tailnet
+        [Install]
+        WantedBy=multi-user.target
+    # ucore ships podman-restart.service already; do not redefine it. Enable the
+    # shipped one instead, plus the auto-update timer that AutoUpdate=registry
+    # depends on.
+    - name: podman-restart.service
+      enabled: true
+      dropins:
+        - name: 10-devbox.conf
+          contents: |
+            [Unit]
+            After=oc-secrets.service
+    - name: podman-auto-update.timer
+      enabled: true
