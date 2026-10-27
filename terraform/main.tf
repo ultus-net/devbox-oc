@@ -19,7 +19,7 @@ resource "azurerm_subnet" "vm" {
   address_prefixes     = [var.vm_subnet_cidr]
 
   # Private subnet. Blocks the implicit platform egress IP, so an explicit
-  # outbound method is mandatory. See docs/decisions.md.
+  # outbound method is mandatory. See docs/superpowers/specs/2026-10-27-devbox-opencode-design.md.
   default_outbound_access_enabled = false
 }
 
@@ -161,7 +161,19 @@ resource "azurerm_linux_virtual_machine" "this" {
   source_image_id = var.os_image_id
 
   # Ignition, not cloud-init. Fedora CoreOS consumes Ignition only.
+  #
+  # The committed ucore.ign carries placeholder values (a dummy SSH key, a dummy
+  # vault name), so it must never reach a real VM. This precondition turns a
+  # silent wrong-boot into a plan-time error. Regenerate with
+  # `./os/butane/build.sh` using real values before applying.
   custom_data = base64encode(file("${path.module}/../os/butane/ucore.ign"))
+
+  lifecycle {
+    precondition {
+      condition     = !can(regex("placeholder|__UNSET__|AAAA\\.\\.\\.", file("${path.module}/../os/butane/ucore.ign")))
+      error_message = "os/butane/ucore.ign still holds placeholder values. Regenerate it with ./os/butane/build.sh and real SSH key, vault and ACR values."
+    }
+  }
 
   # No ignore_changes here on purpose. A bootstrap change rolls the VM, and
   # the data disk survives because it is a separate, protected resource.
@@ -223,13 +235,25 @@ resource "azurerm_role_assignment" "vm_disk_snapshot" {
 
 locals {
   acr_resource_group = var.acr_resource_group == "" ? azurerm_resource_group.this.name : var.acr_resource_group
+  acr_id             = "/subscriptions/${var.subscription_id}/resourceGroups/${local.acr_resource_group}/providers/Microsoft.ContainerRegistry/registries/${var.acr_name}"
 }
 
+# Pull permission for the VM's managed identity.
+#
+# Scope is the registry, not a repository. ACR's ABAC condition syntax requires
+# the registry resource ID for `--scope` even when a condition narrows it to one
+# repository, and an ABAC-enabled role with no condition is registry-wide anyway.
+#
+# The role NAME depends on the registry's role assignment permissions mode:
+#   rbac-abac mode (the future default) honours `Container Registry Repository Reader`
+#   rbac mode (legacy) honours `AcrPull`; ABAC roles are ignored
+# Set var.acr_abac_enabled to match the registry, or the pull silently 401s.
+#
+# acr_name has no default on purpose. Empty would set count = 0 and leave the
+# whole authenticated-pull path silently absent.
 resource "azurerm_role_assignment" "vm_acr_pull" {
-  count = var.acr_name == "" ? 0 : 1
-
-  scope                = "/subscriptions/${var.subscription_id}/resourceGroups/${local.acr_resource_group}/providers/Microsoft.ContainerRegistry/registries/${var.acr_name}"
-  role_definition_name = "Container Registry Repository Reader"
+  scope                = local.acr_id
+  role_definition_name = var.acr_abac_enabled ? "Container Registry Repository Reader" : "AcrPull"
   principal_id         = azurerm_linux_virtual_machine.this.identity[0].principal_id
 }
 

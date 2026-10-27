@@ -9,14 +9,13 @@
 #
 # Auth note: the server password is sent as a bearer token. Confirm this once:
 #   curl -i -H "Authorization: Bearer $PW" http://127.0.0.1:4096/api/info
-# If it returns 401, switch to a paired session cookie. See docs/decisions.md.
+# If it returns 401, switch to a paired session cookie. See docs/superpowers/specs/2026-10-27-devbox-opencode-design.md.
 
 set -euo pipefail
 trap 'echo "oc-idle: probe failed, staying up" >&2; exit 0' ERR
 
 API="${API:-http://127.0.0.1:4096}"
 ENV_FILE="${ENV_FILE:-/etc/opencode/env}"
-VM_ID_FILE="${VM_ID_FILE:-/etc/devbox/vm-resource-id}"
 STATE="${STATE:-/var/lib/oc-idle/last-busy}"
 PIN_FILE="${PIN_FILE:-/var/lib/oc-idle/pin}"
 IDLE_MIN="${IDLE_MIN:-45}"
@@ -24,10 +23,10 @@ BOOT_GRACE="${BOOT_GRACE:-900}"
 DRY_RUN="${DRY_RUN:-0}"
 UPTIME_OVERRIDE="${UPTIME_OVERRIDE:-}"
 IMDS="http://169.254.169.254/metadata/identity/oauth2/token"
+INSTANCE="http://169.254.169.254/metadata/instance"
 
 mkdir -p "$(dirname "$STATE")"
 [ -r "$ENV_FILE" ] || { echo "oc-idle: no env file" >&2; exit 0; }
-[ -r "$VM_ID_FILE" ] || { echo "oc-idle: no vm id file" >&2; exit 0; }
 
 # Operator escape hatch. Work the five API signals cannot see lives behind this.
 if [ -e "$PIN_FILE" ]; then
@@ -39,7 +38,27 @@ fi
 . "$ENV_FILE"
 : "${OPENCODE_PASSWORD:?OPENCODE_PASSWORD missing from env file}"
 PW="$OPENCODE_PASSWORD"
-VM_ID="$(cat "$VM_ID_FILE")"
+
+# ask the instance about itself
+#
+# The VM resource id is read from IMDS rather than a provisioned file. An earlier
+# version expected /etc/devbox/vm-resource-id, which nothing ever wrote, so the
+# gate exited 0 forever and the box never deallocated. Resolving it here removes
+# the file and the Terraform wiring that had to keep it in sync.
+vm_resource_id() {
+  curl -fsS -m 10 -H Metadata:true \
+    "${INSTANCE}/compute?api-version=2020-09-01&format=text" \
+    | jq -r '.resourceId'
+}
+
+VM_ID="${VM_ID_OVERRIDE:-}"
+if [ -z "$VM_ID" ]; then
+  VM_ID="$(vm_resource_id)"
+fi
+case "$VM_ID" in
+  /subscriptions/*/resourceGroups/*/providers/Microsoft.Compute/virtualMachines/*) ;;
+  *) echo "oc-idle: unusable vm id: ${VM_ID}" >&2; exit 0 ;;
+esac
 
 q() { curl -fsS -m 10 -H "Authorization: Bearer $PW" "$API$1"; }
 

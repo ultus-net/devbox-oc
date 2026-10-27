@@ -73,14 +73,24 @@ variable "os_disk_sku" {
 
 variable "acr_name" {
   type        = string
-  description = "Existing Azure Container Registry that holds the devbox image. Empty disables the pull grant."
-  default     = ""
+  description = "Existing Azure Container Registry that holds the devbox image. Required: without it there is no pull path."
+
+  validation {
+    condition     = can(regex("^[a-z0-9]{5,50}$", var.acr_name))
+    error_message = "ACR names are 5 to 50 lowercase alphanumerics. Leaving this empty removes the only image pull path."
+  }
 }
 
 variable "acr_resource_group" {
   type        = string
-  description = "Resource group of the ACR, when it lives outside this deployment."
+  description = "Resource group of the ACR. Defaults to the devbox resource group, which is usually wrong because the registry usually predates the devbox."
   default     = ""
+}
+
+variable "acr_abac_enabled" {
+  type        = bool
+  description = "True when the registry's role assignment permissions mode is 'rbac-abac'. Legacy 'rbac' mode honours AcrPull and ignores the ABAC role names."
+  default     = true
 }
 
 variable "opencode_password" {

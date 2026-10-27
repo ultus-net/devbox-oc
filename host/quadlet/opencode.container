@@ -22,6 +22,15 @@ Volume=/srv/opencode/config:/home/dev/.config/opencode:Z
 Volume=/srv/opencode/state:/home/dev/.local/state/opencode:Z
 AutoUpdate=registry
 
+# `podman auto-update` only keeps a new image if the container reports healthy,
+# so this is what makes the update path safe rather than optimistic. The compose
+# file this replaced had one; dropping it would have removed that guarantee.
+HealthCmd=/usr/local/bin/opencode --version
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=3
+HealthStartPeriod=30s
+
 [Service]
 Restart=always
 

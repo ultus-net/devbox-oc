@@ -133,4 +133,6 @@ Anything requiring credentials is unproven until the first real run.
 
 ## Status
 
-Tasks 1 to 11 of 12 are implemented. See `CHANGELOG.md`.
+All twelve tasks of the plan are implemented, with every invariant guarded by a
+test proven able to fail. See `CHANGELOG.md` for the change list and for the
+honestly unverified gaps.

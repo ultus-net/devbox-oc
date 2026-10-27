@@ -34,7 +34,7 @@ output "next_steps" {
          opencode --server https://<host>.<tailnet>.ts.net
     2. Pair the desktop app:
          opencode pair --url https://<host>.<tailnet>.ts.net
-    3. Confirm the idle probe auth scheme (docs/decisions.md, open question 1).
+    3. Confirm the idle probe auth scheme (docs/superpowers/specs/2026-10-27-devbox-opencode-design.md, open question 6).
   EOT
   description = "Post-apply checklist."
 }

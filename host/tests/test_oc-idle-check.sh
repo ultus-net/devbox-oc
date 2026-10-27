@@ -52,7 +52,8 @@ stale() { printf '1700000000\n' > "$tmp/state/last-busy"; }
 run_gate() {
   local rc=0
   PATH="$tmp/bin:$PATH" \
-  ENV_FILE="$tmp/env" VM_ID_FILE="$tmp/vmid" STATE="$tmp/state/last-busy" \
+  ENV_FILE="$tmp/env" VM_ID_OVERRIDE="${VM_ID_OVERRIDE-/subscriptions/x/resourceGroups/r/providers/Microsoft.Compute/virtualMachines/v}" \
+  STATE="$tmp/state/last-busy" \
   PIN_FILE="${PIN_FILE:-$tmp/state/pin}" ARM_CALLS="$tmp/arm-calls" \
   UPTIME_OVERRIDE="${UPTIME:-2000}" IDLE_MIN="${IDLE_MIN:-45}" \
   NOW="${NOW:-2000000000}" \
@@ -95,5 +96,11 @@ setup
 printf '1700000000\n' > "$tmp/state/last-busy"
 RESP='{"data":[]}' NOW=1700001000 run_gate
 [ ! -s "$tmp/arm-calls" ] || fail "T6 deallocated inside the idle threshold"
+
+# T7: an unusable VM resource id must never deallocate. Without this, a bad IMDS
+# answer could target the wrong resource or a malformed URL.
+setup; stale
+RESP='{"data":[]}' VM_ID_OVERRIDE="garbage" run_gate
+[ ! -s "$tmp/arm-calls" ] || fail "T7 deallocated with an unusable vm id"
 
 echo "all idle-gate tests passed"

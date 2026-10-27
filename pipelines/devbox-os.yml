@@ -18,15 +18,20 @@ jobs:
     steps:
       # get.coreos-installer.dev does not resolve (verified: NXDOMAIN), so the
       # upstream container is the source. Pinned per the no-latest constraint.
+      #
+      # Extract into a directory that persists across steps and advertise it with
+      # the Azure Pipelines logging command, not $GITHUB_PATH, which does not exist
+      # here. build-os-image.sh runs in a later step and needs the binary on PATH.
       - script: |
           set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
+          bindir="$(Pipeline.Workspace)/bin"
+          mkdir -p "$bindir"
           docker run --rm --entrypoint cat \
             quay.io/coreos/coreos-installer:v0.27.0 /usr/bin/coreos-installer \
-            > "$HOME/.local/bin/coreos-installer"
-          chmod +x "$HOME/.local/bin/coreos-installer"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH" || true
-          "$HOME/.local/bin/coreos-installer" --version
+            > "$bindir/coreos-installer"
+          chmod +x "$bindir/coreos-installer"
+          echo "##vso[task.prependpath]$bindir"
+          "$bindir/coreos-installer" --version
         displayName: install coreos-installer from the pinned upstream image
       - task: AzureCLI@2
         displayName: publish managed image

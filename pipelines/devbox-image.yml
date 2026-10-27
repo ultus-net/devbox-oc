@@ -50,10 +50,15 @@ jobs:
             printf '# Written by pipelines/devbox-image.yml. Never hand-edit.\n%s\n' \
               "$digest" > "$(Build.SourcesDirectory)/image/prod-digest.txt"
 
+      # Commit the digest record. `***NO_CI***` is the Azure Pipelines marker;
+      # `[skip ci]` is GitHub's and is ignored here, so using it would re-trigger
+      # this pipeline on its own commit and loop.
       - script: |
+          set -euo pipefail
           git config user.name "devbox-ci"
           git config user.email "devbox-ci@users.noreply.github.com"
           git add image/prod-digest.txt
-          git diff --staged --quiet || git commit -m "chore(image): promote to prod [skip ci]"
+          git diff --staged --quiet && exit 0
+          git commit -m "chore(image): promote to prod ***NO_CI***"
           git push
         displayName: Record digest

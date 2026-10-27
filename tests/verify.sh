@@ -46,19 +46,30 @@ else
   printf '== image integrity\n   SKIPPED: no cached tarball at /tmp/ocinspect/oc.tgz\n'
 fi
 
-# Lint every shell script we own.
+# Lint every shell script we own. Prefer a shellcheck on PATH so this works on a
+# company build agent; fall back to the local download used during development.
 mapfile -t scripts < <(
   find host os image tools tests -name '*.sh' -type f 2>/dev/null
   find host/bin -maxdepth 1 -type f 2>/dev/null
 )
-if [ "${#scripts[@]}" -gt 0 ]; then
+
+shellcheck_bin=""
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck_bin="$(command -v shellcheck)"
+elif [ -x /tmp/shellcheck-v0.10.0/shellcheck ]; then
+  shellcheck_bin=/tmp/shellcheck-v0.10.0/shellcheck
+fi
+
+if [ "${#scripts[@]}" -gt 0 ] && [ -n "$shellcheck_bin" ]; then
   printf '== shellcheck (%s files)\n' "${#scripts[@]}"
-  if /tmp/shellcheck-v0.10.0/shellcheck "${scripts[@]}"; then
+  if "$shellcheck_bin" "${scripts[@]}"; then
     printf '   ok\n'
   else
     printf '   FAILED\n'
     rc=1
   fi
+elif [ "${#scripts[@]}" -gt 0 ]; then
+  printf '== shellcheck\n   SKIPPED: no shellcheck on PATH and no local copy\n'
 fi
 
 printf '\n'

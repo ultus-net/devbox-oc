@@ -70,6 +70,9 @@ storage:
         inline: |
           VAULT_NAME=__VAULT_NAME__
           ACR_NAME=__ACR_NAME__
+          # Without this the tailnet join has no key source on a fresh box, and
+          # oc-tailnet-up fails with "no auth key".
+          TS_AUTHKEY_SECRET=__TS_AUTHKEY_SECRET__
     - path: /etc/devbox/oc-idle.env
       mode: 0600
       contents:

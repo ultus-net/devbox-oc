@@ -23,6 +23,7 @@ sed -e "s|__VAULT_NAME__|${VAULT_NAME}|g" \
     -e "s|__RG__|${RG}|g" \
     -e "s|__SUBSCRIPTION_ID__|${SUBSCRIPTION_ID}|g" \
     -e "s|__SSH_PUBKEY__|${SSH_PUBKEY}|g" \
+    -e "s|__TS_AUTHKEY_SECRET__|${TS_AUTHKEY_SECRET:-tailscale-authkey}|g" \
     "$here/ucore.bu" > "$work_bu"
 
 sed -e "s|__ACR__|${ACR_NAME}|g" \

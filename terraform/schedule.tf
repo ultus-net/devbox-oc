@@ -1,5 +1,5 @@
 # Scheduled wake-up. Shutdown is NOT scheduled: the in-host idle gate owns
-# that decision so an active session is never killed. See docs/decisions.md.
+# that decision so an active session is never killed. See docs/superpowers/specs/2026-10-27-devbox-opencode-design.md.
 #
 # A Logic App Consumption workflow is used instead of an Azure Function
 # because it needs no code, no runtime and no deployment artifact. Built-in
