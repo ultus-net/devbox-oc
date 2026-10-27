@@ -41,6 +41,7 @@ run "variables documented" \
 
 run "docs complete"  ./tests/docs_complete.sh
 run "wake wrapper"   ./tools/tests/test_oc.sh
+run "pipeline shape" ./pipelines/tests/test_pipeline_shape.sh
 
 # The integrity test needs a tarball. Without one it must fail unless the
 # operator opts out, which would make this gate meaningless.
@@ -55,7 +56,7 @@ fi
 # unless SKIP_LINT=1 is set explicitly: a lint gate that can quietly pass having
 # linted nothing is worse than no lint gate, because it buys false confidence.
 mapfile -t scripts < <(
-  find host os image tools tests terraform -name '*.sh' -type f 2>/dev/null
+  find host os image tools tests terraform pipelines -name '*.sh' -type f 2>/dev/null
   find host/bin -maxdepth 1 -type f 2>/dev/null
 )
 

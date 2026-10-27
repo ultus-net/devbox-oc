@@ -1,0 +1,42 @@
+# pipelines/devbox-verify.yml
+#
+# The verification gate on every pull request. tests/verify.sh needs no Azure
+# credentials and no container engine, so nothing here holds a service
+# connection and a fork can run it unchanged.
+#
+# `trigger: none` keeps this a PR gate. The two image pipelines own main.
+trigger: none
+pr:
+  paths:
+    # Every path tests/verify.sh reads, because a docs-only change can still
+    # break tests/docs_complete.sh. At vendoring time each gains the <prefix>/
+    # that docs/vendoring.md requires, or the gate never fires.
+    include:
+      - 'host/**'
+      - 'os/**'
+      - 'image/**'
+      - 'terraform/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'pipelines/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'CHANGELOG.md'
+
+jobs:
+  - job: verify
+    pool: { vmImage: ubuntu-latest }
+    steps:
+      # tests/verify.sh fails, rather than skipping, when no shellcheck is on
+      # PATH. Installing it here keeps a lint failure meaning "lint failed" and
+      # not "the agent had no linter". apt carries one shellcheck per image, so
+      # the version is printed to record what actually ran.
+      - script: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck --version
+        displayName: install shellcheck
+
+      - script: ./tests/verify.sh
+        displayName: verification gate

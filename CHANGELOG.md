@@ -32,6 +32,8 @@ All notable changes to this project. One entry per landed change, newest first.
 - `tests/verify.sh`, one gate that runs every suite then shellchecks every script.
 - Copyable `terraform.tfvars.example` documenting every required variable without
   defaults, so a first `plan` fails on a value rather than on a missing file.
+- Pull-request verification pipeline that runs the whole suite on any PR touching
+  the devbox subtree. It holds no service connection, so a fork can run it.
 - Operating runbook covering first deployment from clone to a connected client,
   plus data disk restore, container and OS rollback, tailnet rejoin, snapshot
   pruning, and the idle gate.
