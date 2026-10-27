@@ -67,11 +67,10 @@ mapfile -t env_paths < <(printf '%s\n' "$container_section" | sed -n 's/^Environ
 # reference to a file no component claims.
 #
 # The limitation is deliberate and stated: this proves the reader and the declared
-# writer agree, not that the writer's implementation still writes. The last two
-# assertions cover the implementation for the one shape this repo ships, and a
-# refactor of oc-secrets is expected to update them. A guard that fails loudly on a
-# refactor is a maintenance cost. A guard that passes on a missing password is a
-# billing defect.
+# writer agree, and that the writer still writes its declared variable by some
+# mv-or-redirect path. It does not prove that path is reached at runtime. A refactor
+# of oc-secrets is expected to update these assertions; that is a maintenance cost,
+# while a guard that passes on a missing password is a billing defect.
 here="$(cd "$(dirname "$0")/.." && pwd)"
 writer="$here/bin/oc-secrets"
 [ -f "$writer" ] || fail "no $writer, so nothing declares where the password goes"
@@ -120,10 +119,21 @@ done
 # temporary file moved into place, so accept either that or a redirect to it.
 # A `chmod` or a read of the same variable is not a write, so the reference has to
 # sit on a line that also carries a redirect or an mv.
-# shellcheck disable=SC2016  # the literal "$OUT_FILE" is what is being searched for
-awk -v ref='"$OUT_FILE"' '
+#
+# `${OUT_FILE}` and `"$OUT_FILE"` are the same target as `$OUT_FILE`, so brace and
+# quote spellings are normalised first. A longer name is a different file, so the
+# reference must end at a non-name character; a bare substring test would let
+# `${OUT_FILE}_BACKUP` stand in for `${OUT_FILE}`.
+# shellcheck disable=SC2016  # the literal $OUT_FILE is what is being searched for
+awk '
   $0 ~ /^[[:space:]]*#/ { next }
-  index($0, ref) && ($0 ~ /(^|[[:space:]])mv[[:space:]]/ || $0 ~ />>?/) { found = 1 }
+  {
+    line = $0
+    gsub(/\$\{OUT_FILE\}/, "$OUT_FILE", line)
+    gsub(/"/, "", line)
+  }
+  line ~ /\$OUT_FILE([^A-Za-z0-9_]|$)/ \
+    && (line ~ /(^|[[:space:]])mv[[:space:]]/ || line ~ />>?/) { found = 1 }
   END { exit(found ? 0 : 1) }
 ' "$writer" \
   || fail "oc-secrets declares OUT_FILE but no longer writes it"
