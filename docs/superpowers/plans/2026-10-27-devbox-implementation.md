@@ -497,15 +497,12 @@ jobs:
             docker build -t "$(acrName).azurecr.io/$(repo):$tag" image/
             docker push "$(acrName).azurecr.io/$(repo):$tag"
 
-      # Blocking gate. A broken image never reaches prod.
+      # Blocking gate. Invokes the real smoke test, so there is one definition of
+      # "fit to serve" rather than an inline copy that drifts from image/smoke.sh.
       - script: |
           set -euo pipefail
-          docker run --rm --entrypoint "" "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)" \
-            opencode --version | grep -q '^opencode v'
-          docker run --rm --entrypoint "" "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)" \
-            id -u dev | grep -qx 1000
-          test "$(docker image inspect "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)" \
-            --format '{{.Config.User}}')" = "dev"
+          ENGINE=docker bash image/smoke.sh \
+            "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)"
         displayName: Smoke gate before promotion
 
       - task: AzureCLI@2
