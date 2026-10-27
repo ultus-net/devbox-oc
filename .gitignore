@@ -1,0 +1,7 @@
+# SDD scratch and anything generated per-machine
+.superpowers/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/.terraform/
+terraform/tfplan
+*.ign.tmp

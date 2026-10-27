@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Publish the OpenCode server on the tailnet with a real TLS certificate.
+#
+# tailscale serve proxies https://<host>.<tailnet>.ts.net to loopback, so the
+# container port is never exposed to the VNet or the internet.
+set -euo pipefail
+
+: "${OC_TCP_PORT:=4096}"
+
+# --bg makes the config survive reboots and tailscale restarts.
+tailscale serve --bg --https=443 "http://127.0.0.1:${OC_TCP_PORT}"
+
+# Keep the SSH path usable too. Tailscale SSH authenticates by tailnet
+# identity, so there are no authorized_keys to distribute or audit.
+tailscale set --ssh=true
+
+tailscale serve status

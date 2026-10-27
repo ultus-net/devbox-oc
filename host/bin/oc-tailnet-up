@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Join the tailnet with a reusable, tagged auth key, then advertise the
+# OpenCode server. Runs on every boot so a rebuild rejoins without a human.
+#
+# --ephemeral is deliberately NOT used: the node identity must be stable so
+# MagicDNS and ACLs keep working across restarts.
+set -euo pipefail
+
+STATE_DIR="${STATE_DIR:-/var/lib/tailscale}"
+AUTH_KEY_FILE="${AUTH_KEY_FILE:-/etc/devbox/tailscale-authkey}"
+LOGIN_SERVER="${LOGIN_SERVER:-}"
+
+if [ -f "$STATE_DIR/tailscaled.state" ]; then
+  echo "oc-tailnet-up: state present, leaving tailscale as configured"
+  exit 0
+fi
+
+[ -r "$AUTH_KEY_FILE" ] || { echo "oc-tailnet-up: no auth key" >&2; exit 1; }
+
+args=(--auth-key "file:$AUTH_KEY_FILE" --hostname "$(hostname)" --accept-routes=false)
+[ -n "$LOGIN_SERVER" ] && args+=(--login-server "$LOGIN_SERVER")
+
+tailscale up "${args[@]}"

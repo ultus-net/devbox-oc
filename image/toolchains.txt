@@ -1,0 +1,28 @@
+# dnf packages added on top of the Fedora toolbox image. One per line.
+# Comments and blank lines are ignored by the Dockerfile.
+#
+# Keep language runtimes HERE and never in a volume: a base image bump can
+# change a runtime major version, and global installs inside a volume do not
+# survive that. Volumes hold caches and data only.
+#
+# The toolbox image already provides git, curl, python3, gcc, make and a
+# broad dev set. Add only what your projects need.
+
+nodejs
+npm
+
+# --- Turn on when the project needs them ---
+# golang
+# rust
+# cargo
+# java-21-openjdk-devel
+# dotnet-sdk-8.0
+# ruby
+# php-cli
+# podman
+# skopeo
+# buildah
+
+# --- IDE backends (for the second-IDE use case) ---
+# openssh-server
+# glibc-langpack-en

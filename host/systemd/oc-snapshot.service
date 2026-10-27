@@ -1,0 +1,9 @@
+[Unit]
+Description=Snapshot the devbox data disk daily
+ConditionPathExists=/etc/devbox/oc-snapshot.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/devbox/oc-snapshot.env
+ExecStart=/usr/local/sbin/oc-snapshot
+TimeoutStartSec=1800

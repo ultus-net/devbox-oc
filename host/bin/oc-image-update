@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Roll the OpenCode container to a newly published image, but only while idle.
+#
+# Deployment is deliberately separate from the build pipeline. A push to the
+# registry must never restart the box underneath a running turn.
+
+set -euo pipefail
+
+COMPOSE_FILE="${COMPOSE_FILE:-/srv/devbox/compose.yaml}"
+SERVICE="${SERVICE:-opencode}"
+IDLE_CHECK="${IDLE_CHECK:-/usr/local/sbin/oc-idle-check}"
+MIN_IDLE_SECONDS="${MIN_IDLE_SECONDS:-300}"
+
+cd "$(dirname "$COMPOSE_FILE")"
+
+image_id() {
+  docker compose -f "$COMPOSE_FILE" images --format json \
+    | jq -r --arg s "$SERVICE" 'select(.Service == $s) | .ID' 2>/dev/null || true
+}
+
+current="$(image_id)"
+docker compose -f "$COMPOSE_FILE" pull --quiet "$SERVICE" >/dev/null
+latest="$(image_id)"
+
+if [ -z "$latest" ] || [ "$latest" = "$current" ]; then
+  exit 0
+fi
+
+# Reuse the same busy-signal gate. Never redeploy over an active turn.
+"$IDLE_CHECK" >/dev/null 2>&1 || exit 0
+
+if [ -r /var/lib/oc-idle/last-busy ]; then
+  idle_for=$(( $(date +%s) - $(cat /var/lib/oc-idle/last-busy) ))
+  [ "$idle_for" -lt "$MIN_IDLE_SECONDS" ] && exit 0
+fi
+
+logger -t oc-image-update "rolling ${SERVICE} from ${current} to ${latest}"
+docker compose -f "$COMPOSE_FILE" up --detach --no-deps "$SERVICE"

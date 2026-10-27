@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Stop the devbox only when OpenCode is genuinely idle.
+#
+# Fails closed: any error exits 0 without stopping anything, so a half-started
+# container can never trigger a deallocation.
+#
+# Uses IMDS for a managed-identity token and calls ARM directly. No Azure CLI
+# on the host, so there is no CLI version to drift and nothing to upgrade.
+#
+# Auth note: the server password is sent as a bearer token. Confirm this once:
+#   curl -i -H "Authorization: Bearer $PW" http://127.0.0.1:4096/api/info
+# If it returns 401, switch to a paired session cookie. See docs/decisions.md.
+
+set -euo pipefail
+trap 'echo "oc-idle: probe failed, staying up" >&2; exit 0' ERR
+
+API="${API:-http://127.0.0.1:4096}"
+ENV_FILE="${ENV_FILE:-/etc/opencode/env}"
+VM_ID_FILE="${VM_ID_FILE:-/etc/devbox/vm-resource-id}"
+STATE="${STATE:-/var/lib/oc-idle/last-busy}"
+IDLE_MIN="${IDLE_MIN:-45}"
+BOOT_GRACE="${BOOT_GRACE:-900}"
+DRY_RUN="${DRY_RUN:-0}"
+IMDS="http://169.254.169.254/metadata/identity/oauth2/token"
+
+mkdir -p "$(dirname "$STATE")"
+[ -r "$ENV_FILE" ] || { echo "oc-idle: no env file" >&2; exit 0; }
+[ -r "$VM_ID_FILE" ] || { echo "oc-idle: no vm id file" >&2; exit 0; }
+
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+: "${OPENCODE_PASSWORD:?OPENCODE_PASSWORD missing from env file}"
+PW="$OPENCODE_PASSWORD"
+VM_ID="$(cat "$VM_ID_FILE")"
+
+q() { curl -fsS -m 10 -H "Authorization: Bearer $PW" "$API$1"; }
+
+# Five independent signals that each mean "do not stop".
+count_busy() {
+  local n=0
+  n=$(( n + $(q /api/session/active      | jq '.data | length') ))
+  n=$(( n + $(q /api/shell               | jq '[.data[] | select(.status == "running")] | length') ))
+  n=$(( n + $(q /api/pty                 | jq '[.data[] | select(.status == "running")] | length') ))
+  n=$(( n + $(q /api/permission/request  | jq '(.data // []) | length') ))
+  n=$(( n + $(q /api/form                | jq '(.data // []) | length') ))
+  printf '%s' "$n"
+}
+
+now="$(date +%s)"
+uptime_s="$(cut -d. -f1 /proc/uptime)"
+
+# Treat boot as busy. The container is still coming up and would look idle.
+if [ "$uptime_s" -lt "$BOOT_GRACE" ]; then
+  printf '%s\n' "$now" > "$STATE"
+  exit 0
+fi
+
+if [ "$(count_busy)" -gt 0 ]; then
+  printf '%s\n' "$now" > "$STATE"
+  exit 0
+fi
+
+last="$(cat "$STATE" 2>/dev/null || printf '%s' "$now")"
+[ $(( now - last )) -lt $(( IDLE_MIN * 60 )) ] && exit 0
+
+# Second look, to close the race where a session starts between the probe and
+# the deallocation call.
+sleep 60
+if [ "$(count_busy)" -gt 0 ]; then
+  printf '%s\n' "$(date +%s)" > "$STATE"
+  exit 0
+fi
+
+logger -t oc-idle "idle for ${IDLE_MIN}m, deallocating ${VM_ID}"
+
+if [ "$DRY_RUN" = "1" ]; then
+  echo "oc-idle: dry run, would deallocate ${VM_ID}"
+  exit 0
+fi
+
+token="$(curl -fsS -m 10 -H Metadata:true \
+  "${IMDS}?api-version=2018-02-01&resource=https%3A%2F%2Fmanagement.azure.com%2F" \
+  | jq -r '.access_token')"
+
+curl -fsS -m 30 -X POST \
+  -H "Authorization: Bearer ${token}" \
+  -H "Content-Length: 0" \
+  "https://management.azure.com${VM_ID}/deallocate?api-version=2024-07-01" \
+  -o /dev/null
