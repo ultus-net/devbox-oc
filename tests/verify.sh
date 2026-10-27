@@ -34,6 +34,8 @@ run "no scheduled stop" \
   ./terraform/tests/no_scheduled_stop.sh
 run "data disk protected" \
   ./terraform/tests/data_disk_protected.sh
+run "variables documented" \
+  ./terraform/tests/variables_documented.sh
 
 run "docs complete"  ./tests/docs_complete.sh
 run "wake wrapper"   ./tools/tests/test_oc.sh
