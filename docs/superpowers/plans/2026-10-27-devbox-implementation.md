@@ -693,7 +693,7 @@ git commit -m "feat(os): publish the Fedora CoreOS Azure managed image"
 
 **Interfaces:**
 - Consumes: the scripts in `host/bin/`, copied into the image by the pipeline.
-- Produces: `os/butane/ucore.ign`, valid JSON, containing units `oc-secrets.service`, `oc-idle.timer`, `oc-snapshot.timer`, the quadlet `opencode.container`, and `srv-data.mount`.
+- Produces: `os/butane/ucore.ign`, valid JSON, containing units `oc-secrets.service`, `oc-idle.timer`, `oc-snapshot.timer`, the quadlet `opencode.container`, and `srv.mount`.
 
 - [ ] **Step 1: Write the Butane source**
 
@@ -768,7 +768,7 @@ storage:
           SUBSCRIPTION_ID=__SUBSCRIPTION_ID__
 systemd:
   units:
-    - name: srv-data.mount
+    - name: srv.mount
       enabled: true
       contents: |
         [Unit]
@@ -785,7 +785,7 @@ systemd:
       contents: |
         [Unit]
         Description=Write OpenCode env and ACR auth from Key Vault
-        After=network-online.target srv-data.mount
+        After=network-online.target srv.mount
         Wants=network-online.target
         [Service]
         Type=oneshot
@@ -818,7 +818,7 @@ systemd:
       contents: |
         [Unit]
         Description=Snapshot the data disk
-        After=srv-data.mount
+        After=srv.mount
         [Service]
         Type=oneshot
         EnvironmentFile=/etc/devbox/oc-snapshot.env
@@ -957,8 +957,8 @@ a command.
       contents: |
         [Unit]
         Description=Create persistent directory layout on the data disk
-        After=srv-data.mount
-        Requires=srv-data.mount
+        After=srv.mount
+        Requires=srv.mount
         Before=opencode.service
         [Service]
         Type=oneshot
@@ -1054,8 +1054,19 @@ executable, add that file to the `storage.files` list and rebuild.
 
 - [ ] **Step 5: Delete the superseded files**
 
+Delete the compose file, the script that `podman auto-update` replaces, and the
+two units that referenced it. Leaving the units behind would point systemd at a
+binary that no longer exists.
+
 ```bash
-git rm host/compose.yaml host/bin/oc-image-update
+git rm host/compose.yaml host/bin/oc-image-update \
+       host/systemd/oc-image-update.service host/systemd/oc-image-update.timer
+```
+
+Then assert no dangling references remain:
+
+```bash
+grep -rn "oc-image-update" host/ && echo "dangling reference" && exit 1 || echo "no dangling references"
 ```
 
 - [ ] **Step 6: Commit**
