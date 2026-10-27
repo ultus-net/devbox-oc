@@ -26,6 +26,7 @@ command -v python3 >/dev/null 2>&1 || fail "python3 is required and absent"
 python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 
 python3 - "$yml" "$display" <<'PY' || exit 1
+import re
 import sys
 
 import yaml
@@ -65,8 +66,12 @@ def body(step):
     return f"{step.get('script') or ''}\n{(step.get('inputs') or {}).get('inlineScript') or ''}"
 
 
+# A step that only mentions the path in an echo would satisfy a substring search, so
+# require an invocation: at line start, optionally with a bash prefix.
+invoke = re.compile(r"^\s*(?:bash\s+)?\S*tests/verify\.sh\b", re.M)
+
 installs = [i for i, s in enumerate(steps) if "shellcheck" in body(s) and "apt" in body(s)]
-runs = [i for i, s in enumerate(steps) if "tests/verify.sh" in body(s)]
+runs = [i for i, s in enumerate(steps) if invoke.search(body(s))]
 
 if not installs:
     fail(f"{display} never installs shellcheck, so tests/verify.sh fails for want of a linter")

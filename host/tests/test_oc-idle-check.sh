@@ -123,4 +123,22 @@ setup; stale
 RESP='{"data":[]}' FAIL_EPS='session/active' CONTAINER_ACTIVE=0 run_gate
 [ ! -s "$tmp/arm-calls" ] || fail "T9 deallocated while the container was up"
 
+# T10: no env file at all, which is first boot with a failed Key Vault fetch. The
+# password that would authenticate the probe does not exist, so the gate must not
+# treat that as busy. Exiting early here was the original defect: the box billed
+# all day while serving nothing.
+setup; stale
+rm -f "$tmp/env"
+RESP='{"data":[]}' CONTAINER_ACTIVE=3 run_gate
+[ "$(wc -l < "$tmp/arm-calls")" -eq 1 ] \
+  || fail "T10 did not deallocate when the env file was missing"
+
+# T11: the pin file must still win when the env file is missing, so an operator
+# can hold a half-configured box awake to debug it.
+setup; stale
+rm -f "$tmp/env"
+: > "$tmp/state/pin"
+RESP='{"data":[]}' CONTAINER_ACTIVE=3 run_gate
+[ ! -s "$tmp/arm-calls" ] || fail "T11 deallocated while pinned with no env file"
+
 echo "all idle-gate tests passed"

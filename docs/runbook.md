@@ -81,11 +81,20 @@ export DISK_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers
 ./os/butane/build.sh
 ```
 
-`VAULT_NAME` is `kv-<name_prefix>-<six hex of sha256(subscription_id)>`, and
+`VAULT_NAME` is `kv-<name_prefix>-<hex of sha256(subscription_id)>`, where the
+hex run shrinks as the prefix grows so the whole name stays within 24 characters.
 `DISK_ID` follows from `name_prefix` plus the subscription. Neither needs state,
 which is the whole point: Ignition must exist before the apply that creates the
 resources Ignition refers to. A randomly suffixed vault name would make that
 circular, so the suffix is derived instead.
+
+Two consequences worth knowing before you pick a `name_prefix`:
+
+- A vault name is a global DNS name. Two boxes in one subscription that share a
+  prefix collide, so give each box its own.
+- `purge_protection_enabled` keeps a removed vault's name reserved for seven
+  days. Removing the stack and immediately re-applying fails on the name until
+  that window passes. Use a different prefix if you need one now.
 
 ### 4. Apply
 

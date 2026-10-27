@@ -122,8 +122,14 @@ resource "azurerm_key_vault" "this" {
   # suffix would make the deployment circular: generate Ignition, which needs the
   # vault name, which only exists after the apply that needs the Ignition.
   #
-  # The suffix is derived from the subscription id, so two subscriptions with the
-  # same prefix do not collide, while a re-apply computes the same name.
+  # The suffix is derived from the subscription id, so a re-apply computes the same
+  # name and two subscriptions do not produce the same one. Two pairs of boxes in
+  # ONE subscription that share a name_prefix would collide, because a vault name is
+  # a global DNS name. Use a distinct name_prefix per box.
+  #
+  # purge_protection_enabled means a destroyed vault keeps its name reserved for
+  # seven days. Destroying and re-applying within that window fails on the name.
+  # docs/runbook.md states the wait, because it is not obvious from here.
   name                       = local.key_vault_name
   resource_group_name        = azurerm_resource_group.this.name
   location                   = azurerm_resource_group.this.location
@@ -244,8 +250,12 @@ locals {
   # Key Vault names must be globally unique and 3 to 24 characters. The suffix is
   # derived from the subscription id rather than randomised so Ignition can be
   # generated before the first apply. Terraform state is not consulted.
-  subscription_suffix = substr(sha256(var.subscription_id), 0, 6)
-  key_vault_name      = substr("kv-${var.name_prefix}-${local.subscription_suffix}", 0, 24)
+  #
+  # The suffix length shrinks with a long prefix so the whole name stays within 24
+  # characters. Truncating the assembled name instead would silently eat hex
+  # characters, which narrows the suffix and defeats its purpose.
+  subscription_suffix = substr(sha256(var.subscription_id), 0, min(8, 20 - length(var.name_prefix)))
+  key_vault_name      = "kv-${var.name_prefix}-${local.subscription_suffix}"
 }
 
 # Pull permission for the VM's managed identity.

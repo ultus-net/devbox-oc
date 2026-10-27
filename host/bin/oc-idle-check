@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Stop the devbox only when OpenCode is genuinely idle.
 #
-# Fails closed: any error exits 0 without stopping anything, so a half-started
-# container can never trigger a deallocation.
+# Fails closed on anything it cannot read: an unreadable probe keeps the box up
+# while the container is running, because a half-started container may still hold
+# a session. The exception is a container that is not running at all, which
+# cannot hold one, so the box is allowed to stop rather than bill for nothing.
 #
 # Uses IMDS for a managed-identity token and calls ARM directly. No Azure CLI
 # on the host, so there is no CLI version to drift and nothing to upgrade.
@@ -26,7 +28,6 @@ IMDS="http://169.254.169.254/metadata/identity/oauth2/token"
 INSTANCE="http://169.254.169.254/metadata/instance"
 
 mkdir -p "$(dirname "$STATE")"
-[ -r "$ENV_FILE" ] || { echo "oc-idle: no env file" >&2; exit 0; }
 
 # Operator escape hatch. Work the five API signals cannot see lives behind this.
 if [ -e "$PIN_FILE" ]; then
@@ -34,10 +35,19 @@ if [ -e "$PIN_FILE" ]; then
   exit 0
 fi
 
-# shellcheck disable=SC1090
-. "$ENV_FILE"
-: "${OPENCODE_PASSWORD:?OPENCODE_PASSWORD missing from env file}"
-PW="$OPENCODE_PASSWORD"
+# No env file means oc-secrets never succeeded, so the quadlet's
+# Requires=oc-secrets.service kept the container down and no session exists to
+# protect. Exiting here would leave the box billing all day on exactly the first
+# boot this gate is meant to cover, so fall through with no password instead and
+# let probe_busy treat the unreadable API as idle.
+PW=""
+if [ -r "$ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  PW="${OPENCODE_PASSWORD:-}"
+else
+  echo "oc-idle: no env file, the container cannot be serving" >&2
+fi
 
 # ask the instance about itself
 #
@@ -96,7 +106,6 @@ uptime_s="${UPTIME_OVERRIDE:-$(cut -d. -f1 /proc/uptime)}"
 # this check the unreadable API reads as "possibly busy", the busy stamp refreshes
 # every five minutes, and the box runs all day serving nothing.
 container_up() {
-  [ "${CONTAINER_CHECK:-1}" = "1" ] || return 0
   systemctl is-active --quiet opencode.service
 }
 

@@ -34,7 +34,12 @@ grep -q '/home/dev/.local/share/opencode' "$q" || fail "session data is not pers
 # `After=` only orders the units. If the secret bootstrap fails, the container
 # would start with no OPENCODE_PASSWORD and no ACR auth, then serve nothing and
 # never idle-stop. Requires= makes a failed bootstrap refuse to start the unit.
-grep -Eq '^Requires=.*oc-secrets\.service' "$q" \
-  || fail "quadlet does not require oc-secrets.service"
+#
+# The placement matters. podman's generator reads only [Unit] for dependencies, so
+# a Requires= sitting in [Container] would satisfy a naive grep and do nothing.
+unit_section="$(awk '/^\[Unit\]/{on=1;next} /^\[/{on=0} on' "$q")"
+[ -n "$unit_section" ] || fail "quadlet has no [Unit] section"
+printf '%s\n' "$unit_section" | grep -Eq '^Requires=.*oc-secrets\.service' \
+  || fail "quadlet does not require oc-secrets.service in its [Unit] section"
 
 echo "persistent data is on the data disk"

@@ -59,6 +59,18 @@ All notable changes to this project. One entry per landed change, newest first.
 - A failed secret bootstrap used to serve nothing while still billing. The quadlet
   now carries `Requires=oc-secrets.service`, and the idle gate treats an unreadable
   API as idle when the container is not running, so the box stops either way.
+- On first boot with a failed Key Vault fetch there is no env file, and the idle
+  gate exited there without ever probing, so the box still billed. It now falls
+  through with no password and lets the container check decide.
+- `os/butane/build.sh` wrote Butane's output straight into the target, so a failed
+  compile left an empty file where a bootable Ignition document was. It now stages
+  the output and moves it into place only after the assertions pass.
+- The Key Vault suffix is sized against the prefix instead of truncating the
+  assembled name, which silently ate hex characters at the longest prefix.
+- Three guards could pass on text that did not mean what they claimed: a
+  state-derived hash satisfied the vault-derivability check, a `Requires=` line
+  inside `[Container]` satisfied the dependency check, and an `echo` mentioning
+  `tests/verify.sh` satisfied the pipeline check.
 
 ### Known gaps
 
