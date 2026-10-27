@@ -16,9 +16,11 @@ run() {
   fi
 }
 
-run "idle gate"        ./host/tests/test_oc-idle-check.sh
-run "secrets and ACR"  ./host/tests/test_oc-secrets.sh
-run "OS image publish" ./os/tests/test_build_os_image.sh
+run "idle gate"           ./host/tests/test_oc-idle-check.sh
+run "secrets and ACR"     ./host/tests/test_oc-secrets.sh
+run "OS image publish"    ./os/tests/test_build_os_image.sh
+run "quadlet persistence" ./host/tests/test_quadlet_persistence.sh
+run "ignition units"      ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.ign
 
 # The integrity test needs a tarball. Without one it must fail unless the
 # operator opts out, which would make this gate meaningless.
