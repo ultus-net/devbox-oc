@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Verify the Dockerfile's integrity-check logic without a container engine.
 # The Dockerfile decodes the base64 sha512 to hex, then compares it against a
-# sha512sum of the downloaded tarball. This runs exactly that sequence.
+# sha512 of the downloaded tarball. This runs exactly that sequence.
 #
 # Why this exists: the image cannot be built on a machine with no usable
 # container engine, but the integrity check is the load-bearing part of the
 # build. This proves it without Docker or Podman.
 set -euo pipefail
- 
+
 cleanup() { rm -f "${temp_tarball:-}" "${corrupt:-}"; }
 trap cleanup EXIT
 
@@ -15,18 +15,10 @@ OC_SHA512='o8EJ0ZsT4dzDKN+0mpG2EKbNGzJyp+F1++Av28UReRVfiEv+N34eZEnN/unkiMoerKHad
 tarball="${1:-/tmp/ocinspect/oc.tgz}"
 
 check() {
-  local digest="$1"
-  local file="$2"
-  local expected=""
-
+  local digest="$1" file="$2" expected actual
   expected="$(printf '%s' "$digest" | base64 -d | od -An -tx1 | tr -d ' \n')"
-  local actual="$(sha512sum "$file" | cut -d' ' -f1)"
-
-  if [ "$actual" = "$expected" ]; then
-    echo "PASS"
-  else
-    echo "FAIL"
-  fi
+  actual="$(sha512sum "$file" | cut -d' ' -f1)"
+  [ "$actual" = "$expected" ]
 }
 
 # Graceful skip if tarball is unavailable.
