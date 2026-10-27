@@ -643,9 +643,21 @@ schedules:
 jobs:
   - job: publish
     pool: { vmImage: ubuntu-latest }
+    variables:
+      # Names must match Terraform's, or the image lands in a group the VM
+      # cannot reference.
+      resourceGroup: rg-devbox-oc
+      storageAccount: stdevboxocimages
+      location: westeurope
     steps:
-      - script: curl -fsSL https://get.coreos-installer.dev | sh -s -- -p /usr/local/bin
-        displayName: install coreos-installer
+      # get.coreos-installer.dev does not resolve (verified: NXDOMAIN). Use the
+      # upstream container, pinned, per the no-latest constraint.
+      - script: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/work" -w /work \
+            quay.io/coreos/coreos-installer:v0.27.0 --help >/dev/null
+          echo "coreos-installer container ok"
+        displayName: verify coreos-installer image
       - task: AzureCLI@2
         displayName: publish managed image
         inputs:
@@ -654,6 +666,9 @@ jobs:
           scriptLocation: inlineScript
           inlineScript: |
             set -euo pipefail
+            export RG="$(resourceGroup)"
+            export STORAGE_ACCOUNT="$(storageAccount)"
+            export LOCATION="$(location)"
             ./os/build-os-image.sh | tee image-id.txt
       - script: |
           echo "Apply this as os_image_id:"; tail -1 image-id.txt
