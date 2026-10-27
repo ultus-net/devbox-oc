@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # image/smoke.sh - asserts the image is fit to serve, not just to build.
 set -euo pipefail
-ref="${1:?usage: smoke.sh <image-ref>}"
+ref="${1:?usage: smoke.sh <image-ref> (env ENGINE, default podman)}"
 
 ENGINE="${ENGINE:-podman}"
 

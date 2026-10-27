@@ -11,8 +11,12 @@ set -euo pipefail
 cleanup() { rm -f "${temp_tarball:-}" "${corrupt:-}"; }
 trap cleanup EXIT
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+oc_version="$(sed -n 's/^ARG OC_VERSION=//p' "$repo_root/image/Dockerfile" | head -1)"
+[ -n "$oc_version" ] || { echo "cannot read OC_VERSION from Dockerfile" >&2; exit 1; }
+
 OC_SHA512='o8EJ0ZsT4dzDKN+0mpG2EKbNGzJyp+F1++Av28UReRVfiEv+N34eZEnN/unkiMoerKHad6W6Ii7k4ukTnPNmNQ=='
-tarball="${1:-/tmp/ocinspect/oc.tgz}"
 
 check() {
   local digest="$1" file="$2" expected actual
@@ -21,20 +25,34 @@ check() {
   [ "$actual" = "$expected" ]
 }
 
-# Graceful skip if tarball is unavailable.
-if [ ! -f "$tarball" ]; then
-  if command -v curl >/dev/null 2>&1; then
-    temp_tarball="$(mktemp)"
-    if curl -fsSL --retry 3 --output "$temp_tarball" \
-      "https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-2.1.4.tgz"; then
-      tarball="$temp_tarball"
-    else
-      echo "SKIP: tarball unavailable (no cached copy and download failed)"
-      exit 0
-    fi
-  else
-    echo "SKIP: tarball unavailable (no network and no cached copy)"
+miss() {
+  echo "integrity check could not run: $1" >&2
+  if [ "${ALLOW_INTEGRITY_SKIP:-0}" = "1" ]; then
+    echo "ALLOW_INTEGRITY_SKIP=1, skipping" >&2
     exit 0
+  fi
+  echo "set ALLOW_INTEGRITY_SKIP=1 to skip explicitly, or fetch the tarball" >&2
+  exit 1
+}
+
+# An explicit argument is authoritative: a typo must fail, never be replaced.
+if [ -n "${1:-}" ]; then
+  [ -f "$1" ] || { echo "no such file: $1" >&2; exit 1; }
+  tarball="$1"
+else
+  tarball="${CACHED_TARBALL:-/tmp/ocinspect/oc.tgz}"
+  if [ ! -f "$tarball" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      temp_tarball="$(mktemp)"
+      if curl -fsSL --retry 3 --output "$temp_tarball" \
+        "https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-${oc_version}.tgz"; then
+        tarball="$temp_tarball"
+      else
+        miss "no cached tarball and download failed"
+      fi
+    else
+      miss "no cached tarball and no curl"
+    fi
   fi
 fi
 
