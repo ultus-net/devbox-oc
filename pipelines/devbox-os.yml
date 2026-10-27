@@ -1,0 +1,45 @@
+# pipelines/devbox-os.yml
+trigger: none
+pr: none
+schedules:
+  - cron: "0 4 * * 1"
+    displayName: weekly OS image refresh
+    branches: { include: [main] }
+    always: true
+
+jobs:
+  - job: publish
+    pool: { vmImage: ubuntu-latest }
+    # build-os-image.sh requires RG and STORAGE_ACCOUNT, so the job supplies them.
+    variables:
+      resourceGroup: rg-devbox-oc
+      storageAccount: stdevboxocimages
+      location: westeurope
+    steps:
+      # get.coreos-installer.dev does not resolve (verified: NXDOMAIN), so the
+      # upstream container is the source. Pinned per the no-latest constraint.
+      - script: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          docker run --rm --entrypoint cat \
+            quay.io/coreos/coreos-installer:v0.27.0 /usr/bin/coreos-installer \
+            > "$HOME/.local/bin/coreos-installer"
+          chmod +x "$HOME/.local/bin/coreos-installer"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH" || true
+          "$HOME/.local/bin/coreos-installer" --version
+        displayName: install coreos-installer from the pinned upstream image
+      - task: AzureCLI@2
+        displayName: publish managed image
+        inputs:
+          azureSubscription: devbox-image
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+            export RG="$(resourceGroup)"
+            export STORAGE_ACCOUNT="$(storageAccount)"
+            export LOCATION="$(location)"
+            ./os/build-os-image.sh | tee image-id.txt
+      - script: |
+          echo "Apply this as os_image_id:"; tail -1 image-id.txt
+        displayName: print the image id for Terraform
