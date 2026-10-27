@@ -35,6 +35,15 @@ directive_values() { printf '%s\n' "$1" | sed -n "s|^[[:space:]]*$2[[:space:]]*=
 # Fields after a directive prefix, so one ExecStart= can be told from another.
 directive_fields() { printf '%s\n' "$1" | sed -n "s|^[[:space:]]*$2[[:space:]][[:space:]]*||p"; }
 
+# The body of one [Section] inside a unit. Every directive below is
+# section-sensitive: systemd logs `Unknown key ... in section [Service],
+# ignoring` for a key in the wrong section and carries on, so a section-blind
+# grep passes on a unit that has no ordering, no condition, and no enablement.
+section_of() { printf '%s\n' "$1" | awk -v want="$2" '
+  /^[[:space:]]*\[/ { name=$0; gsub(/^[[:space:]]*\[|\][[:space:]]*$/, "", name); on=(name==want); next }
+  on { print }
+'; }
+
 unsigned="$(block_of ucore-unsigned-autorebase.service)" \
   || fail "ucore-unsigned-autorebase.service is not in the Ignition config"
 signed="$(block_of ucore-signed-autorebase.service)" \
@@ -43,19 +52,28 @@ signed="$(block_of ucore-signed-autorebase.service)" \
 for pair in "unsigned:$unsigned" "signed:$signed"; do
   label="${pair%%:*}"
   body="${pair#*:}"
+  service="$(section_of "$body" Service)"
+  unit_sec="$(section_of "$body" Unit)"
+  [ -n "$service" ] || fail "${label} autorebase unit has no [Service] section"
+  [ -n "$unit_sec" ] || fail "${label} autorebase unit has no [Unit] section"
   printf '%s\n' "$body" | grep -Eq '^[[:space:]]+enabled: true[[:space:]]*$' \
     || fail "${label} autorebase unit is present but not enabled"
-  printf '%s\n' "$body" | grep -Eq '^[[:space:]]*ExecStart=/usr/bin/rpm-ostree rebase ' \
+  directive_fields "$service" 'ExecStart=/usr/bin/rpm-ostree rebase' \
+    | grep -q 'rpm-ostree\|ostree-' \
     || fail "${label} autorebase unit does not rebase"
-  printf '%s\n' "$body" | grep -Eq '^[[:space:]]*ExecStart=/usr/bin/systemctl reboot[[:space:]]*$' \
+  directive_values "$service" 'ExecStart' | grep -Fxq '/usr/bin/systemctl reboot' \
     || fail "${label} autorebase unit does not reboot into the new deployment"
   # ExecStart= without [Install] leaves the unit static: no enablement symlink is
   # created, so it never starts. `systemctl --root is-enabled` reports "static"
   # and the boot sequence stops one step short of ucore with nothing in the log.
-  printf '%s\n' "$body" | grep -Eq '^[[:space:]]*\[Install\][[:space:]]*$' \
-    || fail "${label} autorebase unit has no [Install] section, so it is never enabled"
-  printf '%s\n' "$body" | grep -Eq '^[[:space:]]*WantedBy=multi-user\.target[[:space:]]*$' \
-    || fail "${label} autorebase unit is not wanted by multi-user.target"
+  #
+  # Both keys are read from [Install] specifically. WantedBy= in [Service] is
+  # ignored with a warning, which is the same never-enabled outcome wearing a
+  # line a section-blind grep accepts.
+  install_sec="$(section_of "$body" Install)"
+  [ -n "$install_sec" ] || fail "${label} autorebase unit has no [Install] section, so it is never enabled"
+  directive_values "$install_sec" 'WantedBy' | grep -Fxq 'multi-user.target' \
+    || fail "${label} autorebase unit is not wanted by multi-user.target in [Install]"
 done
 
 # Stage 1 must be the unverified reference, and stage 2 the signed one. Swapping
@@ -75,7 +93,7 @@ printf '%s\n' "$signed" \
 # two together instead of checking each against a literal.
 marker_written() {
   local body="$1" found
-  found="$(directive_fields "$body" 'ExecStart=/usr/bin/touch' | awk 'NF{print $1}')"
+  found="$(directive_fields "$(section_of "$body" Service)" 'ExecStart=/usr/bin/touch' | awk 'NF{print $1}')"
   case "$found" in
     /etc/ucore-autorebase/?*) printf '%s\n' "$found" ;;
     *) fail "an autorebase stage writes no marker under /etc/ucore-autorebase" ;;
@@ -87,10 +105,12 @@ marker_signed="$(marker_written "$signed")"
   || fail "both stages write the same marker, so one of them never runs"
 
 # Stage 1 runs while its own marker is absent and the later stage has not run.
+# Conditions are read from [Unit], where systemd honours them.
 expect_condition() {
   local label="$1" body="$2" condition="$3"
-  directive_values "$body" 'ConditionPathExists' | grep -Fxq "$condition" \
-    || fail "${label} does not carry 'ConditionPathExists=${condition}'"
+  directive_values "$(section_of "$body" Unit)" 'ConditionPathExists' \
+    | grep -Fxq "$condition" \
+    || fail "${label} does not carry 'ConditionPathExists=${condition}' in [Unit]"
 }
 expect_condition stage-1 "$unsigned" "!${marker_unsigned}"
 expect_condition stage-1 "$unsigned" "!${marker_signed}"
@@ -103,7 +123,8 @@ expect_condition stage-2 "$signed" "!${marker_signed}"
 for pair in "ucore-unsigned-autorebase.service:$unsigned" "ucore-signed-autorebase.service:$signed"; do
   unit_name="${pair%%:*}"
   body="${pair#*:}"
-  directive_fields "$body" 'ExecStart=/usr/bin/systemctl disable' | grep -Fxq "$unit_name" \
+  directive_fields "$(section_of "$body" Service)" 'ExecStart=/usr/bin/systemctl disable' \
+    | grep -Fxq "$unit_name" \
     || fail "${unit_name} does not disable itself before rebooting"
 done
 

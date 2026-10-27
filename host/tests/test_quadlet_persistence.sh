@@ -56,9 +56,24 @@ container_section="$(awk '/^\[Container\]/{on=1;next} /^\[/{on=0} on' "$q")"
 env_paths="$(printf '%s\n' "$container_section" | sed -n 's/^EnvironmentFile=//p')"
 [ -n "$env_paths" ] \
   || fail "quadlet loads no EnvironmentFile in [Container], so the container has no password"
+
+# A writer is a non-comment line that mentions the path. Grepping the raw file
+# accepts a `# TODO: write /etc/.../x.env` note, which produces nothing at boot
+# and reports the reference as satisfied.
+writes_path() {
+  local needle="$1" dir f
+  dir="$(dirname "$q")"
+  for f in "$dir"/../bin/* "$dir"/../../os/butane/ucore.bu; do
+    [ -f "$f" ] || continue
+    awk -v n="$needle" 'index($0, n) && $0 !~ /^[[:space:]]*#/ { found = 1; exit } END { exit !found }' "$f" \
+      && return 0
+  done
+  return 1
+}
+
 while read -r path; do
   [ -n "$path" ] || continue
-  grep -rqF "$path" "$(dirname "$q")/../bin" "$(dirname "$q")/../../os/butane/ucore.bu" \
+  writes_path "$path" \
     || fail "no component writes the quadlet's EnvironmentFile: $path"
 done <<< "$env_paths"
 

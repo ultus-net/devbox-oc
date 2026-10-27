@@ -46,9 +46,16 @@ printf '%s\n' "$block" | grep -Eq '^[[:space:]]*value[[:space:]]*=[[:space:]]*va
 # with an authorization error that reads like a permissions problem. Match the
 # depends_on list itself at line start: a commented-out list satisfies a looser
 # pattern while ordering nothing.
-if ! printf '%s\n' "$block" \
-     | grep -Eq '^[[:space:]]*depends_on[[:space:]]*=[[:space:]]*\[[^]]*azurerm_role_assignment\.deployer_kv_admin'; then
-  fail "secret does not depend on the deployer's Key Vault role assignment"
-fi
+#
+# Terraform allows the list to span lines, and `terraform fmt` does not collapse
+# it, so a single-line pattern rejects valid configuration. Take the list from
+# `depends_on = [` up to its closing bracket, comments excluded.
+depends_block="$(printf '%s\n' "$block" \
+  | awk '/^[[:space:]]*depends_on[[:space:]]*=/{on=1} on{print} on && /\]/{exit}' \
+  | grep -v '^[[:space:]]*#')"
+[ -n "$depends_block" ] \
+  || fail "secret does not depend on the deployer's Key Vault role assignment"
+printf '%s\n' "$depends_block" | grep -q 'azurerm_role_assignment\.deployer_kv_admin' \
+  || fail "secret does not depend on the deployer's Key Vault role assignment"
 
 echo "the tailscale auth key is stored where the host reads it"

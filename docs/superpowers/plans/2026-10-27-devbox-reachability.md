@@ -631,7 +631,7 @@ first boot with no rebase stage. Prove that before trusting anything above it:
 ssh core@devbox "rpm-ostree status"
 ```
 
-The booted deployment must name `ghcr.io/ublue-os/ucore`. If it names
+The booted deployment must name `ghcr.io/ublue-os/ucore-minimal`. If it names
 `fedora-coreos`, the published image is the old plain-CoreOS artifact: rebuild it
 with `./os/build-os-image.sh` and re-apply. Every host unit below depends on ucore
 packages, so nothing else will work until this is right.
@@ -684,7 +684,7 @@ These need a live subscription. D1 to D3 change what they exercise, not the orde
 |---|---|---|
 | E1 publish OS image | run `pipelines/devbox-os.yml`, or `./os/build-os-image.sh` | last stdout line is `/providers/Microsoft.Compute/images/devbox-ucore-...` |
 | E2 apply | `terraform -chdir=terraform apply -var-file=terraform.tfvars` | precondition passes, VM created, no public IP in the plan |
-| E3 confirm the OS is ucore | `ssh core@devbox "rpm-ostree status"` | the booted deployment names `ghcr.io/ublue-os/ucore` |
+| E3 confirm the OS is ucore | `ssh core@devbox "rpm-ostree status"` | the booted deployment names `ghcr.io/ublue-os/ucore-minimal` |
 | E4 confirm the tailnet path | `ssh core@devbox "systemctl is-active tailscaled oc-tailnet"` | `active` twice |
 | E5 build container | run `pipelines/devbox-image.yml` | `:prod` exists, smoke gate passed, digest recorded |
 | E6 first boot check | `journalctl -u oc-secrets -u oc-tailnet -u opencode` | all active, `podman ps` healthy |

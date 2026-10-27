@@ -187,7 +187,12 @@ def unsettable_vars(exec_path):
     if re.search(r'^\s*\.\s+"?\$\{?[A-Z_]', text, re.M):
         return set()
     read = set(re.findall(r"\$\{?([A-Z_][A-Z0-9_]*)", text))
-    local = set(re.findall(r"^([A-Z_][A-Z0-9_]*)=", text, re.M))
+    # Any assignment form counts as a local default: bare, `export`, `readonly`,
+    # `declare`, and `local`. Matching only the bare form reports a false failure
+    # on a script that sets its own default with `export NAME=x`.
+    local = set(re.findall(
+        r"^\s*(?:export\s+|readonly\s+|declare\s+(?:-\w+\s+)*|local\s+(?:-\w+\s+)*)?"
+        r"([A-Z_][A-Z0-9_]*)=", text, re.M))
     local |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):=[^}]*\}", text))
     local |= set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):-[^}][^}]*\}", text))
     return read - local - SYSTEM_PROVIDED

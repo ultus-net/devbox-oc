@@ -28,7 +28,7 @@ variable "vm_size" {
 
 variable "os_image_id" {
   type        = string
-  description = "Managed image ID of the published ucore image. Never a marketplace URN."
+  description = "Managed image ID of the published ucore-minimal image. Never a marketplace URN."
 
   validation {
     condition     = can(regex("^/subscriptions/.+/providers/Microsoft.Compute/images/.+$", var.os_image_id))

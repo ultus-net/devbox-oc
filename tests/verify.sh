@@ -23,6 +23,19 @@ run "OS image publish"    ./os/tests/test_build_os_image.sh
 run "OS image single vhd" ./os/tests/test_build_os_image_one_vhd.sh
 run "container digest"    ./image/tests/test_digest_record.sh
 run "quadlet persistence" ./host/tests/test_quadlet_persistence.sh
+# The artifact check compiles the committed Ignition again, which needs Butane.
+# Look for a local binary so the reproducibility assertion is active here; the
+# suite reports a SKIP when none is available rather than failing.
+if [ -z "${BUTANE:-}" ]; then
+  for candidate in "$(command -v butane 2>/dev/null || true)" "$HOME/.tmp-task6-tool/butane"; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+      BUTANE="$candidate"
+      export BUTANE
+      break
+    fi
+  done
+fi
+
 run "ignition units"      ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.ign
 run "tailscale enabled"   ./os/butane/tests/test_tailscale_enabled.sh
 run "ucore autorebase"    ./os/butane/tests/test_autorebase.sh

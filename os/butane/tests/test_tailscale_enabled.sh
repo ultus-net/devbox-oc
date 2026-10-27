@@ -57,9 +57,17 @@ printf '%s\n' "$unit_section" \
 # first boot, and the first boot is still FCOS, which ships no tailscaled. So the
 # preset applies to nothing and the unit stays disabled after the rebase. Some
 # unit must therefore enable it explicitly on a boot where the unit exists.
+#
+# Read from [Service]. systemd logs `Unknown key 'ExecStart' in section [Unit],
+# ignoring` and runs nothing, so a section-blind grep accepts an ExecStart that
+# is never executed.
 signed="$(block_of ucore-signed-autorebase.service)" \
   || fail "ucore-signed-autorebase.service is not in the Ignition config"
-printf '%s\n' "$signed" \
+signed_service="$(printf '%s\n' "$signed" \
+  | awk '/^[[:space:]]*\[Service\]/{on=1;next} /^[[:space:]]*\[/{on=0} on')"
+[ -n "$signed_service" ] \
+  || fail "ucore-signed-autorebase.service has no [Service] section"
+printf '%s\n' "$signed_service" \
   | grep -Eq '^[[:space:]]*ExecStart=/usr/bin/systemctl enable tailscaled\.service[[:space:]]*$' \
   || fail "nothing enables tailscaled on a boot where the unit exists, so it stays disabled"
 
