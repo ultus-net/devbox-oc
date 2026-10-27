@@ -109,6 +109,47 @@ echo "smoke ok: $ref"
 Run: `chmod +x image/smoke.sh && ./image/smoke.sh ghcr.io/anomalyco/opencode:2.1.4`
 Expected: FAIL at the `id -u dev` check, because the upstream image has no `dev` user. This proves the test detects a missing user rather than passing vacuously.
 
+If this machine has no usable container engine (docker socket permission denied,
+no podman), record that and skip to step 2b. The smoke test still runs, but in the
+pipeline from Task 4, where it becomes a blocking gate before promotion.
+
+- [ ] **Step 2b: Verify the integrity check without a container engine**
+
+The sha512 check is the load-bearing part of the build, so it must be provable
+without Docker.
+
+```bash
+#!/usr/bin/env bash
+# image/tests/test_integrity_logic.sh
+# Runs exactly the Dockerfile's check: decode the base64 sha512 to hex, then
+# compare against sha512sum of the tarball. Includes a negative control.
+set -euo pipefail
+
+OC_SHA512='o8EJ0ZsT4dzDKN+0mpG2EKbNGzJyp+F1++Av28UReRVfiEv+N34eZEnN/unkiMoerKHad6W6Ii7k4ukTnPNmNQ=='
+tarball="${1:?usage: test_integrity_logic.sh <tarball>}"
+
+expected="$(printf '%s' "$OC_SHA512" | base64 -d | od -An -tx1 | tr -d ' \n')"
+actual="$(sha512sum "$tarball" | cut -d' ' -f1)"
+
+[ "$actual" = "$expected" ] || { echo "integrity check FAILS" >&2; exit 1; }
+echo "integrity check PASSES"
+
+corrupt="$(mktemp)"
+trap 'rm -f "$corrupt"' EXIT
+cp "$tarball" "$corrupt"
+printf 'x' >> "$corrupt"
+if [ "$(sha512sum "$corrupt" | cut -d' ' -f1)" = "$expected" ]; then
+  echo "negative control FAILED: corrupted input still matched" >&2
+  exit 1
+fi
+echo "negative control passes: corruption is detected"
+```
+
+Run:
+`curl -fsSL -o /tmp/oc.tgz https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-2.1.4.tgz && ./image/tests/test_integrity_logic.sh /tmp/oc.tgz`
+Expected: `integrity check PASSES` then
+`negative control passes: corruption is detected`
+
 - [ ] **Step 3: Add the container config to the Dockerfile**
 
 Add `containers-common` to the existing `dnf install` list in `image/Dockerfile`,
@@ -455,6 +496,17 @@ jobs:
             az acr login -n "$(acrName)"
             docker build -t "$(acrName).azurecr.io/$(repo):$tag" image/
             docker push "$(acrName).azurecr.io/$(repo):$tag"
+
+      # Blocking gate. A broken image never reaches prod.
+      - script: |
+          set -euo pipefail
+          docker run --rm --entrypoint "" "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)" \
+            opencode --version | grep -q '^opencode v'
+          docker run --rm --entrypoint "" "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)" \
+            id -u dev | grep -qx 1000
+          test "$(docker image inspect "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)" \
+            --format '{{.Config.User}}')" = "dev"
+        displayName: Smoke gate before promotion
 
       - task: AzureCLI@2
         displayName: Promote to prod and capture digest
