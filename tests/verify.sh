@@ -36,6 +36,8 @@ run "data disk protected" \
   ./terraform/tests/data_disk_protected.sh
 run "vault name derivable without state" \
   ./terraform/tests/key_vault_name_derived.sh
+run "variables documented" \
+  ./terraform/tests/variables_documented.sh
 
 run "docs complete"  ./tests/docs_complete.sh
 run "wake wrapper"   ./tools/tests/test_oc.sh
