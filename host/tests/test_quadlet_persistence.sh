@@ -132,12 +132,30 @@ done
 # custom_data and stays readable in the deployment history. Checking the quadlet alone
 # missed two routes: an Ignition storage file at the declared path, and a podman
 # generator drop-in whose `[Container] Environment=` becomes `--env` and beats
-# `--env-file`. So the rule is on every definition the parser can see, not on shapes.
+# `--env-file`. So the rule is on every definition, not on shapes.
+#
+# Two readers, because they cover different files. boot_env.py parses the Butane
+# source, which is where storage files and drop-ins live. The quadlet cannot come from
+# there: ucore.bu includes it with `local:` from a file build.sh deletes after
+# compiling, so at guard time it exists only as host/quadlet/opencode.container, and
+# build.sh is what renders it into the artifact. Its own `[Container] Environment=`
+# still reaches podman's `--env`, so it is read directly, with continuations joined.
 static_password="$(python3 "$here/tests/boot_env.py" "$butane" OPENCODE_PASSWORD \
   | awk -F'\t' '$1 != "envref"')"
 [ -z "$static_password" ] \
   || fail "a shipped file defines OPENCODE_PASSWORD, so a secret is baked into Ignition rather than fetched from Key Vault at boot:
 $static_password"
+
+# A backslash continuation is a single systemd line, and a value may be indented, so
+# join continuations first and allow leading whitespace. Matching only column 0 missed
+# the wrapped spelling.
+container_password="$(sed ':a;/\\$/N;s/\\\n//;ta' "$q" \
+  | awk '/^\[/{s=$0} s=="[Container]"' \
+  | grep -E '^[[:space:]]*Environment=.*OPENCODE_PASSWORD' || true)"
+[ -z "$container_password" ] \
+  || fail "the quadlet sets OPENCODE_PASSWORD in [Container], which podman applies as
+--env and the env file oc-secrets writes does not override it:
+$container_password"
 
 # The container reads the password from the file OUT_FILE names, so the probe must read
 # that same file. That is proved behaviourally in host/tests/test_oc-idle-check.sh,

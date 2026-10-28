@@ -129,7 +129,6 @@ SYSTEM_PROVIDED = {
     "AUTH_KEY_FILE",
     "LOGIN_SERVER",
     "API",
-    "ENV_FILE",
     "STATE",
     "PIN_FILE",
     "OUT",

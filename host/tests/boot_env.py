@@ -41,6 +41,7 @@ EnvironmentFile parser: `set -a` sourcing, `%` specifiers, and continuation
 lines are out of scope, and a caller that needs them should say so rather than
 assume they work.
 """
+import pathlib
 import re
 import shlex
 import sys
@@ -69,19 +70,35 @@ def unit_words(raw):
 
     systemd accepts `Environment="A=1 2" B=3`, so splitting on whitespace would
     invent a definition named `2"`. shlex is not systemd's parser, but it agrees
-    on quoting, and anything it rejects is reported as a parse failure rather
-    than silently mis-read.
+    on quoting. A string it cannot parse is a hard failure, not a fallback: a
+    silent re-split would mis-read exactly the input this is meant to catch.
     """
-    try:
-        return shlex.split(raw, posix=True)
-    except ValueError:
-        return raw.split()
+    return shlex.split(raw, posix=True)
 
 
 def unit_lines(text):
-    """Yield (section, key, value) for each line of a unit file body."""
+    """Yield (section, key, value) for each line of a unit file body.
+
+    Backslash continuations are joined first, as systemd does. Without that a
+    static `Environment=` split across two lines was invisible: the assignment
+    looked like an unknown directive on the second line.
+    """
     section = ""
+    joined, pending = [], ""
     for line in text.splitlines():
+        if pending:
+            pending += " " + line.strip()
+        else:
+            pending = line
+        if pending.rstrip().endswith("\\"):
+            pending = pending.rstrip()[:-1]
+            continue
+        joined.append(pending)
+        pending = ""
+    if pending:
+        joined.append(pending)
+
+    for line in joined:
         stripped = line.strip()
         if stripped.startswith("#") or not stripped:
             continue
@@ -93,15 +110,60 @@ def unit_lines(text):
             yield section, match.group(1), match.group(2)
 
 
-def collect(config, variable):
-    """Return (definitions, references), each a list of (kind, owner, value)."""
+def collect(config, variable, repo_root=None):
+    """Return (definitions, references), each a list of (kind, owner, value).
+
+    `contents: local:` is how the repo includes the quadlet, so a parser that
+    reads only `inline:` never opens the one shipped file most likely to carry a
+    password. `repo_root` is the same directory Butane is given as `--files-dir`,
+    so a local path resolves exactly as it does at build time.
+    """
     definitions, references = [], []
+
+    def body_of(contents):
+        """Return a file's text, from `inline:` or from a `local:` include."""
+        contents = contents or {}
+        if contents.get("inline") is not None:
+            return contents.get("inline") or ""
+        local = contents.get("local")
+        if local and repo_root:
+            candidate = (pathlib.Path(repo_root) / local).resolve()
+            root = pathlib.Path(repo_root).resolve()
+            # Butane rejects a path escaping the files dir, and so does this.
+            if root == candidate or root in candidate.parents:
+                try:
+                    return candidate.read_text()
+                except OSError:
+                    return ""
+        return ""
 
     # Storage files: an inline env file is a definition; a drop-in written directly
     # under /etc/systemd/system/<unit>.d/ is a definition too.
     for entry in (config.get("storage") or {}).get("files") or []:
         path = entry.get("path") or ""
-        inline = (entry.get("contents") or {}).get("inline") or ""
+        inline = body_of(entry.get("contents"))
+
+        # An installed program is not an env file, even when a unit loads it as one.
+        # `oc-secrets` is a shell script full of `NAME=value` lines, and reading it
+        # here reported `${SECRET_NAME:-opencode-password}` as a literal value. A
+        # shebang is the reliable mark; an env file never starts with one.
+        if inline.startswith("#!"):
+            continue
+
+        # A quadlet: `/etc/containers/systemd/<name>.container`. The generator turns
+        # `[Container] Environment=` into podman's `--env`, which beats `--env-file`,
+        # so a static password here wins at runtime. This file arrives through a
+        # `local:` include, which is why reading only `inline:` left it unguarded.
+        if path.startswith("/etc/containers/systemd/") and path.endswith(".container"):
+            for section, key, value in unit_lines(inline):
+                if section != "Container" or key != "Environment":
+                    continue
+                for assignment in unit_words(value):
+                    name, _, val = assignment.partition("=")
+                    if name == variable:
+                        definitions.append(("container-env", path,
+                                            split_value(val)))
+            continue
 
         # Drop-ins reach systemd/podman from two directories: systemd's own, and the
         # podman generator's for quadlets. The generator merges
@@ -122,7 +184,10 @@ def collect(config, variable):
                         definitions.append((kind, owner, split_value(val)))
             continue
 
-        if inline:
+        # Only a file that is *used as* an env file counts. systemd applies these rules
+        # to the paths a unit names in `EnvironmentFile=`, and to any config file with
+        # `NAME=value` lines; it never applies them to a program.
+        if inline and not inline.startswith("#!"):
             # An env file: the last assignment of the key in this file wins.
             last = None
             for line in inline.splitlines():
@@ -167,7 +232,10 @@ def main(argv):
     with open(path) as handle:
         config = yaml.safe_load(handle)
 
-    definitions, references = collect(config, variable)
+    # The repo root is the same directory Butane is given as --files-dir, so a
+    # `local:` include resolves to the same bytes the build reads.
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+    definitions, references = collect(config, variable, repo_root)
     for kind, owner, value in definitions:
         print(f"{kind}\t{owner}\t{value}")
     for kind, owner, value in references:
