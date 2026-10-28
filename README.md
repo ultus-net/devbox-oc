@@ -63,8 +63,9 @@ need to:
 sudo touch /var/lib/oc-idle/pin
 ```
 
-Any probe error means **stay up**. The gate fails closed, and a cold container is
-never mistaken for an idle one.
+A probe error means **stay up** while the container is running, because a half-started
+container may still hold a session. With the container down, an unreadable API is
+treated as idle instead, so a box that refuses to serve does not also refuse to stop.
 
 ## Cost shape
 

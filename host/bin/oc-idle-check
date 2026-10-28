@@ -17,17 +17,22 @@ set -euo pipefail
 trap 'echo "oc-idle: probe failed, staying up" >&2; exit 0' ERR
 
 API="${API:-http://127.0.0.1:4096}"
-# No path default here, and no hard failure either. /etc/devbox/oc-secrets.env defines
-# OUT_FILE, and OUT_FILE names the password file, so there is one definition of where
-# the password lives and oc-secrets reads the same one. A second default in this
-# script is how the idle gate kept reading the old path after the writer moved.
+# The password file is OUT_FILE, and nothing else. /etc/devbox/oc-secrets.env defines
+# it, so there is one definition of where the password lives and oc-secrets reads the
+# same one. This used to be a second hardcoded path, which is how the idle gate kept
+# reading the old file after the writer moved.
+#
+# No ENV_FILE override either. An override is a second way to name the file, it would
+# take precedence over the definition the guards check, and nothing would notice: a
+# stale ENV_FILE in the env file leaves every guard green while the probe reads the
+# wrong password. Tests set OUT_FILE instead.
 #
 # An absent OUT_FILE is not fatal. It means the env file never arrived, which is first
 # boot with a failed Key Vault fetch: the container is down, nothing is being served,
-# and the box must still deallocate rather than bill all day. So the variable stays
-# empty and the read below reports it as "no env file", the same path a missing file
-# already takes. Failing here would turn a billing guard into a crash loop.
-ENV_FILE="${ENV_FILE:-${OUT_FILE:-}}"
+# and the box must still deallocate rather than bill all day. So the read below reports
+# it as "no env file", the same path a missing file already takes. Failing here would
+# turn a billing guard into a crash loop.
+ENV_FILE="${OUT_FILE:-}"
 STATE="${STATE:-/var/lib/oc-idle/last-busy}"
 PIN_FILE="${PIN_FILE:-/var/lib/oc-idle/pin}"
 IDLE_MIN="${IDLE_MIN:-45}"

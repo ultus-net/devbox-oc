@@ -67,7 +67,20 @@ All notable changes to this project. One entry per landed change, newest first.
   Ignition storage file that defined `OPENCODE_PASSWORD`, which allowed a static
   password in a config file to replace the Key Vault fetch, and a
   `[Container] Environment=OPENCODE_PASSWORD=...` was not checked at all even though
-  podman's `--env` beats `--env-file`. Both are now rejected.
+  podman's `--env` beats `--env-file`.
+- No shipped file may define `OPENCODE_PASSWORD` at all, from any route. The previous
+  check covered the quadlet only, and two paths around it stayed green: an Ignition
+  storage file at the declared path, which bakes the secret into the VM's custom_data
+  and the deployment history, and a `.container.d/` drop-in whose
+  `[Container] Environment=` the podman generator merges into `--env`. The rule is now
+  on every definition the parser can see, so it does not depend on which file the
+  password arrives in.
+- `oc-idle-check` reads the password file from `OUT_FILE` and from nothing else. It had
+  accepted an `ENV_FILE` override, which took precedence over the definition the guards
+  check, so a stale `ENV_FILE` in the idle env file left every guard green while the
+  probe read the wrong password. `T13` now passes the probe two files that disagree on
+  the password and requires it to honour `OUT_FILE`, replacing a text rule that
+  accepted spellings it did not anticipate.
 - `oc-idle-check` no longer carries its own copy of the password path. It derives it
   from `OUT_FILE`, which `/etc/devbox/oc-secrets.env` defines, and its unit loads that
   file. Moving the path in the one definition used to leave the idle gate reading the
@@ -95,10 +108,14 @@ All notable changes to this project. One entry per landed change, newest first.
   reads like a permissions bug. `terraform/tests/password_secret_name_matches.sh`
   reads the `:-` default without evaluating it and checks every shipped `SECRET_NAME`
   definition through `host/tests/boot_env.py`. The resource's `name` is read by
-  `terraform/tests/hcl_name.py`, which strips comments and heredoc bodies, tracks brace
-  depth so a nested `name` does not count, and requires exactly one plain string
-  literal. An awk/regex reader accepted a heredoc that mentioned the attribute and a
-  concatenation that merely contained a quoted string; both are now reported by line.
+  `terraform/tests/hcl_name.py`, which strips `#`, `//` and `/* */` comments and
+  heredoc bodies, tracks brace depth so a nested `name` does not count, and requires
+  exactly one plain string literal. An awk/regex reader accepted a heredoc that
+  mentioned the attribute and a concatenation that merely contained a quoted string;
+  both are now reported by line. The first version of the scanner claimed to strip
+  block comments and did not, so a legal file was rejected as "sets name 2 times" and
+  as "has no name attribute"; fifteen shapes now cover that, including a `}` and a
+  `name` inside a block comment.
 - `host/tests/test_oc-secrets.sh` compares the effective password rather than a
   matching line: the last assignment of the key, with one surrounding pair of quotes
   removed. Those are the rules that decide the value for the line the writer emits. A

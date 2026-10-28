@@ -103,15 +103,23 @@ def collect(config, variable):
         path = entry.get("path") or ""
         inline = (entry.get("contents") or {}).get("inline") or ""
 
-        dropin = re.match(r"^/etc/systemd/system/([^/]+)\.d/[^/]+\.conf$", path)
+        # Drop-ins reach systemd/podman from two directories: systemd's own, and the
+        # podman generator's for quadlets. The generator merges
+        # `[Container] Environment=` from a `.container.d/` drop-in into the unit's
+        # `--env`, which beats `--env-file`, so both have to be read or a static
+        # password can be set in one the scanner never opens.
+        dropin = re.match(r"^/etc/(?:systemd/system/([^/]+)\.d"
+                          r"|containers/systemd/([^/]+)\.d)/[^/]+\.conf$", path)
         if dropin:
+            owner = dropin.group(1) or dropin.group(2)
             for section, key, value in unit_lines(inline):
-                if section == "Service" and key == "Environment":
-                    for assignment in unit_words(value):
-                        name, _, val = assignment.partition("=")
-                        if name == variable:
-                            definitions.append(("environment", dropin.group(1),
-                                                split_value(val)))
+                if key != "Environment":
+                    continue
+                for assignment in unit_words(value):
+                    name, _, val = assignment.partition("=")
+                    if name == variable:
+                        kind = "container-env" if section == "Container" else "environment"
+                        definitions.append((kind, owner, split_value(val)))
             continue
 
         if inline:

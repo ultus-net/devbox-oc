@@ -34,12 +34,27 @@ HEREDOC = re.compile(r"<<-?\s*([A-Za-z_][A-Za-z0-9_]*)")
 
 
 def strip_noise(text):
-    """Remove comments and heredoc bodies, preserving line structure."""
+    """Remove comments and heredoc bodies, preserving line structure.
+
+    Block comments are removed across lines, because they are legal HCL and a `name`
+    or a brace inside one is not code. Leaving them in produced two wrong verdicts: a
+    block comment naming the attribute counted as a second definition, and a `}` in one
+    closed the resource early so the real attribute was never reached.
+    """
     out = []
     lines = text.splitlines()
     i = 0
+    in_block = False
     while i < len(lines):
         line = lines[i]
+        if in_block:
+            end = line.find("*/")
+            if end == -1:
+                out.append("")
+                i += 1
+                continue
+            line = line[end + 2:]
+            in_block = False
         # A heredoc starts an arbitrary body that must be skipped whole, or a
         # `name = "..."` inside it would be read as an attribute.
         found = HEREDOC.search(line)
@@ -51,7 +66,7 @@ def strip_noise(text):
                 i += 1
             i += 1  # skip the closing tag
             continue
-        # Strip // and # comments that are not inside a quoted string.
+        # Strip //, # and /* */ comments that are not inside a quoted string.
         cleaned, in_string, escaped, j = [], False, False, 0
         while j < len(line):
             ch = line[j]
@@ -66,8 +81,15 @@ def strip_noise(text):
                 in_string = not in_string
             elif not in_string and ch == "#":
                 break
-            elif not in_string and ch == "/" and line[j:j + 2] == "//":
+            elif not in_string and line[j:j + 2] == "//":
                 break
+            elif not in_string and line[j:j + 2] == "/*":
+                end = line.find("*/", j + 2)
+                if end == -1:
+                    in_block = True
+                    break
+                j = end + 2
+                continue
             else:
                 cleaned.append(ch)
             j += 1

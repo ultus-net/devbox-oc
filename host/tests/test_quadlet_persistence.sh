@@ -127,18 +127,23 @@ for path in "${env_paths[@]}"; do
     || fail "the quadlet loads $path, but oc-secrets writes $declared ($env_owner)"
 done
 
-# `Environment=` in [Container] becomes podman's --env, which beats --env-file. A
-# static password there would shadow the Key Vault one while the container reports
-# healthy, so it is forbidden outright rather than compared.
-if printf '%s\n' "$container_section" | grep -Eq '^Environment=.*OPENCODE_PASSWORD'; then
-  fail "the quadlet sets OPENCODE_PASSWORD in [Container], which overrides the file oc-secrets writes"
-fi
+# No shipped file may define the password at all. It comes from Key Vault at boot, and
+# any static definition is a secret baked into Ignition, which ships as the VM's
+# custom_data and stays readable in the deployment history. Checking the quadlet alone
+# missed two routes: an Ignition storage file at the declared path, and a podman
+# generator drop-in whose `[Container] Environment=` becomes `--env` and beats
+# `--env-file`. So the rule is on every definition the parser can see, not on shapes.
+static_password="$(python3 "$here/tests/boot_env.py" "$butane" OPENCODE_PASSWORD \
+  | awk -F'\t' '$1 != "envref"')"
+[ -z "$static_password" ] \
+  || fail "a shipped file defines OPENCODE_PASSWORD, so a secret is baked into Ignition rather than fetched from Key Vault at boot:
+$static_password"
 
-# The container reads the password from that file, so oc-idle-check must not carry a
-# second copy of the path. It reads OUT_FILE from the same env file instead.
-if grep -qE 'ENV_FILE=.*/etc/opencode' "$here/bin/oc-idle-check"; then
-  fail "oc-idle-check hardcodes the password path, so it can drift from the one oc-secrets writes"
-fi
+# The container reads the password from the file OUT_FILE names, so the probe must read
+# that same file. That is proved behaviourally in host/tests/test_oc-idle-check.sh,
+# which hands the probe a busy password file and requires the box to stay up. No text
+# rule here: a grep for `ENV_FILE=` accepted spellings it did not anticipate and
+# rejected a comment that merely mentioned one.
 grep -q 'OPENCODE_PASSWORD' "$here/bin/oc-idle-check" \
   || fail "oc-idle-check does not read the password oc-secrets writes"
 

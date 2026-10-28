@@ -24,6 +24,14 @@ for a in "$@"; do case "$a" in http*) url="$a" ;; esac; done
 if [[ "$url" == *"/api/"* ]]; then
   ep="$(printf '%s' "$url" | sed 's|.*/api/||')"
   case " ${FAIL_EPS:-} " in *" $ep "*) exit 28 ;; esac   # timeout, like a real failure
+  # A real API rejects an unauthenticated request. The stub mirrors that when asked,
+  # so a probe reading the wrong password file fails here instead of looking busy and
+  # hiding which file it read.
+  if [ -n "${REQUIRE_PW:-}" ]; then
+    auth=""
+    for a in "$@"; do case "$a" in "Authorization: Bearer "*) auth="${a#Authorization: Bearer }" ;; esac; done
+    [ "$auth" = "$REQUIRE_PW" ] || { printf '%s' '{"error":"unauthorized"}'; exit 22; }
+  fi
   # Build the default in a variable: ${RESP:-{"data":[]}} eats one brace and
   # emits invalid JSON, which makes jq fail and the gate look busy everywhere.
   body="${RESP:-}"
@@ -167,5 +175,27 @@ rm -f "$tmp/env"
 RESP='{"data":[]}' CONTAINER_ACTIVE=3 run_gate_no_path
 [ "$(wc -l < "$tmp/arm-calls")" -eq 1 ] \
   || fail "T12 did not deallocate when OUT_FILE was absent entirely"
+
+# T13: the probe reads the file OUT_FILE names, and nothing else. Two candidate files
+# disagree on the password, and the API stub answers only for the one it is handed.
+# A gate that reads a different path than the env file names would decide on the wrong
+# password, which is the drift a text rule for ENV_FILE= used to approximate badly.
+setup; stale
+printf 'OPENCODE_PASSWORD=right\n' > "$tmp/env-right"
+printf 'OPENCODE_PASSWORD=wrong\n' > "$tmp/env-wrong"
+PATH="$tmp/bin:$PATH" \
+OUT_FILE="$tmp/env-right" ENV_FILE="$tmp/env-wrong" \
+VM_ID_OVERRIDE=/subscriptions/x/resourceGroups/r/providers/Microsoft.Compute/virtualMachines/v \
+STATE="$tmp/state/last-busy" PIN_FILE="$tmp/state/pin" ARM_CALLS="$tmp/arm-calls" \
+UPTIME_OVERRIDE=2000 IDLE_MIN=45 NOW=2000000000 \
+REQUIRE_PW=right CONTAINER_ACTIVE=3 RESP='{"data":{"ses_1":{"type":"running"}}}' \
+  bash "$script" >/dev/null 2>&1 \
+  || fail "T13 the gate exited nonzero"
+# The container is marked down on purpose. A failed probe then means idle rather than
+# "stay up", so a gate that reads the wrong password file deallocates and this test
+# fails. Left as running, the wrong file would keep the box up for an unrelated reason
+# and the test would pass whatever the script read.
+[ ! -s "$tmp/arm-calls" ] \
+  || fail "T13 deallocated while the file OUT_FILE names held a running session"
 
 echo "all idle-gate tests passed"
