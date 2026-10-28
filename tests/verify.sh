@@ -57,6 +57,8 @@ run "auth key stored" \
   ./terraform/tests/authkey_is_stored.sh
 run "auth key name matches build" \
   ./terraform/tests/authkey_name_matches_build.sh
+run "password secret name matches" \
+  ./terraform/tests/password_secret_name_matches.sh
 run "variables documented" \
   ./terraform/tests/variables_documented.sh
 

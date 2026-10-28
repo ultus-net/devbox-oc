@@ -41,21 +41,41 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
-- The env-file guard in `test_quadlet_persistence.sh` now runs `oc-secrets` instead
-  of reading its text. Six rounds of pattern matching had each fixed one shape and
-  left the class: the checks accepted a `chmod` carrying an unrelated redirect, an
-  `echo "wrote $OUT_FILE" >&2`, and an `mv` to `${OUT_FILE}.new`, while rejecting
-  `mv -f`, `mv --`, `install -m`, `cp`, `tee`, `dd of=`, a backslash-wrapped `mv`,
-  and a variable declared inside a function. Enumerating write commands is the same
-  trap in a smaller costume, because the list of ways to create a file is
-  open-ended. The guard now points the writer's own `OUT_FILE` at a sandbox with
-  stubbed IMDS and Key Vault, and requires the password line to appear there. That
-  answers the question for any write mechanism and any formatting. The stated
-  limitation is runtime reachability: the stub proves the script writes, not that
-  the service wiring reaches it, which the unit suites cover. The Ignition fallback
-  also accepted any storage path, including the marker directory, a shipped script,
-  and another unit's env file; `os/butane/tests/env_file_paths.py` now lists only
-  `files:` entries whose own inline content defines `OPENCODE_PASSWORD`.
+- The env-file guard in `test_quadlet_persistence.sh` no longer guesses at how
+  `oc-secrets` writes, and no longer runs it either. Six rounds of pattern matching
+  had each fixed one shape and left the class: the checks accepted a `chmod`
+  carrying an unrelated redirect, an `echo "wrote $OUT_FILE" >&2`, and an `mv` to
+  `${OUT_FILE}.new`, while rejecting `mv -f`, `mv --`, `install -m`, `cp`, `tee`,
+  `dd of=`, a backslash-wrapped `mv`, and a variable declared inside a function.
+  Running the writer from this guard was then tried and was worse: it always set
+  `OUT_FILE`, which systemd never sets, so it passed a writer that refuses to run
+  without it and writes nothing at boot, and its `grep -x` accepted
+  `OPENCODE_PASSWORD=probe-password` followed by `OPENCODE_PASSWORD=legacy`.
+  Responsibility is now split by what each check can decide. That the writer writes
+  the right content is proved where the writer is owned,
+  `host/tests/test_oc-secrets.sh`, which runs it and checks content and mode. The
+  path is decided here: the quadlet's `EnvironmentFile=` must equal the writer's
+  declared default, evaluated by bash with `OUT_FILE` unset as it is at boot, so
+  quoting, `export`/`readonly`/`local`, a `:-` fallback and a second assignment all
+  resolve as they do at runtime. The guard also fails if anything else on the boot
+  path sets `OUT_FILE`, since that would make the declared default the wrong thing
+  to compare. The Ignition allowance accepts only `files:` entries whose own inline
+  content defines `OPENCODE_PASSWORD`, through `host/tests/env_file_paths.py`, which
+  reads the document instead of anchoring on indentation.
+- The OpenCode password secret name was never checked against the secret Terraform
+  creates, though the Tailscale auth key already had that guard. A drift between
+  `oc-secrets` and `azurerm_key_vault_secret.opencode_password` produces a Key Vault
+  404 at boot that reads like a permissions bug.
+  `terraform/tests/password_secret_name_matches.sh` evaluates the default with
+  `SECRET_NAME` unset, as at boot, and also fails if an Ignition env file sets a
+  different name. The value mode it needs was added to `env_file_paths.py`, so the
+  Butane source is parsed rather than grepped.
+- `host/tests/test_oc-secrets.sh` compares the password systemd would actually use:
+  the last assignment of the key, with surrounding quotes stripped. A `grep -x` for
+  the first matching line passed a file that also carried a later
+  `OPENCODE_PASSWORD=legacy`, which systemd prefers. A second test runs the writer
+  with `OUT_FILE` absent, which is the boot condition, since every other check
+  passes it and a writer that only works when given one writes nothing on the host.
 - The `enabled` flag in all three unit suites is read by a YAML parser through
   `os/butane/tests/unit_enabled.py`. Each suite had its own derivation and each one
   broke on valid YAML that compiles to the same flag: a hardcoded indent, then an

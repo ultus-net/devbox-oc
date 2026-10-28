@@ -222,38 +222,43 @@ def top_level_assignments(text):
     change depth. Braces are counted on code whose `${...}` expansions and quoted
     strings are already removed, so a brace in data cannot unbalance the count.
 
-    Each semicolon-separated statement is judged in order, and an assignment counts only
-    if control certainly reaches it. `:` and `true` succeed, so `: ; export VAR=x`
-    assigns and counts. A command that runs first can exit, so `exit 1; VAR=x` never
-    assigns and does not count. A control-flow keyword means the branch is conditional,
-    so nothing after it counts. Judging per statement rather than per line also stops
-    `STATE=done` being rejected for its value.
+    Each semicolon-separated statement is judged in order, with the block depth updated
+    as each one is read. `:` and `true` succeed, so `: ; export VAR=x` assigns and
+    counts. `exit` and `return` end the script or the function, so `exit 1; VAR=x`
+    never assigns and does not count. Every other command is assumed to continue:
+    treating any command as fatal rejected ordinary shell such as
+    `cd "$(dirname "$0")"; VAR=x` and `umask 077; VAR=x`, and a guard that fails on
+    ordinary colleagues' code gets switched off.
+
+    Ordering matters inside one line. `f() { return 1; VAR=x; }` opens a block and
+    assigns inside it, so the assignment must be judged after the brace is counted.
+    Judging per statement rather than per line also stops `STATE=done` being rejected
+    for its value.
     """
     names = set()
     depth = 0
     for line in text.splitlines():
         if not line or line.lstrip().startswith("#"):
             continue
-        code = code_only(line)
-        if not line[0].isspace() and depth == 0:
-            reachable = True
-            for segment in line.split(";"):
-                stripped = segment.strip()
-                if not stripped:
-                    continue
+        reachable = True
+        for segment in line.split(";"):
+            stripped = segment.strip()
+            if not stripped:
+                continue
+            seg_code = code_only(segment)
+            at_top = depth == 0 and not line[0].isspace()
+            if at_top:
                 assignment = re.match(
                     r"^(?:export\s+|readonly\s+|declare\s+(?:-\w+\s+)*|local\s+(?:-\w+\s+)*)?"
                     r"([A-Z_][A-Z0-9_]*)=", stripped)
                 if assignment:
                     if reachable:
                         names.add(assignment.group(1))
-                    continue
-                if stripped in (":", "true"):
-                    continue
-                reachable = False
-        depth += len(BLOCK_OPEN.findall(code)) + code.count("{")
-        depth -= len(BLOCK_CLOSE.findall(code)) + code.count("}")
-        depth = max(depth, 0)
+                elif re.match(r"^(exit|return)\b", stripped):
+                    reachable = False
+            depth += len(BLOCK_OPEN.findall(seg_code)) + seg_code.count("{")
+            depth -= len(BLOCK_CLOSE.findall(seg_code)) + seg_code.count("}")
+            depth = max(depth, 0)
     return names
 
 
