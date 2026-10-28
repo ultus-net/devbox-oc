@@ -5,6 +5,10 @@
 # each other: host/bin/oc-secrets defaults SECRET_NAME, and Terraform creates the
 # secret it names. Drift produces a Key Vault 404 at boot that reads like a
 # permissions bug, which is the same failure the tailscale authkey guard covers.
+#
+# Nothing here executes or evaluates a shipped script. A guard that evals text from
+# the file it audits runs that file's code, which is how the previous version of this
+# test could be made to touch a file just by editing a variable's default.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
@@ -22,42 +26,46 @@ butane="$root/os/butane/ucore.bu"
 command -v python3 >/dev/null 2>&1 || fail "python3 is required and absent"
 python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 
-# The default the host uses when the unit sets nothing. bash evaluates the right-hand
-# side with SECRET_NAME unset, which is the boot condition, so quoting and a `:-`
-# fallback resolve as they do at runtime instead of being pattern-matched by hand.
-assign_re='^[[:space:]]*(export[[:space:]]+|readonly[[:space:]]+|declare([[:space:]]+-[A-Za-z]+)*[[:space:]]+|local([[:space:]]+-[A-Za-z]+)*[[:space:]]+)?SECRET_NAME='
-decl_lines="$(grep -E "$assign_re" "$writer" || true)"
-[ -n "$decl_lines" ] || fail "oc-secrets no longer assigns SECRET_NAME, so the name is unbound"
-last_decl="$(printf '%s\n' "$decl_lines" | tail -1)"
-rhs="${last_decl#*SECRET_NAME=}"
-rhs="${rhs%%[[:space:]]#*}"
-# shellcheck disable=SC2016
-declared="$(env -u SECRET_NAME DECL_RHS="$rhs" bash -c '
-  set -u
-  eval "SECRET_NAME=$DECL_RHS"
-  printf %s "$SECRET_NAME"
-' 2>/dev/null || true)"
-[ -n "$declared" ] \
-  || fail "oc-secrets declares a SECRET_NAME that does not evaluate: $rhs"
+# The default the host uses when nothing overrides it. Only the `${NAME:-default}`
+# form is read, which is the one this script ships; anything else is a shape this
+# test does not model, so it fails rather than guessing.
+default_line="$(grep -E '^[[:space:]]*SECRET_NAME="\$\{SECRET_NAME:-[^}]+\}"' "$writer" || true)"
+[ -n "$default_line" ] \
+  || fail "oc-secrets no longer defaults SECRET_NAME as \${SECRET_NAME:-...}, so this test cannot read it"
+declared="${default_line#*SECRET_NAME:-}"
+declared="${declared%%\}*}"
 
+# The created name, from the resource's own block. A `name` inside a nested block is
+# not the resource's name, and an attribute that is not a string literal is a case
+# this test does not model, so both must fail loudly instead of reading as a match.
 start="$(grep -n 'resource "azurerm_key_vault_secret" "opencode_password"' "$main_tf" \
          | head -1 | cut -d: -f1 || true)"
 [ -n "$start" ] || fail "no azurerm_key_vault_secret.opencode_password resource"
-block="$(tail -n "+$start" "$main_tf" | awk 'NR > 1 && /^}/{exit} {print}')"
-created="$(printf '%s\n' "$block" | grep -oE 'name[[:space:]]*=[[:space:]]*"[^"]+"' \
-           | head -1 | sed -E 's/.*"([^"]+)"$/\1/')"
-[ -n "$created" ] || fail "the secret resource has no name attribute"
+
+block="$(awk -v start="$start" 'NR > start { if ($0 ~ /^}/) exit; print }' "$main_tf")"
+names="$(printf '%s\n' "$block" \
+  | awk '/^[[:space:]]*name[[:space:]]*=/ { print }')"
+[ -n "$names" ] || fail "the secret resource has no name attribute"
+count="$(printf '%s\n' "$names" | wc -l)"
+[ "$count" -eq 1 ] || fail "the secret resource sets name $count times: $names"
+case "$names" in
+  *'"'*) ;;
+  *) fail "the secret resource name is not a string literal: $names" ;;
+esac
+created="$(printf '%s\n' "$names" | sed -E 's/^[^"]*"([^"]+)".*$/\1/')"
 
 [ "$declared" = "$created" ] \
   || fail "the host asks for '$declared' but Terraform creates '$created'"
 
-# A unit env file that sets SECRET_NAME would make the default irrelevant, so any
-# value it sets has to match too.
-defs="$(python3 "$root/host/tests/env_file_paths.py" --values "$butane" SECRET_NAME)"
-while IFS=$'\t' read -r env_path value; do
+# A shipped env file that sets SECRET_NAME would make the default irrelevant, so any
+# value it sets has to match too. systemd's last-wins rule applies, which boot_env.py
+# implements; every definition is checked, so an earlier stray value cannot hide.
+defs="$(python3 "$root/host/tests/boot_env.py" "$butane" SECRET_NAME \
+  | awk -F'\t' '$1 == "envfile" || $1 == "environment" { print $2 "\t" $3 }')"
+while IFS=$'\t' read -r env_owner value; do
   [ -n "${value:-}" ] || continue
   [ "$value" = "$created" ] \
-    || fail "$env_path sets SECRET_NAME=$value but Terraform creates '$created'"
+    || fail "$env_owner sets SECRET_NAME=$value but Terraform creates '$created'"
 done <<< "$defs"
 
 echo "password secret name matches between the host and Terraform"

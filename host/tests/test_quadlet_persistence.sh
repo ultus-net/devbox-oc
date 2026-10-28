@@ -52,7 +52,7 @@ mapfile -t env_paths < <(printf '%s\n' "$container_section" | sed -n 's/^Environ
 [ "${#env_paths[@]}" -gt 0 ] \
   || fail "quadlet loads no EnvironmentFile in [Container], so the container has no password"
 
-# Each EnvironmentFile the quadlet loads must be the path `oc-secrets` writes on a
+# Each EnvironmentFile the quadlet loads must be the path the writer writes on a
 # fresh boot.
 #
 # Six rounds of text heuristics lived here and every one lied in both directions.
@@ -61,84 +61,69 @@ mapfile -t env_paths < <(printf '%s\n' "$container_section" | sed -n 's/^Environ
 # unrelated `> /dev/null`, and an `mv` to `${OUT_FILE}.new`. They rejected a literal
 # redirect, `export`, `mv -f`, `install -m`, `cp`, `tee`, and `dd of=`.
 #
-# Round 8 then ran the writer with `OUT_FILE` pointed at a sandbox. That was worse
-# than the heuristics: it always set `OUT_FILE`, which systemd never does, so it
-# proved only the override path. A writer that refuses to run without `OUT_FILE`
-# passed the guard and wrote nothing at boot. It also accepted
-# `OPENCODE_PASSWORD=probe-password` followed by `OPENCODE_PASSWORD=legacy`,
-# because systemd takes the last assignment and `grep -x` does not.
+# Round 8 ran the writer instead. That was worse: it supplied `OUT_FILE`, which
+# systemd never does, so it proved only the override path, and it kept the same
+# blind spot when the writer also assigned the variable itself.
 #
-# So the responsibility is split along what each check can actually decide:
+# Round 9 parsed the writer and evaluated the fragment with bash. That was still
+# wrong twice over: the eval executed code from the file being audited, and a
+# non-line-initial assignment was invisible to the parser.
 #
-#   1. That the writer writes the right content is proved by running it, in
-#      host/tests/test_oc-secrets.sh, which owns that script and checks content and
-#      mode. Nothing here re-proves it.
-#   2. That the path the quadlet loads is the path the writer uses when nothing
-#      overrides it is decided here, by reading the declaration and evaluating it
-#      with bash, plus proving that no shipped env file sets `OUT_FILE`.
+# So the path is not read out of a shell script at all. It is a single definition in
+# the unit env file that Ignition writes, and this guard checks the whole chain from
+# parsed configuration:
 #
-# The value is evaluated by bash rather than unquoted by a regex, so quoting and a
-# `${OUT_FILE:-...}` fallback resolve the same way they do at runtime.
+#   oc-secrets.service loads that env file, the env file defines OUT_FILE, and the
+#   value equals the EnvironmentFile the container loads.
+#
+# Nothing here executes a shipped script or evaluates its text. That the writer
+# writes the right content is proved by running it, in host/tests/test_oc-secrets.sh,
+# which owns that script.
 here="$(cd "$(dirname "$0")/.." && pwd)"
-writer="$here/bin/oc-secrets"
-[ -f "$writer" ] || fail "no $writer, so nothing declares where the password goes"
+butane="$here/../os/butane/ucore.bu"
 
-# python3 reads the Butane source below. Its absence must fail, not silently leave
-# the Ignition allowance empty: an empty allowance rejects every path, which looks
-# like a real finding and hides the missing dependency.
+# python3 reads the Butane source. Its absence must fail, not silently leave the
+# Ignition allowance empty: an empty allowance rejects every path, which looks like a
+# real finding and hides the missing dependency.
 command -v python3 >/dev/null 2>&1 || fail "python3 is required and absent"
 python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 
-# The last `OUT_FILE=` assignment is the one bash would end with, and the one
-# systemd would read if the file were sourced. Taking the last also means a second,
-# later assignment cannot hide behind the first. The pattern is anchored to the
-# variable name with its optional declaration keywords, so `PREFIX_OUT_FILE=` is a
-# different variable and a comment mentioning the name is not an assignment.
-assign_re='^[[:space:]]*(export[[:space:]]+|readonly[[:space:]]+|declare([[:space:]]+-[A-Za-z]+)*[[:space:]]+|local([[:space:]]+-[A-Za-z]+)*[[:space:]]+)?OUT_FILE='
-decl_lines="$(grep -E "$assign_re" "$writer" || true)"
-[ -n "$decl_lines" ] || fail "oc-secrets no longer assigns OUT_FILE, so its output path is unknown"
-last_decl="$(printf '%s\n' "$decl_lines" | tail -1)"
-rhs="${last_decl#*OUT_FILE=}"
-# Strip a trailing comment, which is shell syntax rather than part of the value.
-rhs="${rhs%%[[:space:]]#*}"
+# Every definition of OUT_FILE in the shipped configuration, parsed from the Butane
+# source. Exactly one may exist, and it must be an env file: an `Environment=` line
+# would win at runtime and make the env file a decoy.
+boot_env="$(python3 "$here/tests/boot_env.py" "$butane" OUT_FILE)"
+definitions="$(printf '%s\n' "$boot_env" | awk -F'\t' '$1 != "envref"')"
+[ -n "$definitions" ] || fail "nothing in the shipped configuration defines OUT_FILE"
 
-# `env -u OUT_FILE` is the boot condition: systemd sets no OUT_FILE, so the value
-# that runs is the declared default and nothing else. bash evaluates the right-hand
-# side, so quoting and a `:-` fallback resolve exactly as they do on the host. A
-# value that does not evaluate is a failure, not an empty string to compare later.
-# The single quotes are deliberate: `$DECL_RHS` must reach the eval unexpanded.
-# shellcheck disable=SC2016
-declared="$(env -u OUT_FILE DECL_RHS="$rhs" bash -c '
-  set -u
-  eval "OUT_FILE=$DECL_RHS"
-  printf %s "$OUT_FILE"
-' 2>/dev/null || true)"
-[ -n "$declared" ] \
-  || fail "oc-secrets declares an OUT_FILE that does not evaluate: $rhs"
+count="$(printf '%s\n' "$definitions" | wc -l)"
+[ "$count" -eq 1 ] \
+  || fail "OUT_FILE is defined $count times, so which one wins is a coin toss:
+$definitions"
+
+kind="$(printf '%s\n' "$definitions" | cut -f1)"
+env_owner="$(printf '%s\n' "$definitions" | cut -f2)"
+declared="$(printf '%s\n' "$definitions" | cut -f3)"
+[ "$kind" = "envfile" ] \
+  || fail "OUT_FILE is set by a unit's Environment= ($env_owner), not by an env file, so the env file is a decoy"
 case "$declared" in
   /?*) ;;
-  *) fail "oc-secrets declares an output path that is not absolute: $declared" ;;
+  *) fail "OUT_FILE is defined as a path that is not absolute: $declared" ;;
 esac
 
-# If anything on the boot path sets OUT_FILE, the value above is not what runs, and
-# this guard would be checking a path the host never uses.
-override_files="$(python3 "$here/tests/env_file_paths.py" \
-  "$here/../os/butane/ucore.bu" OUT_FILE)"
-[ -z "$override_files" ] \
-  || fail "a shipped env file sets OUT_FILE ($override_files), so the declared default is not what runs"
-if printf '%s\n' "$container_section" | grep -Eq '^Environment=.*OUT_FILE'; then
-  fail "the quadlet sets OUT_FILE in [Container], so the declared default is not what runs"
-fi
+# The unit that runs the writer must load the file that defines the path, or the
+# definition never reaches the process.
+printf '%s\n' "$boot_env" | awk -F'\t' '$1 == "envref"' | grep -qxF "envref	oc-secrets.service	$env_owner" \
+  || fail "oc-secrets.service does not load $env_owner, so the OUT_FILE it defines never reaches the writer"
 
 # Paths Ignition itself could satisfy: a storage file whose own content defines the
 # variable the container needs. A directory, a shipped script, and an env file for a
 # different unit all appear as storage paths, so a path-only match would accept a
-# reference no component fulfils. See env_file_paths.py.
-mapfile -t ign_paths < <(python3 "$here/tests/env_file_paths.py" \
-  "$here/../os/butane/ucore.bu" OPENCODE_PASSWORD)
+# reference no component fulfils.
+mapfile -t ign_paths < <(python3 "$here/tests/boot_env.py" "$butane" OPENCODE_PASSWORD \
+  | awk -F'\t' '$1 == "envfile" { print $2 }')
 
-# Each loaded path must be the writer's declared path or an Ignition env file that
-# really defines the password. A path that merely starts with a claimed one is a
+# Each loaded path must be the path defined for the writer or an Ignition env file
+# that really defines the password. A path that merely starts with a claimed one is a
 # different file and does not count.
 for path in "${env_paths[@]}"; do
   [ -n "$path" ] || continue
@@ -148,7 +133,7 @@ for path in "${env_paths[@]}"; do
     [ "$path" = "$storage_path" ] && claimed=1
   done
   [ "$claimed" -eq 1 ] \
-    || fail "the quadlet loads $path, but no component declares it: oc-secrets writes $declared"
+    || fail "the quadlet loads $path, but no shipped component defines it: OUT_FILE is $declared ($env_owner)"
 done
 
 # The container's password comes from that file, so the writer and the reader must

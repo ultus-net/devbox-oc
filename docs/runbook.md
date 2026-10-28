@@ -172,6 +172,11 @@ All four units must report `active` and the container must be `healthy`. If
 tailnet path and the box needs Bastion: check
 `sudo journalctl -u tailscaled -n 40`.
 
+The password path is not a default inside the script. `/etc/devbox/oc-secrets.env`
+defines `OUT_FILE`, written by Ignition, and `oc-secrets` fails rather than inventing
+one. A boot that reports `OUT_FILE is required` means that env file is missing, which
+points at Ignition rather than at Key Vault:
+
 `is-active` alone does not prove enablement is right: `oc-tailnet` carries an
 unconditional `Wants=tailscaled`, so the daemon starts whether or not it is
 enabled. `is-enabled` must say `enabled`. If it says `disabled`, the
