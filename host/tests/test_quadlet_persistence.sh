@@ -91,15 +91,35 @@ case "$declared" in
   *) fail "oc-secrets declares an output path that is not absolute: $declared" ;;
 esac
 
-# Paths Ignition writes itself. A storage entry creates its file, so an exact match
-# here is as good as a script that declares the same path.
+# Paths Ignition itself could satisfy: a storage file whose own content defines the
+# variable the container needs. A directory entry, a shipped script, and an env file
+# for a different unit all appear as `- path:` lines, so matching on the path alone
+# would accept a reference no component fulfils. The check is scoped to `files:` and
+# to the content lines indented under that entry.
 ign_paths=()
 while read -r storage_path; do
-  storage_path="${storage_path%%[[:space:]]#*}"
-  storage_path="${storage_path//\"/}"
-  storage_path="${storage_path//\'/}"
   [ -n "$storage_path" ] && ign_paths+=("$storage_path")
-done < <(sed -n -E 's/^[[:space:]]*- path:[[:space:]]*//p' "$here/../os/butane/ucore.bu")
+done < <(awk '
+  /^  files:[[:space:]]*$/ { in_files = 1; next }
+  /^  [A-Za-z_]+:/ { in_files = 0 }
+  !in_files { next }
+  /^[[:space:]]*- path:/ {
+    if (path != "" && defines) print path
+    path = $0
+    sub(/^[[:space:]]*- path:[[:space:]]*/, "", path)
+    gsub(/["\047]/, "", path)
+    match($0, /^[[:space:]]*/)
+    indent = RLENGTH
+    defines = 0
+    next
+  }
+  path != "" {
+    match($0, /^[[:space:]]*/)
+    if (RLENGTH <= indent) { next }
+    if ($0 ~ /^[[:space:]]*OPENCODE_PASSWORD=/) { defines = 1 }
+  }
+  END { if (path != "" && defines) print path }
+' "$here/../os/butane/ucore.bu")
 
 # Each loaded path must be one a shipped component claims: either the writer's
 # declared output, or an exact Ignition storage path. A path that merely starts with
@@ -115,28 +135,35 @@ for path in "${env_paths[@]}"; do
     || fail "the quadlet loads $path, but no component declares it: oc-secrets writes $declared"
 done
 
-# oc-secrets must still write its declared path. Its shipped mechanism is a
+# oc-secrets must still write exactly its declared path. Its shipped mechanism is a
 # temporary file moved into place, so accept either that or a redirect to it.
-# A `chmod` or a read of the same variable is not a write, so the reference has to
-# sit on a line that also carries a redirect or an mv.
 #
-# `${OUT_FILE}` and `"$OUT_FILE"` are the same target as `$OUT_FILE`, so brace and
-# quote spellings are normalised first. A longer name is a different file, so the
-# reference must end at a non-name character; a bare substring test would let
-# `${OUT_FILE}_BACKUP` stand in for `${OUT_FILE}`.
+# The target has to be the variable itself, not a longer name that starts with it: an
+# `mv` to `${OUT_FILE}.new` writes a different file. So the write target is taken as
+# a token, normalised for quoting and braces, and compared for equality. A line that
+# merely mentions the variable, such as a `chmod` or an `echo` to stderr, has no
+# write target and does not count.
 # shellcheck disable=SC2016  # the literal $OUT_FILE is what is being searched for
 awk '
+  function target(tok) {
+    gsub(/["\047]/, "", tok)
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", tok)
+    if (tok == "${OUT_FILE}") return "$OUT_FILE"
+    return tok
+  }
   $0 ~ /^[[:space:]]*#/ { next }
   {
-    line = $0
-    gsub(/\$\{OUT_FILE\}/, "$OUT_FILE", line)
-    gsub(/"/, "", line)
+    n = split($0, w, /[[:space:]]+/)
+    for (i = 1; i <= n; i++) {
+      # `> file`, `>> file`, and `mv src dst` all name the target last.
+      if (w[i] ~ /^>>?$/ && i < n && target(w[i + 1]) == "$OUT_FILE") found = 1
+      if (w[i] == "mv" && i + 2 <= n && target(w[i + 2]) == "$OUT_FILE") found = 1
+      if (w[i] ~ /^>>?[^[:space:]]/ && target(substr(w[i], w[i] ~ /^>>/ ? 3 : 2)) == "$OUT_FILE") found = 1
+    }
   }
-  line ~ /\$OUT_FILE([^A-Za-z0-9_]|$)/ \
-    && (line ~ /(^|[[:space:]])mv[[:space:]]/ || line ~ />>?/) { found = 1 }
   END { exit(found ? 0 : 1) }
 ' "$writer" \
-  || fail "oc-secrets declares OUT_FILE but no longer writes it"
+  || fail "oc-secrets declares OUT_FILE but no longer writes that exact file"
 
 # The container's password comes from that file, so the writer and the reader must
 # agree on the name.

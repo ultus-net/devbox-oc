@@ -9,3 +9,7 @@ terraform/*.tfvars
 *.tfplan
 *.plan.json
 *.ign.tmp
+# Scratch dir the artifact reproducibility check creates next to the artifact.
+os/butane/ign-repro.*
+# Local review scratch, never committed.
+.scratch/

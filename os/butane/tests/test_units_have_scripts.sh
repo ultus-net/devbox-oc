@@ -9,6 +9,10 @@ if [ -z "$ign" ] || [ ! -f "$ign" ]; then
   exit 0
 fi
 fail() { echo "FAIL: $1" >&2; exit 1; }
+# The enabled flag is read by a YAML parser. Without it the comparison cannot run,
+# and a skipped comparison would report success on the state it exists to catch.
+command -v python3 >/dev/null 2>&1 || fail "python3 is required and absent"
+python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 for p in /usr/local/sbin/oc-secrets /usr/local/sbin/oc-acr-login \
          /usr/local/sbin/oc-idle-check /usr/local/sbin/oc-snapshot \
          /usr/local/sbin/oc-tailnet /usr/local/sbin/oc-tailnet-up \
@@ -54,6 +58,7 @@ printf '%s\n' "$net" | grep -Eq '^EnvironmentFile=/etc/devbox/oc-secrets\.env$' 
 # dropped from the .ign and the box still boots plain FCOS, which is the failure
 # this whole file exists to catch.
 bu="${BU:-$(cd "$(dirname "$0")/.." && pwd)/ucore.bu}"
+here="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$bu" ]; then
   # Only the systemd section declares units. Taking every `- name:` line in the
   # file also accepts the user list, whose entries are not units.
@@ -80,32 +85,19 @@ if [ -f "$bu" ]; then
   # A unit with no `enabled:` key is not enabled, so the absent case is compared
   # too: skipping it let the artifact enable a unit the source never enables.
   #
-  # The key's indent is derived from the unit's own `- name:` line plus two, and a
-  # trailing comment is allowed, because both are valid YAML that compiles to the
-  # same flag. A fixed indent or a line-end anchor turns a style change into a
-  # false failure, and a bare `[[:space:]]*` accepts `enabled: true` inside the
-  # `contents: |` block, which is unit text rather than YAML.
+  # The flag is read by a YAML parser, not by matching an indent. Two hand-rolled
+  # derivations lived here and both broke on valid YAML that compiles to the same
+  # flag: a fixed indent, then an indent taken from the unit's own `- name:` line,
+  # which a blank line after `- name:` reduces to the empty string so every unit
+  # compares as disabled and the artifact can enable anything. See unit_enabled.py.
+  #
+  # `absent` is compared as false, and an explicit `enabled: false` is compared as
+  # false too, because Butane renders no flag in either case.
   while read -r name; do
     [ -n "$name" ] || continue
-    want="$(printf '%s\n' "$units_block" \
-      | awk -v u="    - name: ${name}" '$0==u{on=1;next} /^    - name: /{on=0} on' \
-      | awk '
-          NR == 1 {
-            match($0, /^[[:space:]]*/)
-            key = substr($0, 1, RLENGTH)
-          }
-          index($0, key "enabled:") == 1 {
-            rest = substr($0, length(key) + length("enabled:") + 1)
-            sub(/#.*/, "", rest)
-            gsub(/[[:space:]]/, "", rest)
-            print rest
-            exit
-          }' \
-      | head -1)"
-    case "$want" in
-      true|yes) want=true ;;
-      *) want=false ;;
-    esac
+    want="$(python3 "$here/unit_enabled.py" "$bu" "$name")" \
+      || fail "cannot read the enabled flag for ${name} from $bu"
+    [ "$want" = "true" ] || want=false
     got="$(jq -r --arg n "$name" \
       '.systemd.units[] | select(.name == $n) | (.enabled // false)' "$ign")"
     [ "$got" = "$want" ] \
@@ -120,7 +112,8 @@ if [ -f "$bu" ]; then
     # Anchor the scratch directory to the Ignition file's own directory, not to
     # $PWD: the compile writes a staged sibling of its target, and the trap then
     # has both in one place it can remove. Anchoring to $PWD leaves the directory
-    # outside the repo when the suite is run from a parent directory.
+    # outside the repo when the suite is run from a parent directory. The EXIT trap
+    # is the only cleanup path: one owner for the directory, on pass and on fail.
     reprodir="$(mktemp -d "$(dirname "$ign")/ign-repro.XXXXXX")"
     trap 'rm -rf "$reprodir"' EXIT
     repro="$reprodir/repro.ign"
@@ -130,8 +123,6 @@ if [ -f "$bu" ]; then
     if ! diff <(jq -S . "$repro") <(jq -S . "$ign") >/dev/null; then
       fail "the committed Ignition differs from what build-placeholder.sh produces"
     fi
-    rm -rf "$reprodir"
-    trap - EXIT
   else
     echo "SKIP: no BUTANE set, artifact reproducibility unchecked" >&2
   fi

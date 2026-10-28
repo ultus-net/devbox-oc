@@ -31,12 +31,17 @@ jobs:
       # PATH. Installing it here keeps a lint failure meaning "lint failed" and
       # not "the agent had no linter". apt carries one shellcheck per image, so
       # the version is printed to record what actually ran.
+      #
+      # python3-yaml is installed for the same reason: two unit suites read the
+      # Butane source with a YAML parser, and they fail rather than skip when the
+      # module is absent.
       - script: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends shellcheck
+          sudo apt-get install -y --no-install-recommends shellcheck python3-yaml
           shellcheck --version
-        displayName: install shellcheck
+          python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
+        displayName: install shellcheck and PyYAML
 
       - script: ./tests/verify.sh
         displayName: verification gate

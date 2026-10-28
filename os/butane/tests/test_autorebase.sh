@@ -17,6 +17,10 @@ bu="${1:-$here/../ucore.bu}"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 [ -f "$bu" ] || fail "no such file: $bu"
+# The enabled flag is read by a YAML parser. Without it the check cannot run, and a
+# skipped check would report success on the state this suite exists to catch.
+command -v python3 >/dev/null 2>&1 || fail "python3 is required and absent"
+python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 
 # Take a unit's block by line number. An awk range whose end pattern matches the
 # start line collapses to one line and reads as absent.
@@ -44,24 +48,13 @@ section_of() { printf '%s\n' "$1" | awk -v want="$2" '
   on { print }
 '; }
 
-# The unit-level `enabled:` key, wherever the unit's own indent puts it. A line at
-# the same indent as the `- name:` list item is the unit's YAML; anything deeper is
-# inside `contents: |` and is unit text, not YAML. A hardcoded indent is brittle to
-# a style change, so derive it from the `- name:` line and accept a trailing
-# comment (`enabled: true  # first boot` is valid YAML and compiles to true).
+# The unit-level `enabled:` key, read by a YAML parser rather than by matching an
+# indent. Two hand-rolled derivations lived here and both broke on valid YAML that
+# compiles to the same flag: first a hardcoded six-space indent, then an indent taken
+# from the unit's own `- name:` line, which a blank line after `- name:` reduces to
+# the empty string so every unit compares as disabled. See unit_enabled.py.
 enabled_flag() {
-  local body="$1" indent value
-  # Keys of the unit mapping sit two spaces past the `- ` list marker.
-  indent="$(printf '%s\n' "$body" | sed -n '1s/^\([[:space:]]*\)- name:.*/\1  /p')"
-  [ -n "$indent" ] || indent="      "
-  value="$(printf '%s\n' "$body" \
-    | sed -n "s/^${indent}enabled:[[:space:]]*\(true\|false\|yes\|no\)[[:space:]]*\(#.*\)\{0,1\}$/\1/p" \
-    | head -1)"
-  case "$value" in
-    true|yes) printf 'true\n' ;;
-    false|no) printf 'false\n' ;;
-    *) return 1 ;;
-  esac
+  python3 "$here/unit_enabled.py" "$bu" "$1"
 }
 
 unsigned="$(block_of ucore-unsigned-autorebase.service)" \
@@ -69,17 +62,18 @@ unsigned="$(block_of ucore-unsigned-autorebase.service)" \
 signed="$(block_of ucore-signed-autorebase.service)" \
   || fail "ucore-signed-autorebase.service is not in the Ignition config"
 
-for pair in "unsigned:$unsigned" "signed:$signed"; do
+for pair in "unsigned:ucore-unsigned-autorebase.service" "signed:ucore-signed-autorebase.service"; do
   label="${pair%%:*}"
-  body="${pair#*:}"
+  unit="${pair#*:}"
+  body="$(block_of "$unit")" || fail "${unit} is not in the Ignition config"
   service="$(section_of "$body" Service)"
   unit_sec="$(section_of "$body" Unit)"
   [ -n "$service" ] || fail "${label} autorebase unit has no [Service] section"
   [ -n "$unit_sec" ] || fail "${label} autorebase unit has no [Unit] section"
   # The unit-level key, not any line in the block. An `enabled: true` line inside
   # `contents: |` is unit text, not YAML, and satisfies a whole-block grep while
-  # Butane renders no flag at all.
-  [ "$(enabled_flag "$body" || true)" = "true" ] \
+  # Butane renders no flag at all. The YAML parse cannot see that decoy at all.
+  [ "$(enabled_flag "$unit" || true)" = "true" ] \
     || fail "${label} autorebase unit is present but not enabled"
   directive_fields "$service" 'ExecStart=/usr/bin/rpm-ostree rebase' \
     | grep -q 'rpm-ostree\|ostree-' \

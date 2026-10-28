@@ -203,27 +203,40 @@ def code_only(line):
     return line
 
 
+BLOCK_OPEN = re.compile(r"\b(if|while|until|for|case|select)\b")
+BLOCK_CLOSE = re.compile(r"\b(fi|done|esac)\b")
+
+
 def top_level_assignments(text):
     """Names assigned by a statement that runs unconditionally.
 
-    Only a line at column zero can run unconditionally, and only its semicolon-
-    separated segments that are plain assignments or `export`/`readonly` count.
-    A line carrying a control-flow keyword, or a block brace, is a conditional or
-    a function body, so its assignments do not supply a value on every path.
+    A column-zero line is not enough. `if false`, `then`, and `VAULT_REGION=x` are
+    three lines, and only the first is recognisable as control flow when one line is
+    read at a time, so an assignment inside the untaken branch sits at column zero and
+    would otherwise pass. The same holds for a `while false` body, a `case` arm, and a
+    function whose brace is on a line of its own.
+
+    So track block depth across lines and accept an assignment only while the depth is
+    zero. Openers are `if`, `while`, `until`, `for`, `case`, `select`, and `{`;
+    closers are `fi`, `done`, `esac`, and `}`. `then`, `do`, `in`, and `elif` do not
+    change depth. Braces are counted on code whose `${...}` expansions and quoted
+    strings are already removed, so a brace in data cannot unbalance the count.
     """
     names = set()
+    depth = 0
     for line in text.splitlines():
-        if not line or line[0].isspace() or line.lstrip().startswith("#"):
+        if not line or line.lstrip().startswith("#"):
             continue
         code = code_only(line)
-        if re.search(r"\b(if|then|else|elif|fi|for|while|until|do|done|case|esac|function)\b", code):
-            continue
-        if "{" in code or "}" in code:
-            continue
-        for segment in line.split(";"):
-            match = re.match(r"\s*(?:export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)=", segment)
-            if match:
-                names.add(match.group(1))
+        if not line[0].isspace() and depth == 0:
+            if not re.search(r"\b(if|then|else|elif|fi|for|while|until|do|done|case|esac|function)\b", code):
+                for segment in line.split(";"):
+                    match = re.match(r"\s*(?:export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)=", segment)
+                    if match:
+                        names.add(match.group(1))
+        depth += len(BLOCK_OPEN.findall(code)) + code.count("{")
+        depth -= len(BLOCK_CLOSE.findall(code)) + code.count("}")
+        depth = max(depth, 0)
     return names
 
 
