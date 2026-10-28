@@ -221,6 +221,13 @@ def top_level_assignments(text):
     closers are `fi`, `done`, `esac`, and `}`. `then`, `do`, `in`, and `elif` do not
     change depth. Braces are counted on code whose `${...}` expansions and quoted
     strings are already removed, so a brace in data cannot unbalance the count.
+
+    Each semicolon-separated statement is judged in order, and an assignment counts only
+    if control certainly reaches it. `:` and `true` succeed, so `: ; export VAR=x`
+    assigns and counts. A command that runs first can exit, so `exit 1; VAR=x` never
+    assigns and does not count. A control-flow keyword means the branch is conditional,
+    so nothing after it counts. Judging per statement rather than per line also stops
+    `STATE=done` being rejected for its value.
     """
     names = set()
     depth = 0
@@ -229,11 +236,21 @@ def top_level_assignments(text):
             continue
         code = code_only(line)
         if not line[0].isspace() and depth == 0:
-            if not re.search(r"\b(if|then|else|elif|fi|for|while|until|do|done|case|esac|function)\b", code):
-                for segment in line.split(";"):
-                    match = re.match(r"\s*(?:export\s+|readonly\s+)?([A-Z_][A-Z0-9_]*)=", segment)
-                    if match:
-                        names.add(match.group(1))
+            reachable = True
+            for segment in line.split(";"):
+                stripped = segment.strip()
+                if not stripped:
+                    continue
+                assignment = re.match(
+                    r"^(?:export\s+|readonly\s+|declare\s+(?:-\w+\s+)*|local\s+(?:-\w+\s+)*)?"
+                    r"([A-Z_][A-Z0-9_]*)=", stripped)
+                if assignment:
+                    if reachable:
+                        names.add(assignment.group(1))
+                    continue
+                if stripped in (":", "true"):
+                    continue
+                reachable = False
         depth += len(BLOCK_OPEN.findall(code)) + code.count("{")
         depth -= len(BLOCK_CLOSE.findall(code)) + code.count("}")
         depth = max(depth, 0)

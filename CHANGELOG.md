@@ -41,22 +41,31 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
-- Four more defects found by the fresh review of the sixth round, each one a
-  narrower version of the class the round before had already narrowed. The
-  write-token check in `test_quadlet_persistence.sh` asked whether a line mentioned
-  the variable and carried a redirect, so `chmod 0600 "$OUT_FILE" >/dev/null`, an
-  `echo "wrote $OUT_FILE" >&2`, and `mv "$tmp" "${OUT_FILE}.new"` all counted while
-  the file was never written; it now takes the write target as a token and compares
-  it for equality, so only an exact `mv` or redirect to that variable counts. The
-  Ignition fallback accepted any `- path:` in the Butane source, including a
-  directory, a shipped script, and an env file for another unit; it is now scoped to
-  `files:` entries whose own content defines `OPENCODE_PASSWORD`. The `enabled` flag
-  in both unit suites was read by hand, and the indent taken from the unit's
-  `- name:` line collapses to the empty string when a blank line follows it, which
-  made every unit compare as disabled and let the artifact enable anything; both now
-  read the flag with a YAML parser through `os/butane/tests/unit_enabled.py`. The
-  artifact scratch directory is gitignored and its cleanup has one owner, the EXIT
-  trap.
+- The env-file guard in `test_quadlet_persistence.sh` now runs `oc-secrets` instead
+  of reading its text. Six rounds of pattern matching had each fixed one shape and
+  left the class: the checks accepted a `chmod` carrying an unrelated redirect, an
+  `echo "wrote $OUT_FILE" >&2`, and an `mv` to `${OUT_FILE}.new`, while rejecting
+  `mv -f`, `mv --`, `install -m`, `cp`, `tee`, `dd of=`, a backslash-wrapped `mv`,
+  and a variable declared inside a function. Enumerating write commands is the same
+  trap in a smaller costume, because the list of ways to create a file is
+  open-ended. The guard now points the writer's own `OUT_FILE` at a sandbox with
+  stubbed IMDS and Key Vault, and requires the password line to appear there. That
+  answers the question for any write mechanism and any formatting. The stated
+  limitation is runtime reachability: the stub proves the script writes, not that
+  the service wiring reaches it, which the unit suites cover. The Ignition fallback
+  also accepted any storage path, including the marker directory, a shipped script,
+  and another unit's env file; `os/butane/tests/env_file_paths.py` now lists only
+  `files:` entries whose own inline content defines `OPENCODE_PASSWORD`.
+- The `enabled` flag in all three unit suites is read by a YAML parser through
+  `os/butane/tests/unit_enabled.py`. Each suite had its own derivation and each one
+  broke on valid YAML that compiles to the same flag: a hardcoded indent, then an
+  indent taken from the unit's `- name:` line, which a blank line after `- name:`
+  reduces to the empty string. That last shape made every unit compare as disabled,
+  so the source could enable a unit the artifact disabled and the comparison still
+  returned success. `enabled: yes`, `enabled: on`, and a trailing comment now count,
+  and an absent key stays distinct from an explicit false. PyYAML is an explicit
+  requirement: all three suites fail loudly without it, and the PR pipeline installs
+  `python3-yaml` beside shellcheck.
 - Six guard defects from the sixth review round, all reproduced by mutation before
   and after the fix. `test_quadlet_persistence.sh` matched a path by substring and
   did not require a write, so it accepted a `chmod` line, a bare `echo` mention, a
@@ -71,10 +80,9 @@ All notable changes to this project. One entry per landed change, newest first.
   read, so it never counted at all. `test_autorebase.sh` and
   `test_units_have_scripts.sh` derived `enabled` from a hardcoded indent and a
   line-end anchor, so `enabled: yes` and `enabled: true  # comment` failed while a
-  decoy at the wrong depth could pass. Both now read the flag with a YAML parser
-  through `os/butane/tests/unit_enabled.py`, which also accepts `on`, tolerates a
-  blank line after `- name:`, and keeps an absent key distinct from an explicit
-  false. `test_units_load_their_env.sh` counted a `NAME=x` line inside a
+  decoy at the wrong depth could pass; that round derived the indent from the unit's
+  own `- name:` line, and the YAML-parser replacement came in the next one.
+  `test_units_load_their_env.sh` counted a `NAME=x` line inside a
   heredoc body as a default; heredoc bodies are stripped before assignments are
   read, column-zero assignments are parsed per semicolon-separated statement, and
   structural judgement runs on code with expansions and quoted strings removed, so

@@ -62,10 +62,11 @@ unsigned="$(block_of ucore-unsigned-autorebase.service)" \
 signed="$(block_of ucore-signed-autorebase.service)" \
   || fail "ucore-signed-autorebase.service is not in the Ignition config"
 
-for pair in "unsigned:ucore-unsigned-autorebase.service" "signed:ucore-signed-autorebase.service"; do
-  label="${pair%%:*}"
-  unit="${pair#*:}"
-  body="$(block_of "$unit")" || fail "${unit} is not in the Ignition config"
+# Each stage is checked with the block already taken above, so the pair carries the
+# unit name and its body rather than looking the block up twice.
+check_stage() {
+  local label="$1" unit="$2" body="$3"
+  local service unit_sec
   service="$(section_of "$body" Service)"
   unit_sec="$(section_of "$body" Unit)"
   [ -n "$service" ] || fail "${label} autorebase unit has no [Service] section"
@@ -91,7 +92,10 @@ for pair in "unsigned:ucore-unsigned-autorebase.service" "signed:ucore-signed-au
   [ -n "$install_sec" ] || fail "${label} autorebase unit has no [Install] section, so it is never enabled"
   directive_values "$install_sec" 'WantedBy' | grep -Fxq 'multi-user.target' \
     || fail "${label} autorebase unit is not wanted by multi-user.target in [Install]"
-done
+}
+
+check_stage unsigned ucore-unsigned-autorebase.service "$unsigned"
+check_stage signed ucore-signed-autorebase.service "$signed"
 
 # Stage 1 must be the unverified reference, and stage 2 the signed one. Swapping
 # them asks for a signed rebase before any policy exists, which fails on boot.

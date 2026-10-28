@@ -26,9 +26,15 @@ block_of() {
 
 # tailscaled is a shipped unit, not one we write. Enabling it needs a unit entry
 # with no contents block, or the contents would shadow the real unit.
+#
+# The flag is read by the shared YAML helper rather than by matching an indent, so
+# `enabled: yes`, `enabled: on`, and a trailing comment all count. This was the third
+# copy of that derivation; keeping one copy is why the other two no longer disagree.
+command -v python3 >/dev/null 2>&1 || fail "python3 is required and absent"
+python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 block="$(block_of tailscaled.service)" \
   || fail "tailscaled.service is not enabled in the Ignition config"
-printf '%s\n' "$block" | grep -Eq '^[[:space:]]+enabled: true[[:space:]]*$' \
+[ "$(python3 "$here/unit_enabled.py" "$bu" tailscaled.service)" = "true" ] \
   || fail "tailscaled.service is present but not enabled"
 if printf '%s\n' "$block" | grep -q 'contents:'; then
   fail "tailscaled.service has a contents block, which would shadow the shipped unit"

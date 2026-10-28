@@ -53,32 +53,40 @@ mapfile -t env_paths < <(printf '%s\n' "$container_section" | sed -n 's/^Environ
   || fail "quadlet loads no EnvironmentFile in [Container], so the container has no password"
 
 # Each EnvironmentFile must be the exact file a shipped component declares it
-# writes. Four text heuristics were tried here and every one lied in both
-# directions: they accepted a comment, an `echo "see <path>"` mention, a writer for
-# `/etc/opencode/env-backup`, a write to `${OUT_FILE}_BACKUP`, and a `chmod` line
-# carrying an unrelated `> /dev/null`; they rejected a literal redirect, a variable
-# declared inside a function, and `export`. Running the writer to see whether the
-# file appears does not work either, because a producer that never assigns the path
-# to a variable cannot be aimed at a sandbox.
+# writes, and that component must really write it.
 #
-# So this checks a property that is decidable rather than guessing at shell
-# semantics: the path the quadlet loads must be exactly the path `oc-secrets`
-# declares as its output, or an exact Ignition storage path. Anything else is a
-# reference to a file no component claims.
+# Text heuristics were tried here for six rounds and every one lied in both
+# directions. They accepted a comment, an `echo "see <path>"` mention, a writer for
+# `/etc/opencode/env-backup`, a write to `${OUT_FILE}_BACKUP`, a `chmod` line carrying
+# an unrelated `> /dev/null`, and an `mv` to `${OUT_FILE}.new`. They rejected a literal
+# redirect, a variable declared inside a function, `export`, `mv -f`, `install -m`,
+# `cp`, `tee`, `dd of=`, and a backslash-wrapped `mv`. Enumerating write commands is
+# the same trap in a smaller costume: the list of ways to create a file is open-ended.
 #
-# The limitation is deliberate and stated: this proves the reader and the declared
-# writer agree, and that the writer still writes its declared variable by some
-# mv-or-redirect path. It does not prove that path is reached at runtime. A refactor
-# of oc-secrets is expected to update these assertions; that is a maintenance cost,
-# while a guard that passes on a missing password is a billing defect.
+# So the writer is run instead. `oc-secrets` is the one component that declares this
+# path, so pointing its own variable at a sandbox and checking that the file appears
+# with the right content answers the question directly, for any write mechanism and
+# any formatting. The earlier attempt at a probe failed because it searched for an
+# unknown producer by variable name; here the producer and its variable are both known
+# from the declaration below, which is what makes running it decidable.
+#
+# What remains unproven is reachability at runtime: the probe supplies its own stub
+# for IMDS and Key Vault, so it does not prove the service wiring. That is covered by
+# the unit-level suites.
 here="$(cd "$(dirname "$0")/.." && pwd)"
 writer="$here/bin/oc-secrets"
 [ -f "$writer" ] || fail "no $writer, so nothing declares where the password goes"
 
 # The declared output path, with the shell spelling normalised: quotes and the
 # `${OUT_FILE:-...}` fallback are the same value as a bare literal.
-declared="$(sed -n -E 's/^[[:space:]]*(export[[:space:]]+|readonly[[:space:]]+)?OUT_FILE=[[:space:]]*//p' "$writer" | head -1)"
-[ -n "$declared" ] || fail "oc-secrets no longer declares OUT_FILE, so its output path is unknown"
+assignments="$(sed -n -E 's/^[[:space:]]*(export[[:space:]]+|readonly[[:space:]]+)?OUT_FILE=[[:space:]]*//p' "$writer")"
+[ -n "$assignments" ] || fail "oc-secrets no longer declares OUT_FILE, so its output path is unknown"
+# More than one assignment means the first one read here is not necessarily the one
+# written, so the declaration would be ambiguous. The behavioural probe below would
+# catch it, but a named failure is clearer than a missing file.
+[ "$(printf '%s\n' "$assignments" | wc -l)" -eq 1 ] \
+  || fail "oc-secrets assigns OUT_FILE more than once, so its output path is ambiguous"
+declared="$assignments"
 declared="${declared%%[[:space:]]#*}"
 declared="${declared//\"/}"
 declared="${declared//\'/}"
@@ -92,34 +100,11 @@ case "$declared" in
 esac
 
 # Paths Ignition itself could satisfy: a storage file whose own content defines the
-# variable the container needs. A directory entry, a shipped script, and an env file
-# for a different unit all appear as `- path:` lines, so matching on the path alone
-# would accept a reference no component fulfils. The check is scoped to `files:` and
-# to the content lines indented under that entry.
-ign_paths=()
-while read -r storage_path; do
-  [ -n "$storage_path" ] && ign_paths+=("$storage_path")
-done < <(awk '
-  /^  files:[[:space:]]*$/ { in_files = 1; next }
-  /^  [A-Za-z_]+:/ { in_files = 0 }
-  !in_files { next }
-  /^[[:space:]]*- path:/ {
-    if (path != "" && defines) print path
-    path = $0
-    sub(/^[[:space:]]*- path:[[:space:]]*/, "", path)
-    gsub(/["\047]/, "", path)
-    match($0, /^[[:space:]]*/)
-    indent = RLENGTH
-    defines = 0
-    next
-  }
-  path != "" {
-    match($0, /^[[:space:]]*/)
-    if (RLENGTH <= indent) { next }
-    if ($0 ~ /^[[:space:]]*OPENCODE_PASSWORD=/) { defines = 1 }
-  }
-  END { if (path != "" && defines) print path }
-' "$here/../os/butane/ucore.bu")
+# variable the container needs. A directory, a shipped script, and an env file for a
+# different unit all appear as storage paths, so a path-only match would accept a
+# reference no component fulfils. See env_file_paths.py.
+mapfile -t ign_paths < <(python3 "$here/tests/env_file_paths.py" \
+  "$here/../os/butane/ucore.bu" OPENCODE_PASSWORD)
 
 # Each loaded path must be one a shipped component claims: either the writer's
 # declared output, or an exact Ignition storage path. A path that merely starts with
@@ -135,40 +120,40 @@ for path in "${env_paths[@]}"; do
     || fail "the quadlet loads $path, but no component declares it: oc-secrets writes $declared"
 done
 
-# oc-secrets must still write exactly its declared path. Its shipped mechanism is a
-# temporary file moved into place, so accept either that or a redirect to it.
-#
-# The target has to be the variable itself, not a longer name that starts with it: an
-# `mv` to `${OUT_FILE}.new` writes a different file. So the write target is taken as
-# a token, normalised for quoting and braces, and compared for equality. A line that
-# merely mentions the variable, such as a `chmod` or an `echo` to stderr, has no
-# write target and does not count.
-# shellcheck disable=SC2016  # the literal $OUT_FILE is what is being searched for
-awk '
-  function target(tok) {
-    gsub(/["\047]/, "", tok)
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", tok)
-    if (tok == "${OUT_FILE}") return "$OUT_FILE"
-    return tok
-  }
-  $0 ~ /^[[:space:]]*#/ { next }
-  {
-    n = split($0, w, /[[:space:]]+/)
-    for (i = 1; i <= n; i++) {
-      # `> file`, `>> file`, and `mv src dst` all name the target last.
-      if (w[i] ~ /^>>?$/ && i < n && target(w[i + 1]) == "$OUT_FILE") found = 1
-      if (w[i] == "mv" && i + 2 <= n && target(w[i + 2]) == "$OUT_FILE") found = 1
-      if (w[i] ~ /^>>?[^[:space:]]/ && target(substr(w[i], w[i] ~ /^>>/ ? 3 : 2)) == "$OUT_FILE") found = 1
-    }
-  }
-  END { exit(found ? 0 : 1) }
-' "$writer" \
-  || fail "oc-secrets declares OUT_FILE but no longer writes that exact file"
+# oc-secrets must really write that file. Run it with its own variable pointed at a
+# sandbox path, and require the password line to appear there. IMDS and Key Vault are
+# the only network seams, so a stub curl covers both.
+probe="$(mktemp -d "$here/tests/.probe.XXXXXX")"
+trap 'rm -rf "$probe"' EXIT
+mkdir -p "$probe/bin"
+cat > "$probe/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+url=""
+for a in "$@"; do
+  case "$a" in http://*|https://*) url="$a" ;; esac
+done
+case "$url" in
+  *169.254.169.254*) printf '%s' '{"access_token":"probe"}' ;;
+  *vault.azure.net/secrets/*) printf '%s' '{"value":"probe-password"}' ;;
+  *) printf '%s' '{}' ;;
+esac
+STUB
+chmod +x "$probe/bin/curl"
+
+# The writer installs its parent directory and writes atomically, so the sandbox is
+# simply its target path. VAULT_NAME and SECRET_NAME are supplied in the form the
+# script demands. A failed run is not evidence of a missing write, so it is reported
+# with its output rather than silently treated as a pass or a fail.
+if ! env -i PATH="$probe/bin:/usr/bin:/bin" HOME="$probe" TMPDIR="$probe" \
+     VAULT_NAME=probe OUT_FILE="$probe/written.env" \
+     bash "$writer" >"$probe/out" 2>&1; then
+  fail "oc-secrets failed to run, so its write cannot be verified: $(tail -1 "$probe/out")"
+fi
+grep -qx 'OPENCODE_PASSWORD=probe-password' "$probe/written.env" 2>/dev/null \
+  || fail "oc-secrets does not write OPENCODE_PASSWORD to the OUT_FILE it declares"
 
 # The container's password comes from that file, so the writer and the reader must
 # agree on the name.
-grep -q 'OPENCODE_PASSWORD=' "$writer" \
-  || fail "oc-secrets does not write OPENCODE_PASSWORD"
 grep -q 'OPENCODE_PASSWORD' "$here/bin/oc-idle-check" \
   || fail "oc-idle-check does not read the password oc-secrets writes"
 
