@@ -176,7 +176,9 @@ The password path is not a default inside the script. `/etc/devbox/oc-secrets.en
 defines `OUT_FILE`, written by Ignition, and `oc-secrets` fails rather than inventing
 one. A boot that reports `OUT_FILE is required` means that env file is missing, which
 points at Ignition rather than at Key Vault. `oc-idle-check` reads the same definition,
-so the idle gate follows the password path instead of carrying its own copy.
+so the idle gate follows the password path instead of carrying its own copy. It does
+not fail when the definition is absent: the env file never arriving means nothing is
+being served, so the gate falls through and the box still deallocates.
 
 `is-active` alone does not prove enablement is right: `oc-tailnet` carries an
 unconditional `Wants=tailscaled`, so the daemon starts whether or not it is

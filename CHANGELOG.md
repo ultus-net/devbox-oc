@@ -71,7 +71,11 @@ All notable changes to this project. One entry per landed change, newest first.
 - `oc-idle-check` no longer carries its own copy of the password path. It derives it
   from `OUT_FILE`, which `/etc/devbox/oc-secrets.env` defines, and its unit loads that
   file. Moving the path in the one definition used to leave the idle gate reading the
-  old file with every guard still green.
+  old file with every guard still green. An absent `OUT_FILE` is not fatal there: it
+  means the env file never arrived, so the gate treats it as "no env file" and still
+  deallocates rather than failing every five minutes while the box bills. `T12` covers
+  that case, because `T10` deleted the file but still passed a path and so could not
+  see a gate that dies when the variable is absent.
 - `oc-secrets` no longer defaults `OUT_FILE`. The path is defined once, in
   `/etc/devbox/oc-secrets.env`, and the script fails closed when it is absent rather
   than inventing one. That removes the second definition that let the two drift apart,

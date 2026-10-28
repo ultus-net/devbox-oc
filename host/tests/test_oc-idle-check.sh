@@ -57,14 +57,31 @@ stale() { printf '1700000000\n' > "$tmp/state/last-busy"; }
 
 run_gate() {
   local rc=0
+  # OUT_FILE, not ENV_FILE: the gate derives the password file from OUT_FILE, and
+  # passing ENV_FILE would skip that derivation and leave it untested.
   PATH="$tmp/bin:$PATH" \
-  ENV_FILE="$tmp/env" VM_ID_OVERRIDE="${VM_ID_OVERRIDE-/subscriptions/x/resourceGroups/r/providers/Microsoft.Compute/virtualMachines/v}" \
+  OUT_FILE="$tmp/env" VM_ID_OVERRIDE="${VM_ID_OVERRIDE-/subscriptions/x/resourceGroups/r/providers/Microsoft.Compute/virtualMachines/v}" \
   STATE="$tmp/state/last-busy" \
   PIN_FILE="${PIN_FILE:-$tmp/state/pin}" ARM_CALLS="$tmp/arm-calls" \
   UPTIME_OVERRIDE="${UPTIME:-2000}" IDLE_MIN="${IDLE_MIN:-45}" \
   NOW="${NOW:-2000000000}" \
   bash "$script" >/dev/null 2>&1 || rc=$?
   [ "$rc" -eq 0 ] || fail "gate exited ${rc}; it must always exit 0"
+}
+
+# Neither OUT_FILE nor ENV_FILE is set, which is what happens when Ignition never
+# wrote the env file. The gate must still deallocate: a crash here would bill all day
+# on exactly the failure this gate exists to catch.
+run_gate_no_path() {
+  local rc=0
+  PATH="$tmp/bin:$PATH" \
+  VM_ID_OVERRIDE="${VM_ID_OVERRIDE-/subscriptions/x/resourceGroups/r/providers/Microsoft.Compute/virtualMachines/v}" \
+  STATE="$tmp/state/last-busy" \
+  PIN_FILE="${PIN_FILE:-$tmp/state/pin}" ARM_CALLS="$tmp/arm-calls" \
+  UPTIME_OVERRIDE="${UPTIME:-2000}" IDLE_MIN="${IDLE_MIN:-45}" \
+  NOW="${NOW:-2000000000}" \
+  bash "$script" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 0 ] || fail "gate exited ${rc} with no OUT_FILE; it must always exit 0"
 }
 
 # T0: the script must be executable, or every other test passes vacuously.
@@ -140,5 +157,15 @@ rm -f "$tmp/env"
 : > "$tmp/state/pin"
 RESP='{"data":[]}' CONTAINER_ACTIVE=3 run_gate
 [ ! -s "$tmp/arm-calls" ] || fail "T11 deallocated while pinned with no env file"
+
+# T12: no path at all, not merely no file. T10 deletes the file but still passes a
+# path, so it cannot see a gate that dies when OUT_FILE is absent. That is the first
+# boot where Ignition never ran: the unit would fail every five minutes and the box
+# would bill all day, which is the defect this timer exists to prevent.
+setup; stale
+rm -f "$tmp/env"
+RESP='{"data":[]}' CONTAINER_ACTIVE=3 run_gate_no_path
+[ "$(wc -l < "$tmp/arm-calls")" -eq 1 ] \
+  || fail "T12 did not deallocate when OUT_FILE was absent entirely"
 
 echo "all idle-gate tests passed"
