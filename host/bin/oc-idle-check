@@ -17,7 +17,11 @@ set -euo pipefail
 trap 'echo "oc-idle: probe failed, staying up" >&2; exit 0' ERR
 
 API="${API:-http://127.0.0.1:4096}"
-ENV_FILE="${ENV_FILE:-/etc/opencode/env}"
+# No path default here. /etc/devbox/oc-secrets.env defines OUT_FILE, and
+# OUT_FILE names the password file, so there is one definition of where the
+# password lives and oc-secrets reads the same one. A second default in this
+# script is how the idle gate kept reading the old path after the writer moved.
+ENV_FILE="${ENV_FILE:-${OUT_FILE:?OUT_FILE is required, set by /etc/devbox/oc-secrets.env}}"
 STATE="${STATE:-/var/lib/oc-idle/last-busy}"
 PIN_FILE="${PIN_FILE:-/var/lib/oc-idle/pin}"
 IDLE_MIN="${IDLE_MIN:-45}"

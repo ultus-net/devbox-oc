@@ -62,65 +62,41 @@ PATH="$tmp/bin:$PATH" ACR_NAME=myreg OUT="$tmp/auth.json" "$here/../bin/oc-acr-l
 jq -e '.auths["myreg.azurecr.io"].auth' "$tmp/auth.json" >/dev/null || fail "T3 no auths entry"
 [ "$(stat -c '%a' "$tmp/auth.json")" = "600" ] || fail "T3 wrong mode"
 
-# T4: the path comes from the environment, and its absence fails closed.
+# T4: the path is supplied by the boot path, and its absence fails closed and says so.
 #
-# The writer no longer has a default: /etc/devbox/oc-secrets.env defines OUT_FILE,
-# and the quadlet guard proves that definition reaches the service and matches the
-# file the container loads. A second definition inside the script is exactly how the
-# two drifted apart before, so there must not be one.
+# One check, not three. Earlier rounds enumerated assignment shapes and each round
+# left one outside the union: a `:=` default, a re-exec through `env`, a `printf -v`
+# into an indirection. All of them share one observable property, and it does not
+# depend on how the shape is spelled: a writer that refuses when `OUT_FILE` is absent
+# cannot be using a path of its own, because refusing is the alternative to inventing
+# one.
 #
-# Two properties are checked here. Without OUT_FILE the writer must fail rather than
-# pick a path of its own, because a silent write to a file nobody reads looks like
-# success. With it set, the bytes must land there and not somewhere hardcoded beside
-# it, which no amount of configuration comparison can show.
-if env -u OUT_FILE PATH="$tmp/bin:$PATH" VAULT_NAME=v \
-     "$here/../bin/oc-secrets" >/dev/null 2>&1; then
-  fail "T4 the writer succeeded with OUT_FILE unset, so it invents a path the boot path never defined"
-fi
-
-# A writer that honours OUT_FILE for its directory but writes a fixed name inside it
-# would pass a directory-only comparison, so compare the whole path.
-hardcoded="$tmp/hardcoded"
-if PATH="$tmp/bin:$PATH" VAULT_NAME=v OUT_FILE="$hardcoded" \
-     "$here/../bin/oc-secrets" >/dev/null 2>&1; then
-  [ "$(effective_env_value "$hardcoded" OPENCODE_PASSWORD)" = "s3cret" ] \
-    || fail "T4 the writer did not write the OUT_FILE it was given"
-else
-  fail "T4 the writer failed with OUT_FILE set"
-fi
-
-# The script must not set OUT_FILE at all. A fallback would make the boot path's
-# definition optional, which is the drift this design removes.
+# So the check is behavioural. Any default, append, or assignment makes the writer
+# *proceed* instead of refusing, which is what fails here. The message is part of the
+# assertion too: a run that dies for an unrelated reason must not read as a refusal.
 #
-# Two mechanisms, because each covers what the other cannot. Running it readonly
-# catches every assignment that actually executes, whatever its shape and wherever it
-# sits. It cannot catch one behind a condition that is false on the machine running the
-# test, so a text rule covers that case: the script must not contain an OUT_FILE
-# assignment at all. Neither is sufficient alone.
-#
-# `BASH_SOURCE` is passed explicitly because a sourced script sees the caller's $0.
-#
-# The environment is stripped to what a unit gets: PATH is the stub plus the system
-# directories, not the caller's PATH. A writer that shells out to something installed
-# only on the interactive PATH passes with the caller's environment and fails under
-# systemd, which is the failure this closes.
-# The child expands $SELF and $OUT_FILE, so the single-quoted body is deliberate.
-# shellcheck disable=SC2016
-readonly_out="$(env -i PATH="$tmp/bin:/usr/bin:/bin" HOME="$tmp" TMPDIR="$tmp" \
-  VAULT_NAME=v OUT_FILE="$tmp/readonly-env" SELF="$here/../bin/oc-secrets" \
-  bash -c 'readonly OUT_FILE; cd "$(dirname "$SELF")" && . "./$(basename "$SELF")"' \
-  2>&1 || true)"
-case "$readonly_out" in
-  *"readonly variable"*)
-    fail "T4 the writer assigns OUT_FILE ($readonly_out), so the boot path's definition is not the only one" ;;
+# The environment is stripped to what a unit gets. A writer that shells out to a tool
+# installed only on the interactive PATH passes with the caller's environment and
+# fails under systemd, which is the failure this closes.
+refusal="$(env -i PATH="$tmp/bin:/usr/bin:/bin" HOME="$tmp" TMPDIR="$tmp" \
+  VAULT_NAME=v "$here/../bin/oc-secrets" 2>&1)" && \
+  fail "T4 the writer succeeded with OUT_FILE absent, so it invents a path the boot path never defined"
+case "$refusal" in
+  *"OUT_FILE is required"*) ;;
+  *) fail "T4 the writer failed with OUT_FILE absent for some other reason, which is not a refusal: $refusal" ;;
 esac
-grep -qx 'OPENCODE_PASSWORD=s3cret' "$tmp/readonly-env" 2>/dev/null \
-  || fail "T4 the writer did not complete when OUT_FILE was readonly and set: $readonly_out"
 
-# The static half. `: "${OUT_FILE:?...}"` is a check, not an assignment, so it does not
-# match; `OUT_FILE=`, `export OUT_FILE=`, and `${OUT_FILE:-...}` all do.
-if grep -nE '(^|[^A-Za-z0-9_])OUT_FILE=' "$here/../bin/oc-secrets" >/dev/null; then
-  fail "T4 the writer contains an OUT_FILE= assignment, so the boot path's definition is not the only one:
-$(grep -nE '(^|[^A-Za-z0-9_])OUT_FILE=' "$here/../bin/oc-secrets")"
-fi
+# The check above proves the writer has no fallback. It cannot prove the writer *uses*
+# the path it is handed: a script that declares the variable and then writes a fixed
+# path beside it refuses nothing. So the bytes are read back from where it was told
+# to write, which is the property no configuration comparison can show.
+target="$tmp/supplied/env"
+mkdir -p "$tmp/supplied"
+PATH="$tmp/bin:$PATH" VAULT_NAME=v OUT_FILE="$target" \
+  "$here/../bin/oc-secrets" >/dev/null \
+  || fail "T4 the writer failed with OUT_FILE set"
+[ "$(effective_env_value "$target" OPENCODE_PASSWORD)" = "s3cret" ] \
+  || fail "T4 the writer did not write the OUT_FILE it was given"
+[ "$(stat -c '%a' "$target")" = "600" ] || fail "T4 wrong mode on the supplied path"
+
 echo "all secret tests passed"

@@ -35,24 +35,13 @@ default_line="$(grep -E '^[[:space:]]*SECRET_NAME="\$\{SECRET_NAME:-[^}]+\}"' "$
 declared="${default_line#*SECRET_NAME:-}"
 declared="${declared%%\}*}"
 
-# The created name, from the resource's own block. A `name` inside a nested block is
-# not the resource's name, and an attribute that is not a string literal is a case
-# this test does not model, so both must fail loudly instead of reading as a match.
-start="$(grep -n 'resource "azurerm_key_vault_secret" "opencode_password"' "$main_tf" \
-         | head -1 | cut -d: -f1 || true)"
-[ -n "$start" ] || fail "no azurerm_key_vault_secret.opencode_password resource"
-
-block="$(awk -v start="$start" 'NR > start { if ($0 ~ /^}/) exit; print }' "$main_tf")"
-names="$(printf '%s\n' "$block" \
-  | awk '/^[[:space:]]*name[[:space:]]*=/ { print }')"
-[ -n "$names" ] || fail "the secret resource has no name attribute"
-count="$(printf '%s\n' "$names" | wc -l)"
-[ "$count" -eq 1 ] || fail "the secret resource sets name $count times: $names"
-case "$names" in
-  *'"'*) ;;
-  *) fail "the secret resource name is not a string literal: $names" ;;
-esac
-created="$(printf '%s\n' "$names" | sed -E 's/^[^"]*"([^"]+)".*$/\1/')"
+# The created name, from the resource's own block. hcl_name.py strips comments and
+# heredocs first, tracks brace depth so a nested `name` does not count, and requires
+# the value to be exactly one string literal. An awk/regex reader accepted a heredoc
+# that mentioned the attribute and a concatenation that contained a quoted string.
+created="$(python3 "$here/hcl_name.py" "$main_tf" \
+  azurerm_key_vault_secret opencode_password 2>&1)" \
+  || fail "cannot read the name of azurerm_key_vault_secret.opencode_password: $created"
 
 [ "$declared" = "$created" ] \
   || fail "the host asks for '$declared' but Terraform creates '$created'"

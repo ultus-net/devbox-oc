@@ -69,16 +69,13 @@ mapfile -t env_paths < <(printf '%s\n' "$container_section" | sed -n 's/^Environ
 # wrong twice over: the eval executed code from the file being audited, and a
 # non-line-initial assignment was invisible to the parser.
 #
-# So the path is not read out of a shell script at all. It is a single definition in
-# the unit env file that Ignition writes, and this guard checks the whole chain from
-# parsed configuration:
-#
-#   oc-secrets.service loads that env file, the env file defines OUT_FILE, and the
-#   value equals the EnvironmentFile the container loads.
+# Round 10 moved the definition into the Ignition env file but allowed the quadlet to
+# load *any* Ignition file that defined OPENCODE_PASSWORD. That accepted a static
+# password in a storage file in place of the Key Vault path, so the allowance is gone:
+# the container loads the one path oc-secrets writes, and nothing else.
 #
 # Nothing here executes a shipped script or evaluates its text. That the writer
-# writes the right content is proved by running it, in host/tests/test_oc-secrets.sh,
-# which owns that script.
+# writes the right content is proved by running it, in host/tests/test_oc-secrets.sh.
 here="$(cd "$(dirname "$0")/.." && pwd)"
 butane="$here/../os/butane/ucore.bu"
 
@@ -90,7 +87,8 @@ python3 -c 'import yaml' >/dev/null 2>&1 || fail "python3 has no PyYAML module"
 
 # Every definition of OUT_FILE in the shipped configuration, parsed from the Butane
 # source. Exactly one may exist, and it must be an env file: an `Environment=` line
-# would win at runtime and make the env file a decoy.
+# would win at runtime and make the env file a decoy. A unit's own `dropins:` counts,
+# because Butane compiles those into the artifact and systemd applies them.
 boot_env="$(python3 "$here/tests/boot_env.py" "$butane" OUT_FILE)"
 definitions="$(printf '%s\n' "$boot_env" | awk -F'\t' '$1 != "envref"')"
 [ -n "$definitions" ] || fail "nothing in the shipped configuration defines OUT_FILE"
@@ -110,34 +108,37 @@ case "$declared" in
   *) fail "OUT_FILE is defined as a path that is not absolute: $declared" ;;
 esac
 
-# The unit that runs the writer must load the file that defines the path, or the
-# definition never reaches the process.
-printf '%s\n' "$boot_env" | awk -F'\t' '$1 == "envref"' | grep -qxF "envref	oc-secrets.service	$env_owner" \
-  || fail "oc-secrets.service does not load $env_owner, so the OUT_FILE it defines never reaches the writer"
-
-# Paths Ignition itself could satisfy: a storage file whose own content defines the
-# variable the container needs. A directory, a shipped script, and an env file for a
-# different unit all appear as storage paths, so a path-only match would accept a
-# reference no component fulfils.
-mapfile -t ign_paths < <(python3 "$here/tests/boot_env.py" "$butane" OPENCODE_PASSWORD \
-  | awk -F'\t' '$1 == "envfile" { print $2 }')
-
-# Each loaded path must be the path defined for the writer or an Ignition env file
-# that really defines the password. A path that merely starts with a claimed one is a
-# different file and does not count.
-for path in "${env_paths[@]}"; do
-  [ -n "$path" ] || continue
-  claimed=0
-  [ "$path" = "$declared" ] && claimed=1
-  for storage_path in "${ign_paths[@]}"; do
-    [ "$path" = "$storage_path" ] && claimed=1
-  done
-  [ "$claimed" -eq 1 ] \
-    || fail "the quadlet loads $path, but no shipped component defines it: OUT_FILE is $declared ($env_owner)"
+# Both readers of that path must load the file that defines it, or the definition
+# never reaches them: the writer writes there, and the idle gate reads the password
+# from it. oc-idle-check used to carry its own hardcoded default, so moving the path
+# left it reading the old file with every guard green.
+for unit in oc-secrets.service oc-idle.service; do
+  printf '%s\n' "$boot_env" | awk -F'\t' '$1 == "envref"' \
+    | grep -qxF "envref	$unit	$env_owner" \
+    || fail "$unit does not load $env_owner, so the OUT_FILE it defines never reaches it"
 done
 
-# The container's password comes from that file, so the writer and the reader must
-# agree on the name.
+# Each loaded path must be exactly the path oc-secrets writes. A path that merely
+# starts with it is a different file, and no other file may be substituted even if it
+# happens to define the same variable: that is a static password bypassing Key Vault.
+for path in "${env_paths[@]}"; do
+  [ -n "$path" ] || continue
+  [ "$path" = "$declared" ] \
+    || fail "the quadlet loads $path, but oc-secrets writes $declared ($env_owner)"
+done
+
+# `Environment=` in [Container] becomes podman's --env, which beats --env-file. A
+# static password there would shadow the Key Vault one while the container reports
+# healthy, so it is forbidden outright rather than compared.
+if printf '%s\n' "$container_section" | grep -Eq '^Environment=.*OPENCODE_PASSWORD'; then
+  fail "the quadlet sets OPENCODE_PASSWORD in [Container], which overrides the file oc-secrets writes"
+fi
+
+# The container reads the password from that file, so oc-idle-check must not carry a
+# second copy of the path. It reads OUT_FILE from the same env file instead.
+if grep -qE 'ENV_FILE=.*/etc/opencode' "$here/bin/oc-idle-check"; then
+  fail "oc-idle-check hardcodes the password path, so it can drift from the one oc-secrets writes"
+fi
 grep -q 'OPENCODE_PASSWORD' "$here/bin/oc-idle-check" \
   || fail "oc-idle-check does not read the password oc-secrets writes"
 

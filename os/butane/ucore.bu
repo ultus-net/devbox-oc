@@ -147,6 +147,10 @@ systemd:
         After=opencode.service
         [Service]
         Type=oneshot
+        # oc-secrets.env carries OUT_FILE, which is where the password file is. The
+        # idle env file only carries the tuning knobs, so a path change touches one
+        # file and both the writer and this probe follow it.
+        EnvironmentFile=/etc/devbox/oc-secrets.env
         EnvironmentFile=/etc/devbox/oc-idle.env
         ExecStart=/usr/local/sbin/oc-idle-check
     - name: oc-idle.timer

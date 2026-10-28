@@ -55,29 +55,46 @@ All notable changes to this project. One entry per landed change, newest first.
   code from the file being audited, and a non-line-initial assignment was invisible to
   the parser, so a conditional override and a second assignment both passed.
   The path is now a single definition in the unit env file that Ignition writes, and
-  the guard checks the whole chain from parsed configuration: `oc-secrets.service`
-  loads that env file, the env file defines `OUT_FILE` exactly once, and the value
-  equals the `EnvironmentFile=` the container loads. Nothing executes a shipped script
-  or evaluates its text. `host/tests/boot_env.py` does the parsing, and it also
-  catches a systemd drop-in that sets `OUT_FILE`, which a quadlet-only grep missed.
+  the guard checks the whole chain from parsed configuration: `oc-secrets.service` and
+  `oc-idle.service` load that env file, the env file defines `OUT_FILE` exactly once,
+  and the value equals the `EnvironmentFile=` the container loads. Nothing executes a
+  shipped script or evaluates its text. `host/tests/boot_env.py` does the parsing, and
+  it reads a unit's own `dropins:` blocks too, so a drop-in that sets `OUT_FILE` is
+  caught rather than invisible. Its value rules were checked against `systemd-run` on
+  ten env-file shapes and agree on all ten, including that a trailing `# staging` is
+  part of the value rather than a comment.
+- The quadlet may load only the one path `oc-secrets` writes. It used to accept any
+  Ignition storage file that defined `OPENCODE_PASSWORD`, which allowed a static
+  password in a config file to replace the Key Vault fetch, and a
+  `[Container] Environment=OPENCODE_PASSWORD=...` was not checked at all even though
+  podman's `--env` beats `--env-file`. Both are now rejected.
+- `oc-idle-check` no longer carries its own copy of the password path. It derives it
+  from `OUT_FILE`, which `/etc/devbox/oc-secrets.env` defines, and its unit loads that
+  file. Moving the path in the one definition used to leave the idle gate reading the
+  old file with every guard still green.
 - `oc-secrets` no longer defaults `OUT_FILE`. The path is defined once, in
   `/etc/devbox/oc-secrets.env`, and the script fails closed when it is absent rather
   than inventing one. That removes the second definition that let the two drift apart,
   and the container's `Requires=oc-secrets.service` turns a missing path into a
   visible failure instead of a silent write nobody reads.
-  `host/tests/test_oc-secrets.sh` enforces it two ways, because each covers what the
-  other cannot: the writer is run with `OUT_FILE` readonly, which rejects any
-  assignment that executes whatever its shape, and the script is checked for an
-  `OUT_FILE=` assignment at all, which catches one behind a condition that is false on
-  the test machine. It also runs the writer under `env -i` with a systemd-like `PATH`,
-  so a writer depending on an interactive tool fails here rather than at boot.
+  `host/tests/test_oc-secrets.sh` checks this behaviourally: with `OUT_FILE` absent the
+  writer must refuse *and* say why. Any default, append, or assignment makes it
+  proceed instead, so one check covers every shape rather than enumerating spellings.
+  Two earlier attempts enumerated them and each missed one: a `:=` default passed both
+  a readonly run and an `OUT_FILE=` token scan, and a token scan also rejected a
+  comment that merely mentioned the path. The suite also runs the writer under
+  `env -i` with a systemd-like `PATH`, so a writer depending on an interactive tool
+  fails here rather than at boot.
 - The OpenCode password secret name is now checked against the secret Terraform
   creates, which the Tailscale auth key already had. A drift between `oc-secrets` and
   `azurerm_key_vault_secret.opencode_password` produces a Key Vault 404 at boot that
   reads like a permissions bug. `terraform/tests/password_secret_name_matches.sh`
-  reads the `:-` default without evaluating it, requires the resource's own `name` to
-  be a single string literal so a nested block or an expression fails loudly, and
-  checks every shipped `SECRET_NAME` definition through `host/tests/boot_env.py`.
+  reads the `:-` default without evaluating it and checks every shipped `SECRET_NAME`
+  definition through `host/tests/boot_env.py`. The resource's `name` is read by
+  `terraform/tests/hcl_name.py`, which strips comments and heredoc bodies, tracks brace
+  depth so a nested `name` does not count, and requires exactly one plain string
+  literal. An awk/regex reader accepted a heredoc that mentioned the attribute and a
+  concatenation that merely contained a quoted string; both are now reported by line.
 - `host/tests/test_oc-secrets.sh` compares the effective password rather than a
   matching line: the last assignment of the key, with one surrounding pair of quotes
   removed. Those are the rules that decide the value for the line the writer emits. A

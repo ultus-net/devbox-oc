@@ -117,6 +117,11 @@ if not env_files:
 
 # Names the host system supplies. The unit sets some inline, systemd passes
 # others, so their absence from an env file is not a defect.
+#
+# OUT_FILE is deliberately absent. It is not system-supplied: /etc/devbox/oc-secrets.env
+# defines it, so a unit whose script needs it must load that file. Listing it as
+# provided would let a unit lose the env file and still pass here, which is the drift
+# the quadlet guard catches from the other side.
 SYSTEM_PROVIDED = {
     "HOME",
     "PATH",
@@ -127,7 +132,6 @@ SYSTEM_PROVIDED = {
     "ENV_FILE",
     "STATE",
     "PIN_FILE",
-    "OUT_FILE",
     "OUT",
     "SECRET_NAME",
     "IMAGE",
