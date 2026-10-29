@@ -38,8 +38,17 @@ All notable changes to this project. One entry per landed change, newest first.
 - Operating runbook covering first deployment from clone to a connected client,
   plus data disk restore, container and OS rollback, tailnet rejoin, snapshot
   pruning, and the idle gate.
+- `AGENTS.md` recording the invariants a change must not break, the gate command,
+  and the test-writing rules this repo learned the hard way.
+- MIT licence.
 
 ### Fixed
+
+- The verification pipeline now installs Butane, pinned to 0.29.0 by sha256, and
+  fails if the artifact check reports itself skipped. Without a compiler the
+  reproducibility suite printed `SKIP` and the gate returned success, so a
+  hand-edited `ucore.ign` passed CI while the gate claimed to have checked it.
+  The pinned binary reproduces the committed artifact byte-for-byte.
 
 - The env-file guard in `test_quadlet_persistence.sh` no longer guesses at how
   `oc-secrets` writes, and no longer reads the script to find out. Six rounds of
