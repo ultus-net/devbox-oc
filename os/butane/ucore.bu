@@ -1,5 +1,10 @@
 # os/butane/ucore.bu
 #
+# Ignition for a VM whose OS image is built from the ucore bootc container, so it
+# boots ucore directly. There is no rebase stage: an earlier design published
+# plain Fedora CoreOS and rebased at boot, which needed two units, two marker
+# files, and three boots to reach the same OS.
+#
 # Placeholders are filled in by build.sh, which then runs Butane with
 # --files-dir at the repo root, so every local: path is relative to the root.
 variant: fcos
@@ -16,11 +21,6 @@ storage:
       partitions:
         - label: data
           number: 1
-  # The autorebase units gate on marker files in this directory. Ignition creates
-  # it, and /etc survives a rebase, so the markers outlive the OS switch they record.
-  directories:
-    - path: /etc/ucore-autorebase
-      mode: 0755
   filesystems:
     - device: /dev/disk/by-partlabel/data
       format: ext4
@@ -237,59 +237,4 @@ systemd:
             After=oc-secrets.service
     - name: podman-auto-update.timer
       enabled: true
-    # The published Azure image is Fedora CoreOS, not ucore. Fedora publishes no
-    # ucore Azure VHD and the design forbids forking ucore, so the box installs as
-    # FCOS and rebases onto the ucore container image on first boot. This is the
-    # upstream auto-rebase template, with the target pinned by tag as ucore
-    # documents; ucore's rpm-ostreed timer then keeps it current.
-    #
-    # Two stages, not one. The first rebase binds an unverified reference, so it
-    # reboots. Only after booting ucore does the installed container-signing policy
-    # exist, which is what the second stage needs to accept a signed reference.
-    # Each stage touches a marker so a reboot cannot loop it.
-    - name: ucore-unsigned-autorebase.service
-      enabled: true
-      contents: |
-        [Unit]
-        Description=Rebase from FCOS to the ucore image, then reboot
-        ConditionPathExists=!/etc/ucore-autorebase/unverified
-        ConditionPathExists=!/etc/ucore-autorebase/signed
-        After=network-online.target
-        Wants=network-online.target
-        # The rebase pulls a 1.5 GB image, so it needs working DNS and a route to
-        # the registry. network-online.target is the only ordering it needs: on this
-        # first boot the box is still plain FCOS, so ordering after any oc-* unit
-        # would just wait on a unit that cannot work before the rebase it gates.
-        [Service]
-        Type=oneshot
-        StandardOutput=journal+console
-        ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-unverified-registry:ghcr.io/ublue-os/ucore-minimal:stable
-        ExecStart=/usr/bin/touch /etc/ucore-autorebase/unverified
-        ExecStart=/usr/bin/systemctl disable ucore-unsigned-autorebase.service
-        ExecStart=/usr/bin/systemctl reboot
-        [Install]
-        WantedBy=multi-user.target
-    - name: ucore-signed-autorebase.service
-      enabled: true
-      contents: |
-        [Unit]
-        Description=Switch to the signed ucore reference, then reboot
-        ConditionPathExists=/etc/ucore-autorebase/unverified
-        ConditionPathExists=!/etc/ucore-autorebase/signed
-        After=network-online.target
-        Wants=network-online.target
-        [Service]
-        Type=oneshot
-        StandardOutput=journal+console
-        ExecStart=/usr/bin/rpm-ostree rebase ostree-image-signed:docker://ghcr.io/ublue-os/ucore-minimal:stable
-        # Enablement above is preset-only, and the preset ran on the FCOS boot
-        # where this unit did not exist yet. Enabling here creates the real
-        # symlink, so is-enabled tells the truth on the booted host. This runs
-        # before the marker is written: a failure then retries on the next boot
-        # instead of marking a half-done stage as complete.
-        ExecStart=/usr/bin/systemctl enable tailscaled.service
-        ExecStart=/usr/bin/touch /etc/ucore-autorebase/signed
-        ExecStart=/usr/bin/systemctl disable ucore-signed-autorebase.service
-        ExecStart=/usr/bin/systemctl reboot
-        [Install]
-        WantedBy=multi-user.target
+

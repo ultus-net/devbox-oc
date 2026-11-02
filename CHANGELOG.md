@@ -16,11 +16,16 @@ All notable changes to this project. One entry per landed change, newest first.
   on the host.
 - Image pipeline that builds, smoke-gates before promotion, promotes to `:prod`,
   and records the resolved digest for rollback.
-- OS image publish script and pipeline, using Fedora's own Azure VHD because
-  Fedora publishes no CoreOS image in the Azure marketplace, plus the two-stage
-  Ignition autorebase that lands the box on ucore on first boot.
+- OS image publish script and pipeline that build an Azure VHD from the upstream
+  ucore-minimal bootc container, pinned by digest, and create the managed image as
+  Gen2.
 - Butane source and a compiled Ignition document, plus the podman quadlet that
   runs the container with every persistent path on the data disk.
+- `docs/pipelines.md` recording the one-time Azure DevOps setup: the pipeline
+  points at this public GitHub repo directly, with no vendored copy and no GitHub
+  credential.
+- Guard test asserting the OS image stays bootc-sourced and digest-pinned, is
+  created as Gen2, and that no autorebase unit returns.
 - Idempotent tailnet join with a durable, non-ephemeral node and SSH over tailnet
   identity.
 - Terraform that boots from the published managed image with Ignition, with no
@@ -44,6 +49,25 @@ All notable changes to this project. One entry per landed change, newest first.
 - Cockpit published over the tailnet on its own HTTPS port, default 8443. ucore
   ships Cockpit and switches firewalld to the server profile so it is reachable,
   so the box would otherwise have a second root-equivalent door from the VNet.
+
+### Changed
+
+- The OS image is built from the ucore-minimal bootc container instead of being
+  plain Fedora CoreOS that rebased onto ucore at boot. Fedora publishes no ucore
+  VHD, so the previous design applied ucore's bare-metal install recipe to a cloud
+  image: three boots, two marker files, and a network dependency on first boot.
+  Building the VHD from the same container ucore publishes gives one boot and the
+  same OS.
+- Azure DevOps builds this public GitHub repo directly. The vendoring step, which
+  copied the tree into a larger repository as one subtree, is removed along with
+  the path-prefix edits it required on every pipeline.
+
+### Removed
+
+- `ucore-unsigned-autorebase.service`, `ucore-signed-autorebase.service`, their
+  `/etc/ucore-autorebase` marker directory, and `test_autorebase.sh`. The image
+  boots ucore, so nothing needs to rebase it.
+- `docs/vendoring.md`, replaced by `docs/pipelines.md`.
 
 ### Fixed
 
@@ -290,6 +314,9 @@ All notable changes to this project. One entry per landed change, newest first.
 
 - No `terraform plan` or `apply` has run: no subscription available here.
 - The container image has never been built: no container engine available here.
+- The OS image has never been built. `image-builder` has not produced a VHD here,
+  so the bootc build path, the `vhd` output type, and a Gen2 boot are all
+  unverified against a real Azure subscription.
 - All three pipeline files parse as YAML but have never executed.
 - `pipelines/devbox-image.yml` and `pipelines/devbox-os.yml` carry placeholder
   registry and storage account names that must be set before first use.

@@ -54,9 +54,9 @@ printf '%s\n' "$net" | grep -Eq '^EnvironmentFile=/etc/devbox/oc-secrets\.env$' 
   || fail "oc-tailnet.service does not load the env file naming its vault in the compiled Ignition"
 
 # Every unit the source declares must reach the artifact. Checking two named
-# units by hand leaves the rest able to vanish: the autorebase pair can be
-# dropped from the .ign and the box still boots plain FCOS, which is the failure
-# this whole file exists to catch.
+# units by hand leaves the rest able to vanish: a unit can be dropped from the
+# .ign while the box still boots, and the loss is silent until that unit is the
+# one you need.
 bu="${BU:-$(cd "$(dirname "$0")/.." && pwd)/ucore.bu}"
 here="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$bu" ]; then

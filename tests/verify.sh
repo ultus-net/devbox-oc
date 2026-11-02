@@ -39,7 +39,7 @@ fi
 
 run "ignition units"      ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.ign
 run "tailscale enabled"   ./os/butane/tests/test_tailscale_enabled.sh
-run "ucore autorebase"    ./os/butane/tests/test_autorebase.sh
+run "bootc image"         ./os/butane/tests/test_bootc_image.sh
 run "units load their env" ./os/butane/tests/test_units_load_their_env.sh
 
 # Terraform guards. These test the assertions themselves against fixtures, since

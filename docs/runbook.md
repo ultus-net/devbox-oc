@@ -53,14 +53,28 @@ The last line of output is the image resource ID. Put it in `os_image_id`.
 Before either path runs, set the pipeline's `resourceGroup` and `storageAccount`
 variables in `pipelines/devbox-os.yml`. Storage account names are globally
 unique, so the placeholder there is certainly wrong. The script path needs
-`coreos-installer` and `az` on PATH and `RG` and `STORAGE_ACCOUNT` exported; the
-pipeline installs `coreos-installer` from a pinned image, so prefer the pipeline.
+`image-builder`, `podman`, and `az` on PATH, with `RG` and `STORAGE_ACCOUNT`
+exported; the pipeline installs a pinned `image-builder`, so prefer the pipeline.
 Run `DRY_RUN=1 ./os/build-os-image.sh` to print the image id it would create
-without downloading or uploading anything. That works before a storage account
+without pulling or uploading anything. That works before a storage account
 exists, because the dry run answers before it requires one.
 
-The upstream stream is `STREAM`, defaulting to `stable`. It selects which Fedora
-CoreOS VHD is published, and the Ignition rebase is independent of it.
+The OS comes from `UCORE_IMAGE`, a digest-pinned reference to
+`ghcr.io/ublue-os/ucore-minimal`. A tag is rejected rather than resolved, so the
+published image cannot drift. Change the digest deliberately, and record the new
+one in the design's verified-facts table.
+
+`image-builder` needs `--bootc-default-fs` because Fedora bootable containers do
+not declare a root filesystem. `BUILD_FS` defaults to `ext4`, which is what Azure
+expects.
+
+The VM's generation is not set in Terraform: `azurerm_linux_virtual_machine` has
+no `hyper_v_generation` argument in the azurerm 4.x provider, and Azure takes the
+generation from the image. What matters is the image itself, so
+`os/build-os-image.sh` passes `--hyper-v-generation V2` to `az image create`.
+`os/butane/tests/test_bootc_image.sh` guards that argument. Confirm the first
+apply produces a Gen2 VM; a Gen1 VM cannot boot this UEFI image, and the failure
+appears at create time.
 
 ### 3. Generate Ignition with real values
 
@@ -125,40 +139,25 @@ follows `:prod`, so the image reaches the host without a redeploy.
 
 ### 6. Verify first boot
 
-The published image is Fedora CoreOS, so first boot is not one boot. Ignition
-rebases the box onto ucore in two stages, and each stage reboots:
+The published image is built from the ucore bootc container, so first boot is one
+boot. The VM starts already on ucore; there is no rebase stage and no reboot.
 
 ```sh
 az vm start -g "$RG" -n "$VM"
-
-# stage 1: plain CoreOS -> unverified ucore reference, then reboot
-ssh core@devbox "sudo journalctl -u ucore-unsigned-autorebase -n 40"
-
-# stage 2: unverified -> signed ucore reference, then reboot
-ssh core@devbox "sudo journalctl -u ucore-signed-autorebase -n 40"
 ```
 
-Expect the box to be unreachable for several minutes and to reboot twice. That is
-normal, not a failed deploy. Reach it over Bastion Developer during this window;
-the tailnet is not up yet.
-
-Stage 2 cannot run until the box has booted ucore, because only the ucore image
-installs the container-signing policy that accepts a signed reference. If stage 2
-fails with a policy error, stage 1 did not complete: check its journal first.
-
-Then prove the booted OS really is ucore, not the plain CoreOS image it started
-from:
+Prove the booted OS is ucore:
 
 ```sh
 ssh core@devbox "sudo rpm-ostree status"
 ```
 
 The booted deployment must name `ghcr.io/ublue-os/ucore-minimal`. Every host unit
-below depends on ucore packages, so nothing else works until this is right. If the
-box is still on `fedora-coreos`, the rebase did not run: check
-`systemctl status ucore-unsigned-autorebase`.
+below depends on ucore packages, so nothing else works until this is right. If it
+names `fedora-coreos`, the VM booted the wrong image: check that `os_image_id`
+points at the image `pipelines/devbox-os.yml` published, not an older one.
 
-Finally confirm the devbox units and the daemon the tailnet path needs:
+Then confirm the devbox units and the daemon the tailnet path needs:
 
 ```sh
 ssh core@devbox "systemctl is-active tailscaled oc-secrets oc-tailnet opencode"
@@ -182,10 +181,9 @@ being served, so the gate falls through and the box still deallocates.
 
 `is-active` alone does not prove enablement is right: `oc-tailnet` carries an
 unconditional `Wants=tailscaled`, so the daemon starts whether or not it is
-enabled. `is-enabled` must say `enabled`. If it says `disabled`, the
-signed-autorebase stage did not complete: check
-`sudo journalctl -u ucore-signed-autorebase -n 40`, then enable it by hand with
-`sudo systemctl enable --now tailscaled` before pairing a client.
+enabled. `is-enabled` must say `enabled`. If it says `disabled`, enable it by hand
+with `sudo systemctl enable --now tailscaled` before pairing a client, and check
+`sudo journalctl -u tailscaled -n 40` to see why the preset did not apply.
 
 ### 7. Connect a client
 
