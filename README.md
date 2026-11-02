@@ -1,9 +1,10 @@
 # devbox-oc
 
 An AI development server in Azure that you can destroy and rebuild without
-losing work. The operating system is a signed Fedora CoreOS derived image. The
-toolchain runs in a Fedora container. The OpenCode TUI and desktop app connect to
-it directly over a private tailnet, with no public IP and no open inbound port.
+losing work. The operating system is ucore-minimal, a Fedora CoreOS derived image
+built from its upstream bootc container, so a VM boots it directly. The toolchain
+runs in a Fedora container. The OpenCode TUI and desktop app connect to it
+directly over a private tailnet, with no public IP and no open inbound port.
 
 ## Why it exists
 
@@ -36,7 +37,7 @@ flowchart LR
 
 | Layer | Built by | Updated by |
 |---|---|---|
-| OS image (`ucore-minimal`) | our pipeline, publishing Fedora's CoreOS VHD; Ignition rebases onto ucore | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
+| OS image (`ucore-minimal`) | `pipelines/devbox-os.yml`, building a VHD from the upstream bootc container pinned by digest | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
 | Container image | `pipelines/devbox-image.yml` into ACR | `podman auto-update` on the `:prod` tag, gated by the idle check |
 | Data disk | not built | nightly incremental snapshot |
 | Tailnet path | `tailscaled` enabled by Ignition, then `oc-tailnet.service` | both must be up; without them the box is Bastion-only |
@@ -126,6 +127,8 @@ This repo has no Azure subscription and no container engine. So:
 - `terraform validate` passes, but no `plan` or `apply` has run.
 - The container image has never been built. `image/smoke.sh` runs in the pipeline
   as a blocking gate before promotion.
+- The OS image has never been built. The bootc build path, the `vhd` output type,
+  and a Gen2 boot are unverified against a real subscription.
 - Pipeline definitions parse as YAML, but no pipeline run has executed.
 
 Anything requiring credentials is unproven until the first real run.
@@ -133,7 +136,8 @@ Anything requiring credentials is unproven until the first real run.
 ## Documentation
 
 - `docs/runbook.md` covers restore, rollback, tailnet rejoin, snapshot pruning.
-- `docs/vendoring.md` covers moving this into an existing Azure DevOps repo.
+- `docs/pipelines.md` covers building this repo from Azure DevOps into the work
+  subscription.
 - `docs/superpowers/specs/` holds the design and its verified facts.
 - `docs/superpowers/plans/` holds the implementation plan.
 

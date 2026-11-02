@@ -9,11 +9,11 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
-for f in README.md CHANGELOG.md docs/runbook.md docs/vendoring.md; do
+for f in README.md CHANGELOG.md docs/runbook.md docs/pipelines.md; do
   [ -s "$root/$f" ] || fail "missing or empty: $f"
 done
 
-for topic in restore rollback tailnet snapshot vendoring; do
+for topic in restore rollback tailnet snapshot; do
   grep -riq "$topic" "$root/docs" "$root/README.md" || fail "no documentation for: $topic"
 done
 
@@ -29,17 +29,15 @@ done
 # surprised when the box stops under a connected client.
 grep -riq "not protected" "$root/README.md" || fail "README does not state what the idle gate does not protect"
 
-# The published image is Fedora CoreOS, and Ignition rebases it onto ucore on
-# first boot. An operator who does not know that reads two reboots and several
-# minutes of unreachability as a failed deploy, so the runbook must name both
-# stages and give a command that proves the booted OS really is ucore.
+# The published image is ucore, built from the upstream bootc container, so a VM
+# boots ucore directly. An operator who expects the old rebase sees one boot and
+# no second reboot, so the runbook must say how to confirm the booted OS is ucore
+# and must name tailscaled, the unit most likely to be down.
 grep -riq "rpm-ostree status" "$root/docs/runbook.md" \
   || fail "runbook does not tell the operator how to confirm the booted OS is ucore"
 grep -riq "tailscaled" "$root/docs/runbook.md" \
   || fail "runbook does not name tailscaled, the unit most likely to be down"
-for stage in ucore-unsigned-autorebase ucore-signed-autorebase; do
-  grep -riq -- "$stage" "$root/docs/runbook.md" \
-    || fail "runbook does not name the $stage stage of the first boot"
-done
+grep -riq "bootc" "$root/docs/runbook.md" \
+  || fail "runbook does not say the image is built from the ucore bootc container"
 
 echo "docs complete"

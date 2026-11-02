@@ -12,9 +12,9 @@ Two images and a data disk. The OS is a signed Fedora CoreOS derived image that
 autorebases onto `ghcr.io/ublue-os/ucore-minimal`. The toolchain runs in a Fedora
 toolbox container. OpenCode is reached over a private tailnet with no public IP.
 
-It is a **build repo**, not the final home. `docs/vendoring.md` moves it into a
-larger Azure DevOps repository as one subtree. Treat every path a vendoring step
-names as something another repo will inherit.
+This repo is the source of truth. Azure DevOps builds it directly from GitHub and
+deploys into the work subscription, so there is no copy to keep in step.
+`docs/pipelines.md` records the one-time console setup.
 
 ## Non-negotiables
 
@@ -94,7 +94,7 @@ terraform -chdir=terraform validate
 | `image/` | toolbox container: Dockerfile, toolchains, smoke test, digest |
 | `terraform/` | VM, disk, network, Key Vault, ACR permissions |
 | `pipelines/` | Azure Pipelines: verify, OS image, container image |
-| `docs/` | runbook, vendoring, design and plans |
+| `docs/` | runbook, pipeline setup, design and plans |
 
 `os/butane/ucore.ign` is a compiled artifact and must stay byte-identical to what
 `os/butane/build-placeholder.sh` produces. Never hand-edit it.
