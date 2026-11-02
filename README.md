@@ -147,6 +147,6 @@ Anything requiring credentials is unproven until the first real run.
 
 ## Status
 
-All twelve tasks of the plan are implemented, with every invariant guarded by a
-test proven able to fail. See `CHANGELOG.md` for the change list and for the
-honestly unverified gaps.
+All twelve tasks of the plan are implemented. The invariants named above each have
+a guard, and those guards were checked against mutations they are meant to catch.
+See `CHANGELOG.md` for the change list and for the honestly unverified gaps.

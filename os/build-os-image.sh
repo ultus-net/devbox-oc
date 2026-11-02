@@ -37,13 +37,13 @@ STORAGE_ACCOUNT="${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
 
 # A tag is not a pin. Accepting one here would publish a different OS on a later
 # run while the pipeline reported success and the hash described another image.
-case "$UCORE_IMAGE" in
-  *@sha256:*) ;;
-  *)
-    echo "UCORE_IMAGE must be pinned by digest (@sha256:...), not a tag: $UCORE_IMAGE" >&2
-    exit 1
-    ;;
-esac
+# The digest is required in full: `@sha256:` with nothing after it would pass a
+# prefix test and resolve to whatever the registry served. Pure bash, because the
+# precondition cases below run with a stripped PATH that has no grep.
+if [[ ! "$UCORE_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+  echo "UCORE_IMAGE must be pinned by digest (@sha256:<64 hex>), not a tag: $UCORE_IMAGE" >&2
+  exit 1
+fi
 
 # Two ways to run the builder. A Fedora host installs the binary; a CI runner on
 # another distribution has no package, so it runs the pinned container instead.

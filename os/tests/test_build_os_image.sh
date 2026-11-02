@@ -134,6 +134,18 @@ case "$out" in
 esac
 [ ! -s "$tmp/podman-calls" ] || fail "T4 pulled before rejecting the tag: $(cat "$tmp/podman-calls")"
 
+# T4b: a digest prefix with nothing after it is not a pin either. A test for
+# `@sha256:` alone accepted this, so the check requires the full 64 hex digits.
+rc=0
+out="$(PATH="$tmp/bin:$PATH" RG=rg-x STORAGE_ACCOUNT=stx \
+  UCORE_IMAGE=ghcr.io/ublue-os/ucore-minimal@sha256: "$bash_bin" "$script" 2>&1)" || rc=$?
+[ "$rc" -ne 0 ] || fail "T4b accepted an empty digest as a pin"
+case "$out" in
+  *"pinned by digest"*) ;;
+  *) fail "T4b message does not explain the digest requirement: $out" ;;
+esac
+[ ! -s "$tmp/podman-calls" ] || fail "T4b pulled before rejecting the empty digest"
+
 # T5: DRY_RUN answers before any tool or credential is required, and calls
 # nothing. That ordering is the point: the runbook tells the operator to run this
 # before a storage account exists, so requiring one here would make it useless.

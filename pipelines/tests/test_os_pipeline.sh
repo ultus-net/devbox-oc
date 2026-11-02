@@ -81,14 +81,57 @@ if not re.fullmatch(r"\S+@sha256:[0-9a-f]{64}", builder):
         f"(got {builder!r}), so the build recipe can change under a fixed name"
     )
 
-# The step that runs the build script is the one whose environment matters.
-builds = [s for s in steps if "build-os-image.sh" in body(s)]
-if not builds:
-    fail(f"{display} never runs os/build-os-image.sh")
-build = body(builds[0])
+# The step that runs the build script is the one whose environment matters. Match
+# a command, not a substring: a comment, or an echo whose argument happens to be
+# the path, would otherwise satisfy the checks with prose. This is the repo's
+# named anti-pattern, so the check tokenises the logical line the way the shell
+# would, drops the comment, and requires the path to be in command position with
+# sudo in front of it.
+import shlex
 
-if "sudo" not in build:
-    fail(f"{display} runs the build without sudo, so the builder cannot mount a disk")
+
+def logical(text):
+    return re.sub(r"\\\n\s*", " ", text)
+
+
+def tokens(line):
+    lex = shlex.shlex(line, posix=True, punctuation_chars="|;&")
+    lex.whitespace_split = True
+    lex.commenters = "#"
+    return list(lex)
+
+
+CONTROL = {"|", "||", "&&", ";", "&", ";;"}
+SILENT = {"echo", "printf", "cat", "true"}
+
+
+def invocation_of(line):
+    """Return the tokens of the command that runs the script, or None."""
+    toks = tokens(line)
+    for i, tok in enumerate(toks):
+        if tok != "./os/build-os-image.sh":
+            continue
+        prefix = []
+        for back in reversed(toks[:i]):
+            if back in CONTROL:
+                break
+            prefix.append(back)
+        prefix.reverse()
+        words = [w for w in prefix if not w.startswith("-") and "=" not in w]
+        if "sudo" not in words or SILENT & set(words):
+            continue
+        return toks
+    return None
+
+
+candidates = [s for s in steps if "./os/build-os-image.sh" in logical(body(s))]
+if not candidates:
+    fail(f"{display} never names os/build-os-image.sh")
+
+build = logical(body(candidates[0]))
+build_tokens = invocation_of(build)
+if build_tokens is None:
+    fail(f"{display} never invokes os/build-os-image.sh as a command under sudo")
 
 # sudo --preserve-env with an explicit list means everything not listed is dropped.
 # AZURE_CONFIG_DIR is where AzureCLI@2 keeps the token, and HOME is the fallback
