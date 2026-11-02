@@ -27,6 +27,10 @@ preference.
 - **No public IP and no inbound internet rule.** Reachability is Tailscale.
   Bastion Developer is break-glass only. `terraform/tests/no_public_ip.sh` guards
   this.
+- **Everything that listens, listens on loopback.** Services are published over the
+  tailnet with `tailscale serve`, never bound to an interface. ucore ships Cockpit
+  and enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in;
+  `host/tests/test_cockpit_loopback.sh` guards that.
 - **No scheduled stop.** Start is scheduled, stop is idle-based. A timer that
   deallocates on a clock is a data-loss path and
   `terraform/tests/no_scheduled_stop.sh` rejects it.

@@ -68,7 +68,7 @@
         "path": "/usr/local/sbin/oc-tailnet",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/2SRQY/TPhDF7/4U79/8j8TpQgUi2u6lFyQQrWjFtXKS6cZq8FiecdmC+O7IYRexcBtlMu+933P1X5MlNZ0PDYULOiejqbDL3eRlhI6EbaSw4YEglC6UwGH+rM5PgRRfvY5wSOQmHD7s0VNSf/K9U7KmMtX8o/RuehRATPzgSTCqRmmb5nZk0Tt7+yh4Z1VsEVbGxBw7159fQLiYmgo9B3U+UELkpPCCQCUVPUQWGspVSff5Iyk4zbMPSimQWiOkqCkzoo90cn4ypsXi/+/bzfGw2R1320+Hdr1avn39Y2FMhbru7vHFnUlmnZ7Dyd9Dcrr4CyFRx6wCF4Y/GBOJuqRizd/cs1pdz9jr1eoVFmVsm+bm5Ru7tEt70z5L8ivDe6I4u+/37xCdjsjiuomgzBaH3x5l7bKOFHTuXtBdn97IVPBDWej1qclEcIkQeD7i5L/RcDzTVUqBgxdNvstKpUKXB6/PcRR1LTKuNWUy/4CKOs1ifgYAAP//I3oHDloCAAA="
+          "source": "data:;base64,H4sIAAAAAAAC/4RUwY7iRhC9+ysq4xzHNpuskgzZ2QuXXW0UULByRW13QZfwdlld1TAk2n+Pug2EYRTlgpCq6vV7r165/K6JEpqOfIP+AJ0RV5Swit1A4kAdwnJEv2CLIBgOGMB4Cwvu9yMpsM8tamjwqHAkdRDQDND+toYeg0pdlEWZG6Q3wxkExsAvhAJOdZR503xwLPqx/nAG+lir1AlQGQbmsTP9/hGEwSOpw5AQHULPXg15DDByUPAcrsRIAF9GFrQJIzX/+TsqcMj/ySsGj1pf+osyTXQcvb19E7oTGA+fd56U2IMNPFbkk+x+GqyF+z3qr0BbUGf00jIBYvJrYNFHUEeSZZ9gjzgKHDnsye+gi5o5TUBAKjhs03BA0zvTDQhmZ8g/FiUcHfUu1Y7pqeRZoygq+XdzprS5sK/FAb6QqCRNY8ADep320aalHRk+te1qDQOJoscg4BEtWBIl32t2VeZvlhdwGwUFDAj27G1RQkfeJlfMtAkzBDT2BOQhCtaFoEKFkWGkEbeGhqKYw8P3fy8Xm3ax2qyWf7Tz5/ezp5++PVwLmdql9P7HS2WxXHxZfW5v5p5mT7P76u3wL9N0UUJVdTv4avYol/hsaQcSw4GyrI5ZJef7X8kBRU3O8b0NGa2qcoSf7zl/e4CHVJk3zbsffq5n9ax+N38leKJ0k9dk52iCUbwuBIJJcU/Jyt4adZeTu14lB9pN6eiwN1EwRQj46MGIYNITzowtbAN/zdOBWbPQI8fBQs/DQBb/X+Nbf/9D6P2aJrVfEMf8/nr9aVITJSdcmWtor4+nsonq0Cv1RlHSIZ6/DemybCroKX8SkkGYRXrOQxzoL7SbPZ5y7lOaA3VRk1VgoiV9rVOhqkTcs4aIxRsHRI1GKf4JAAD//6O9XRsnBQAA"
         },
         "mode": 493
       },
@@ -181,6 +181,15 @@
         "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\nAfter=network-online.target oc-secrets.service tailscaled.service\nWants=network-online.target tailscaled.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\n# A unit does not inherit another unit's EnvironmentFile. Without this the\n# join runs with TS_AUTHKEY_SECRET and VAULT_NAME unset, skips Key Vault\n# entirely, and fails with \"no auth key\" on every fresh boot.\nEnvironmentFile=/etc/devbox/oc-secrets.env\n# Joins only when no state exists, then advertises the loopback port.\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "oc-tailnet.service"
+      },
+      {
+        "dropins": [
+          {
+            "contents": "[Socket]\nListenStream=\nListenStream=127.0.0.1:9090\n",
+            "name": "10-loopback.conf"
+          }
+        ],
+        "name": "cockpit.socket"
       },
       {
         "dropins": [

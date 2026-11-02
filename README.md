@@ -17,13 +17,16 @@ redeploy rather than a repair.
 flowchart LR
   TUI["TUI<br/>opencode --server"] --> TN
   DESK["Desktop app<br/>pairing link"] --> TN
+  COCK["Cockpit<br/>https://host:8443"] --> TN
   TN["tailnet<br/>WireGuard plus TLS"] --> HOST
   subgraph VM["ucore-minimal VM (no public IP)"]
-    HOST["tailscaled<br/>serves 127.0.0.1:4096"]
+    HOST["tailscaled<br/>serves loopback only"]
     Q["podman quadlet<br/>opencode container"]
+    CP["cockpit.socket<br/>127.0.0.1:9090"]
     IDLE["oc-idle.timer<br/>deallocates when idle"]
     SN["oc-snapshot.timer<br/>nightly"]
     HOST --> Q
+    HOST --> CP
   end
   Q --> DD["/srv data disk<br/>repos, session DB"]
   VM --> NAT["NAT Gateway<br/>explicit egress"]
@@ -103,6 +106,7 @@ Individual suites:
 | `host/tests/test_oc-idle-check.sh` | the box is never stopped while busy; probes fail closed |
 | `host/tests/test_oc-secrets.sh` | the server password file is mode 0600 and never clobbered by an empty secret |
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent and uses a durable node |
+| `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is published over the tailnet |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk, never a named volume on the OS disk |
 | `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools and emits a valid image ID |
 | `os/butane/tests/test_units_have_scripts.sh` | every unit runs a script that is baked into the image |

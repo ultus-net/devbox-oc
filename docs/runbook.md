@@ -197,6 +197,12 @@ opencode --server https://devbox.<tailnet>.ts.net     # TUI
 Set `OPENCODE_PASSWORD` from Key Vault for the TUI. The pairing link is
 single-use and expires in five minutes.
 
+Cockpit is published on its own HTTPS port, `https://devbox.<tailnet>.ts.net:8443`
+by default. It listens on loopback only and is reachable over the tailnet, never
+the VNet or the internet. Do not expect port 9090 to answer: an Ignition drop-in
+rebinds the socket to `127.0.0.1:9090`, and `host/tests/test_cockpit_loopback.sh`
+fails the gate if that drop-in is lost.
+
 ### 8. Confirm the cost model
 
 Leave the box alone with no session for fifty minutes, then check:

@@ -19,6 +19,7 @@ run() {
 run "idle gate"           ./host/tests/test_oc-idle-check.sh
 run "secrets and ACR"     ./host/tests/test_oc-secrets.sh
 run "tailnet join"        ./host/tests/test_tailnet_up.sh
+run "cockpit loopback"    ./host/tests/test_cockpit_loopback.sh
 run "OS image publish"    ./os/tests/test_build_os_image.sh
 run "OS image single vhd" ./os/tests/test_build_os_image_one_vhd.sh
 run "container digest"    ./image/tests/test_digest_record.sh

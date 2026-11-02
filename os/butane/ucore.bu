@@ -209,6 +209,22 @@ systemd:
         ExecStart=/usr/local/sbin/oc-tailnet
         [Install]
         WantedBy=multi-user.target
+    # ucore-minimal ships Cockpit and switches firewalld to the server profile so
+    # it is reachable. The shipped cockpit.socket listens on 9090 across every
+    # interface, and the service behind it runs privileged with / mounted, so on
+    # this box it would be a second root-equivalent door from the VNet and the
+    # tailnet. This design has one door: the tailnet, via tailscale serve.
+    #
+    # An empty assignment resets a list option, so `ListenStream=` first drops the
+    # shipped 9090 and the loopback line replaces it. Without the reset the second
+    # ListenStream would append and leave 9090 open.
+    - name: cockpit.socket
+      dropins:
+        - name: 10-loopback.conf
+          contents: |
+            [Socket]
+            ListenStream=
+            ListenStream=127.0.0.1:9090
     # ucore ships podman-restart.service already; do not redefine it. Enable the
     # shipped one instead, plus the auto-update timer that AutoUpdate=registry
     # depends on.

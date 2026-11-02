@@ -41,8 +41,21 @@ All notable changes to this project. One entry per landed change, newest first.
 - `AGENTS.md` recording the invariants a change must not break, the gate command,
   and the test-writing rules this repo learned the hard way.
 - MIT licence.
+- Cockpit published over the tailnet on its own HTTPS port, default 8443. ucore
+  ships Cockpit and switches firewalld to the server profile so it is reachable,
+  so the box would otherwise have a second root-equivalent door from the VNet.
 
 ### Fixed
+
+- Cockpit no longer listens on `0.0.0.0:9090`. ucore-minimal's shipped
+  `cockpit.socket` binds every interface, and the service behind it runs
+  `privileged` with `/` mounted, so the box had a root-equivalent web console
+  reachable from the VNet and the tailnet, bypassing the one-door design. An
+  Ignition drop-in resets the listen list and rebinds it to `127.0.0.1:9090`.
+  Publishing it through `tailscale serve` keeps it usable over WireGuard.
+  `host/tests/test_cockpit_loopback.sh` fails the gate if the drop-in, the reset
+  ordering, the loopback target, or the port separation regresses; six mutants,
+  all caught.
 
 - The verification pipeline now installs Butane, pinned to 0.29.0 by sha256, and
   fails if the artifact check reports itself skipped. Without a compiler the
