@@ -16,3 +16,4 @@ os/butane/ign-repro.*
 os/butane/.ucore.tmp.bu
 # Local review scratch, never committed.
 .scratch/
+.pr-body.md
