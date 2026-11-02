@@ -8,9 +8,10 @@ two disagree.
 
 ## What this repo is
 
-Two images and a data disk. The OS is a signed Fedora CoreOS derived image that
-autorebases onto `ghcr.io/ublue-os/ucore-minimal`. The toolchain runs in a Fedora
-toolbox container. OpenCode is reached over a private tailnet with no public IP.
+Two images and a data disk. The OS is ucore-minimal, a Fedora CoreOS derived
+image built from its upstream bootc container by digest, so a VM boots it
+directly. The toolchain runs in a Fedora toolbox container. OpenCode is reached
+over a private tailnet with no public IP.
 
 This repo is the source of truth. Azure DevOps builds it directly from GitHub and
 deploys into the work subscription, so there is no copy to keep in step.

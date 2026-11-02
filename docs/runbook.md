@@ -39,10 +39,9 @@ Never commit `terraform.tfvars`; it is gitignored for that reason.
 
 ### 2. Publish the OS image
 
-Fedora publishes no CoreOS image in the Azure marketplace, so the first step
-publishes Fedora's own CoreOS VHD as a managed image. That image is plain CoreOS,
-not ucore, so the Ignition configuration rebases the box onto ucore on first boot.
-Stage 6 walks through that.
+Fedora and ucore both publish no Azure VHD, so the first step builds one from the
+upstream ucore-minimal bootc container and publishes it as a managed image. The
+image already is ucore, so the box boots it directly with no rebase stage.
 
 ```sh
 az pipelines run --name devbox-os            # or: ./os/build-os-image.sh
