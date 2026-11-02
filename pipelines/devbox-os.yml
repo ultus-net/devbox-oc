@@ -41,10 +41,15 @@ jobs:
             export RG="$(resourceGroup)"
             export STORAGE_ACCOUNT="$(storageAccount)"
             export LOCATION="$(location)"
-            # The builder needs root to mount disks, and sudo would drop the
-            # exported variables, so run podman as root with an explicit env.
-            sudo --preserve-env=RG,STORAGE_ACCOUNT,LOCATION,IMAGE_BUILDER_CONTAINER \
-              env PATH="$PATH" IMAGE_BUILDER_CONTAINER="$(imageBuilderContainer)" \
+            export IMAGE_BUILDER_CONTAINER="$(imageBuilderContainer)"
+            # The builder needs root to mount disks, so the script runs under sudo.
+            # sudo resets the environment, and AzureCLI@2 keeps its token in
+            # AZURE_CONFIG_DIR, so that variable has to cross the boundary too:
+            # without it az runs as root against /root/.azure and reports no login.
+            # HOME comes along for the same reason, because the CLI falls back to
+            # $HOME/.azure when AZURE_CONFIG_DIR is unset.
+            sudo --preserve-env=RG,STORAGE_ACCOUNT,LOCATION,IMAGE_BUILDER_CONTAINER,AZURE_CONFIG_DIR,HOME \
+              env PATH="$PATH" \
               ./os/build-os-image.sh | tee image-id.txt
       - script: |
           echo "Apply this as os_image_id:"; tail -1 image-id.txt

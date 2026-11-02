@@ -109,16 +109,20 @@ Individual suites:
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent and uses a durable node |
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is published over the tailnet |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk, never a named volume on the OS disk |
-| `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools and emits a valid image ID |
+| `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools, rejects a tag, and builds a Gen2 image from the pinned bootc ref |
+| `os/butane/tests/test_bootc_image.sh` | no rebase unit, marker path, or runtime rebase returns to the Ignition config |
 | `os/butane/tests/test_units_have_scripts.sh` | every unit runs a script that is baked into the image |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
 | `terraform/tests/no_public_ip.sh` | no public IP and no internet-allow ingress |
 | `terraform/tests/no_scheduled_stop.sh` | no scheduled hard stop ever returns |
 | `terraform/tests/data_disk_protected.sh` | the data disk stays `prevent_destroy` |
+| `pipelines/tests/test_os_pipeline.sh` | the OS pipeline installs podman, pins its builder, and keeps the Azure credential across `sudo` |
 
-Two suites are proven able to fail, not just able to pass: the integrity test
-rejects a corrupted tarball, and the idle gate rejects a forced-allow pin check.
+Every guard listed above was checked against a mutation it is meant to catch, and
+the mutation was confirmed to land before the result was trusted. Two have a
+documented negative control: the integrity test rejects a corrupted tarball, and
+the idle gate rejects a forced-allow pin check.
 
 ## What is not verified here
 

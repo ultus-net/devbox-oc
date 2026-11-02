@@ -320,5 +320,8 @@ All notable changes to this project. One entry per landed change, newest first.
 - All three pipeline files parse as YAML but have never executed.
 - `pipelines/devbox-image.yml` and `pipelines/devbox-os.yml` carry placeholder
   registry and storage account names that must be set before first use.
+- The image-integrity suite is skipped in CI, because nothing there extracts the
+  tarball it inspects. The sha512 check runs only where someone has one, so a
+  corrupted artifact would pass the pipeline gate.
 - `systemd-analyze verify` cannot check the quadlet: it rejects a `.container`
   file, because the podman generator, not systemd, produces the unit.

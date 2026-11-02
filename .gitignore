@@ -17,3 +17,4 @@ os/butane/.ucore.tmp.bu
 # Local review scratch, never committed.
 .scratch/
 .pr-body.md
+.commit-msg-tmp*.txt

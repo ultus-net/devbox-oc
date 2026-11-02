@@ -51,12 +51,15 @@ The last line of output is the image resource ID. Put it in `os_image_id`.
 
 Before either path runs, set the pipeline's `resourceGroup` and `storageAccount`
 variables in `pipelines/devbox-os.yml`. Storage account names are globally
-unique, so the placeholder there is certainly wrong. The script path needs
-`image-builder`, `podman`, and `az` on PATH, with `RG` and `STORAGE_ACCOUNT`
-exported; the pipeline installs a pinned `image-builder`, so prefer the pipeline.
-Run `DRY_RUN=1 ./os/build-os-image.sh` to print the image id it would create
-without pulling or uploading anything. That works before a storage account
-exists, because the dry run answers before it requires one.
+unique, so the value there is a placeholder and is certainly wrong. Set the
+`imageBuilderContainer` digest there too if you change it; it is pinned for the
+same reason the OS is. The script path needs `podman` and `az` on PATH, with `RG`
+and `STORAGE_ACCOUNT` exported, and either a host `image-builder` or
+`IMAGE_BUILDER_CONTAINER` naming the pinned builder image. The pipeline installs
+podman and runs the builder container, so prefer the pipeline. Run
+`DRY_RUN=1 ./os/build-os-image.sh` to print the image id it would create without
+pulling or uploading anything. That works before a storage account exists,
+because the dry run answers before it requires one.
 
 The OS comes from `UCORE_IMAGE`, a digest-pinned reference to
 `ghcr.io/ublue-os/ucore-minimal`. A tag is rejected rather than resolved, so the
@@ -71,8 +74,8 @@ The VM's generation is not set in Terraform: `azurerm_linux_virtual_machine` has
 no `hyper_v_generation` argument in the azurerm 4.x provider, and Azure takes the
 generation from the image. What matters is the image itself, so
 `os/build-os-image.sh` passes `--hyper-v-generation V2` to `az image create`.
-`os/butane/tests/test_bootc_image.sh` guards that argument. Confirm the first
-apply produces a Gen2 VM; a Gen1 VM cannot boot this UEFI image, and the failure
+`os/tests/test_build_os_image.sh` guards that argument. Confirm the first apply
+produces a Gen2 VM; a Gen1 VM cannot boot this UEFI image, and the failure
 appears at create time.
 
 ### 3. Generate Ignition with real values

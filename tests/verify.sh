@@ -66,9 +66,12 @@ run "variables documented" \
 run "docs complete"  ./tests/docs_complete.sh
 run "wake wrapper"   ./tools/tests/test_oc.sh
 run "pipeline shape" ./pipelines/tests/test_pipeline_shape.sh
+run "OS pipeline"    ./pipelines/tests/test_os_pipeline.sh
 
-# The integrity test needs a tarball. Without one it must fail unless the
-# operator opts out, which would make this gate meaningless.
+# The integrity test needs a tarball. This suite skips without one, so a machine
+# with no container engine still runs the rest of the gate. The image pipeline
+# does not build this tarball yet, so in CI the suite is skipped too: the sha512
+# check itself is guarded only where someone has extracted the artifact.
 if [ -f /tmp/ocinspect/oc.tgz ]; then
   run "image integrity" ./image/tests/test_integrity_logic.sh /tmp/ocinspect/oc.tgz
 else

@@ -176,16 +176,29 @@ grep -q -- "--hyper-v-generation V2" "$tmp/az-calls" \
 grep -q -- "--bootc-default-fs" "$tmp/args-used" \
   || fail "T6 did not pass --bootc-default-fs to image-builder: $(cat "$tmp/args-used" 2>/dev/null || echo none)"
 
-# T7: the container path, which is what a non-Fedora CI runner takes. It must not
-# require the host binary, must run privileged with the shared container storage
-# (or the pulled ref is invisible), and must pass the same pinned ref and Gen2
-# settings as the host path.
+# T7: the container path, which is what a non-Fedora CI runner takes. It must
+# work with no host binary at all, must run privileged with the shared container
+# storage (or the pulled ref is invisible), and must pass the same pinned ref and
+# Gen2 settings as the host path.
+#
+# The PATH here holds the fakes and the few coreutils the script needs, and
+# nothing else. Building it deliberately is what makes "no host binary" a fact
+# the test proves rather than a claim it repeats.
+mkdir -p "$tmp/nobuilder"
+for tool in bash mktemp rm find sha256sum date; do
+  ln -sf "$(command -v "$tool")" "$tmp/nobuilder/$tool"
+done
+cp "$tmp/bin/podman" "$tmp/bin/az" "$tmp/nobuilder/"
+if PATH="$tmp/nobuilder" command -v image-builder >/dev/null 2>&1; then
+  fail "T7 precondition: image-builder is on the stripped PATH, so this cannot prove container mode stands alone"
+fi
+
 : > "$tmp/ref-used"
 rc=0
-PATH="$tmp/bin:$PATH" RG=rg-x STORAGE_ACCOUNT=stx \
+PATH="$tmp/nobuilder" RG=rg-x STORAGE_ACCOUNT=stx \
   IMAGE_BUILDER_CONTAINER=ghcr.io/osbuild/image-builder-cli@pinned \
   "$bash_bin" "$script" >"$tmp/out7" 2>"$tmp/err7" || rc=$?
-[ "$rc" -eq 0 ] || fail "T7 container path exited $rc: $(cat "$tmp/err7")"
+[ "$rc" -eq 0 ] || fail "T7 container path exited $rc without a host image-builder: $(cat "$tmp/err7")"
 
 grep -q -- "--privileged" "$tmp/podman-calls" \
   || fail "T7 did not run the builder privileged, which mounting a disk requires"
@@ -193,6 +206,8 @@ grep -q -- "/var/lib/containers/storage" "$tmp/podman-calls" \
   || fail "T7 did not share container storage, so the pulled bootc ref is invisible to the builder"
 grep -q -- "image-builder-cli@pinned" "$tmp/podman-calls" \
   || fail "T7 did not run the requested builder container: $(cat "$tmp/podman-calls")"
+grep -q "$digest" "$tmp/ref-used" 2>/dev/null \
+  || fail "T7 did not pass the pinned ref to the builder in container mode"
 grep -q -- "--hyper-v-generation V2" "$tmp/az-calls" \
   || fail "T7 did not create a Gen2 image"
 
