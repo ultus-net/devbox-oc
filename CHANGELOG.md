@@ -107,11 +107,13 @@ All notable changes to this project. One entry per landed change, newest first.
   substrate is ever rebuilt.
 
   The plan also stops claiming this repo's Terraform tests guard the deployed VM.
-  `terraform/tests/*.sh` read a Terraform plan, and the port removes the VM, NIC, NSG
-  and disk from that plan, so the no-public-IP guard would pass over a plan that no
-  longer describes the box. Phase 2 now names the two replacement readers in
-  `csh-dev`: a pipeline check over the compiled template, and a post-deploy read of
-  the NIC and NSG. Both are outstanding work rather than existing coverage.
+  `terraform/tests/no_public_ip.sh` reads a `terraform show -json` plan, so it would
+  pass over a plan that no longer describes the box, while
+  `data_disk_protected.sh` scans `main.tf` and would fail the gate outright once the
+  disk block leaves it. Phase 2 now names the two replacement readers in `csh-dev`,
+  the retirement of `data_disk_protected.sh`, and the `AGENTS.md` and `README.md`
+  claims that need updating. All of it is outstanding work rather than existing
+  coverage.
 
   The cost section now carries a measured November instead of a projection alone.
   The same CostManagement query with daily granularity shows the storage account at

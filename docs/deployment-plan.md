@@ -120,11 +120,12 @@ The one live object it removes is an orphaned Key Vault role assignment, in Phas
 
 ## What already exists
 
-Read with `az resource list -g rg-csh-dev` on 2026-11-04. Three entries remain,
-down from six: `csh-dev-env`, its certificate and `csh-dev-hermes` were deleted on
-2026-11-03 at 03:17Z (activity log, `Microsoft.App/managedEnvironments/delete`,
-Succeeded). An app and a certificate have no life outside their environment, so the
-one delete removed all three entries.
+Read with `az resource list -g rg-csh-dev` on 2026-11-04. Three entries remain, down
+from the six that the 2026-11-03 read showed after the storage account was already
+gone: `csh-dev-env`, its certificate and `csh-dev-hermes` were deleted at 03:17Z
+(activity log, `Microsoft.App/managedEnvironments/delete`, Succeeded). An app and a
+certificate have no life outside their environment, so the one delete removed all
+three entries.
 
 | Resource | Name | Type | After this plan |
 |---|---|---|---|
@@ -731,9 +732,13 @@ rows above need re-deriving.
 
 New modules in `csh-dev/infra/modules`, ported from the Terraform that already
 encodes these invariants. Each invariant keeps a guard, because a rule with no
-reader is a rule that drifts. The guard moves with the resource, and the tests in
-this repo cannot follow it: `terraform/tests/*.sh` read a Terraform plan, and the VM,
-NIC, NSG and disk leave that plan here.
+reader is a rule that drifts. The guard moves with the resource, and the existing
+tests cannot follow it: `terraform/tests/no_public_ip.sh` reads a `terraform
+show -json` plan, and the VM, NIC and NSG leave that plan here. The other two
+invariant tests scan the Terraform sources directly, so they do not quietly pass:
+`data_disk_protected.sh` fails with `azurerm_managed_disk.data not found` the moment
+the disk block leaves `terraform/main.tf`, and `no_scheduled_stop.sh` greps `*.tf` and
+`schedule.tf`. Both edits are therefore part of this phase, not follow-ups.
 
 | New module | Ports from | Invariant to keep |
 |---|---|---|
@@ -759,7 +764,17 @@ three invariant tests, and both are new work in `csh-dev`:
 
 Until both exist, these invariants are enforced by nothing that runs. That is the
 cost of moving the VM out of this repo, and the plan names it instead of claiming the
-old tests still cover a resource they can no longer see.
+old tests still cover a resource they can no longer see. Three edits land with the
+port so the gate keeps meaning something:
+
+- **Retire `terraform/tests/data_disk_protected.sh`** in the same change that removes
+  the disk block, because it exits `not found` rather than passing vacuously. Its
+  replacement is the `deleteOption: Detach` assertion above.
+- **Retarget `terraform/tests/no_scheduled_stop.sh`.** It keeps guarding
+  `terraform/schedule.tf`, which stays here, but its message should say the stop
+  guard for the VM moved to the template check.
+- **Update `AGENTS.md` and `README.md`**, both of which state that these tests guard
+  the deployed VM. Leaving them is the same drift this phase exists to remove.
 
 There is deliberately no `backup.bicep`. Snapshots are taken by
 `host/bin/oc-snapshot` from inside the VM, which is where retention lands, and an
@@ -787,15 +802,15 @@ in the current context`. Every reader has to move in the same commit:
 | `module jobs` | `accountName`, `queueName` | `:209-210` |
 | top-level outputs | `accountName`, `queueName` | `:255-256` |
 
-`module plane` and `module jobs` are also the two readers of `environment`. So the
-storage removal drags the ACA app modules with it, and Phase 2 cannot land as
-"port the VM modules and delete storage" with the ACA modules still declared. Do one
-of two things, explicitly:
+`module plane` and `module jobs` are also the two modules that read both `storage`
+and `environment`. So the storage removal drags the ACA app modules with it, and
+Phase 2 cannot land as "port the VM modules and delete storage" with the ACA modules
+still declared. Do one of two things, explicitly:
 
 - **Preferred: take the whole ACA surface out here.** Delete `storage.bicep`,
   `aca-storage.bicep`, `environment.bicep`, `plane.bicep`, `jobs.bicep` and
-  `hermes.bicep` with their module calls, plus the `planeIdentity` module call and
-  the four outputs that read them (`planeFqdn`, `workerJobName`,
+  `hermes.bicep` with their module calls, plus the `planeIdentity` and `workerIdentity`
+  module calls and the four outputs that read them (`planeFqdn`, `workerJobName`,
   `storageAccountName`, `queueName`). Move `csh-dev-logs` into its own module, and
   rewire the vault's identity parameters as Phase 7 describes so the surviving
   `csh-dev-hermes-identity` is the VM identity. Measured on 2026-11-04 on exactly
@@ -804,9 +819,10 @@ of two things, explicitly:
   resources: the budget, the vault, the vault role assignment,
   `csh-dev-hermes-identity` and `csh-dev-logs`. The unsupported entry is the role
   assignment's `principalType`, which `what-if` cannot resolve, not a sixth
-  resource. That proves the ACA removal
-  compiles and produces no creates; it does not preview the VM, disk, NIC, NSG or
-  ACR, which are the rest of this phase.
+  resource. That proves the ACA removal compiles and produces no creates; it does
+  not preview the VM, disk, NIC, NSG or ACR, which are the rest of this phase. One
+  delta from that copy: it still declares the `workerIdentity` module, so delete
+  that call too and treat the build as the check for it.
 - **Otherwise: keep the ACA modules and keep `storage.bicep`.** Any shape that
   deletes storage but keeps `plane`, `jobs` or `acaStorage` does not compile.
 
@@ -838,9 +854,11 @@ target:
   the ACA modules are kept, `hermes.bicep` and `jobs.bicep` are declared but not
   evaluated while those params are false, so they produce no creates. Flipping
   either true reintroduces creates, and for Hermes it starts a second Discord
-  gateway. On the preferred path both module calls are gone, so neither flag can
-  produce a resource. The parameters themselves survive until Phase 7 step 4 removes
-  them.
+  gateway. On the preferred path both ACA module calls are gone, so `deployHermes`
+  produces nothing. `deployWorker` still gates the `workerIdentity` module and its
+  `kv-secrets-user` grant, so delete that module call in Phase 2 as well, or flipping
+  the flag creates an identity nobody uses. The parameters themselves survive until
+  Phase 7 step 4 removes them.
 
 **Stop if** `what-if` reports a create for the storage account, `csh-dev-env`, or
 `csh-dev-plane`, or reports modify or delete on the vault or either identity.
