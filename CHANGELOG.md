@@ -77,6 +77,32 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
+  live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on
+  2026-11-03 in preparation for this deployment model. Phase 6 is now a fresh
+  stand-up of Hermes on the VM rather than a cutover, because there is no serving
+  gateway to overlap with and the bot is offline until the phase lands. The
+  inventory drops from six resources to the three that actually remain.
+
+  Four measurement findings changed the plan, and each replaced a claim it had made
+  confidently. A `what-if` of the committed template fails preflight validation with
+  `MaxNumberOfGlobalEnvironmentsInSubExceeded`: the subscription holds six Container
+  Apps environments against a limit of five, so `csh-dev-env` cannot be recreated and
+  the plan no longer keeps `modules/environment.bicep` to do it. Removing only
+  `modules/storage.bicep` produces 11 `BCP057` errors, because four other module calls
+  and two outputs read `storage.outputs`, so Phase 2 now names the whole ACA surface
+  as one atomic removal instead of a one-file edit. The end-state template builds
+  with zero errors and its `what-if` returns `1 to modify, 4 no change`, so the checks
+  no longer demand "no changes": `module budget` never sets `endDate` and ARM
+  recomputes it on every preview. And the deleted `csh-dev-plane-identity` left a
+  `Key Vault Secrets User` grant on the vault whose service principal no longer
+  resolves, which Phase 7 now removes.
+
+  `modules/jobs.bicep` is the Shape-A worker, queue-driven over the storage account
+  this plan deletes, so it is deleted rather than reused as-is. The claim that a
+  Consumption environment has no standing charge is not restated: it remains
+  unverified in `docs/headless-hosting-options.md`, and the meter's scope is what to
+  re-check if the jobs substrate is ever rebuilt.
 - The OS image is built from the ucore-minimal bootc container instead of being
   plain Fedora CoreOS that rebased onto ucore at boot. Fedora publishes no ucore
   VHD, so the previous design applied ucore's bare-metal install recipe to a cloud

@@ -15,8 +15,8 @@ The deployment mechanism changes hands.
 
 ## Who owns `rg-csh-dev` today
 
-Read from Azure DevOps, not assumed. The owner is Bicep, in project
-`AzureAppDev`, repo `csh-dev`, and it is deployed by pipeline.
+Read from Azure DevOps, not assumed. The owner is Bicep, in organization
+`Jacobsens`, project `AzureAppDev`, repo `csh-dev`, and it is deployed by pipeline.
 
 | Fact | Evidence |
 |---|---|
@@ -64,9 +64,9 @@ deployment target, so there is no resource to import and no state to drift.
 | 2 | Vault name | Moot. Bicep already derives the live name |
 | 3 | Purge protection | Turn it on, permanently |
 | 4 | Identity on the VM | Attach `csh-dev-hermes-identity` as the only identity |
-| 5 | Rollback window | Container app stays defined one week plus one restart |
+| 5 | Rollback window | Moot. The operator deleted the app 2026-11-03, so Phase 6 is a fresh stand-up |
 | 6 | ACR role mode | `AbacRepositoryPermissions`, matching the Terraform default |
-| 7 | IaC ownership | Port the VM into `csh-dev` Bicep, retire the ACA modules |
+| 7 | IaC ownership | Port the VM into `csh-dev` Bicep, retire the whole ACA surface |
 | 8 | ADR | Supersede `0001-aca-over-vm.md` with a new ADR in `csh-dev` |
 | 9 | Plan scope | This document, rewritten now |
 | 10 | Egress | No NAT gateway, no static IP. `defaultOutboundAccess: true` |
@@ -112,33 +112,39 @@ There is no storage account in this shape. It was deleted on 2026-11-03, taking
 the three shares and the `workflow-evidence` blobs with it. That removes the
 migration source and the image staging path, so the plan no longer has either.
 
-Gone after this plan: `csh-dev-env`, `csh-dev-logs`, `csh-dev-hermes`, and
-`csh-dev-plane-identity`. Kept: the resource group, the vault,
-`csh-dev-hermes-identity`, and the budget.
+Kept: the resource group, the vault, `csh-dev-hermes-identity`, `csh-dev-logs`, and
+the budget. Already gone, deleted by the operator on 2026-11-03:
+`csh-dev-env`, `csh-dev-hermes`, `csh-dev-plane`, `csh-dev-plane-identity` and
+`cshdevfilesb6lmephspqf2u`. Nothing in this plan deletes a live resource.
 
 ## What already exists
 
-Read with `az resource list -g rg-csh-dev` on 2026-11-03, after the storage
-account deletion. Six entries, five top-level plus one child.
+Read with `az resource list -g rg-csh-dev` on 2026-11-04. Three entries remain,
+down from six, because `csh-dev-env` and `csh-dev-hermes` were deleted on
+2026-11-03 at 03:17Z (activity log, `Microsoft.App/managedEnvironments/delete`,
+Succeeded). An app has no life outside its environment, so deleting the
+environment removed both.
 
 | Resource | Name | Type | After this plan |
 |---|---|---|---|
-| Container Apps Environment | `csh-dev-env` | `Microsoft.App/managedEnvironments` | Delete, one cleanup step |
-| Environment certificate | `csh-dev-env/cf-origin-ultus` | `managedEnvironments/certificates` | Goes with the environment |
-| Container app | `csh-dev-hermes` | `Microsoft.App/containerApps` | Delete after the rollback window |
-| Identity | `csh-dev-hermes-identity` | User-assigned identity | **Keep.** Becomes the VM identity |
+| Log Analytics | `csh-dev-logs` | Workspace | **Keep.** The jobs log sink |
 | Key Vault | `csh-devkvb6lmephspqf2u` | Key Vault | **Keep.** 11 secrets |
-| Log Analytics | `csh-dev-logs` | Workspace | Delete, one cleanup step |
+| Identity | `csh-dev-hermes-identity` | User-assigned identity | **Keep.** Becomes the VM identity |
 
-`csh-dev-plane` and `csh-dev-plane-identity` were already gone before this edit,
-and the storage account went with the shares and the blob container. There is no
+Deleted before this plan started: `csh-dev-env` and `csh-dev-hermes` with the
+environment certificate under it, `csh-dev-plane` and `csh-dev-plane-identity`,
+and the storage account with the three shares and the blob container. There is no
 ACR anywhere in the subscription matching `csh`, so the template creates one.
 
-**The Hermes state is already lost.** `hermes-data` was the only copy, so there
-is nothing to copy in Phase 6 and no rollback of that data. Hermes still reports
-`Running` with no restarts through 2026-11-03 02:00, which means either it keeps
-no durable state on that mount or it has not needed to read one yet. Treat the
-first boot as a fresh start.
+`modules/environment.bicep` still declares `csh-dev-env` and `csh-dev-logs`. That is
+drift to clean up, not something to keep. Phase 7 deletes the module and gives
+`csh-dev-logs` its own declarer, because the environment cannot be recreated (the
+subscription is over the five-environment limit) and leaving the module in place
+makes every deployment fail validation.
+
+**The Hermes state is already lost.** `hermes-data` was the only copy, so there is
+nothing to carry into Phase 6. The process that might have read it is also gone, so
+treat the first boot as a fresh start and let Discord reconnect the gateway.
 
 ## Why replace rather than add
 
@@ -579,9 +585,17 @@ denies inbound from the Internet, and no public IP is attached, so
 
 | Item | Why | Check |
 |---|---|---|
-| Rights on `csh-dev` in `AzureAppDev` | the change lands there | you can open a PR on `main` |
+| Rights on `csh-dev` in `AzureAppDev` | the change lands there | `git ls-remote https://dev.azure.com/Jacobsens/AzureAppDev/_git/csh-dev` returns refs; opening a PR additionally needs write |
 | A service connection that authenticates the pipeline and can assign roles in `rg-csh-dev` | the pipeline deploys twice and the template assigns roles to two principals | `jhl-agent-service-connection` resolves to `sp-azdevops-jhl-agent`, which holds `Contributor` at subscription scope and `User Access Administrator` **on `rg-csh-dev`** |
 | Tailscale tailnet plus a reusable auth key | the only data path | admin console |
+
+The organization is `Jacobsens` and the project is `AzureAppDev`, so the repo URL
+is `https://dev.azure.com/Jacobsens/AzureAppDev/_git/csh-dev`. Earlier versions of
+this plan named the project only, and `AzureAppDev` is not an organization, so
+`https://dev.azure.com/AzureAppDev/...` fails. Read access is measured: the
+`ls-remote` above returns `HEAD` and the branch list from this workstation using
+cached credentials. Write access is not measured, and it is what opening a PR
+needs.
 
 The privilege requirement is already satisfied, and it is narrower than the
 previous version of this plan claimed. Measured:
@@ -618,7 +632,7 @@ the account key.
 
 **Check:** the ADR names 455.64, 242.33 and 200, and `what-if` is explained.
 
-**Expect drift, and require it to be exactly these three creates.** An earlier
+**Expect drift, and require it to be exactly these four creates.** An earlier
 version of this plan said `what-if` should report no changes. It cannot: the
 committed template still declares resources the operator has already deleted, so
 an incremental `what-if` will report creates. That is the honest baseline, not a
@@ -629,11 +643,59 @@ failure:
 | Create `cshdevfilesb6lmephspqf2u` | `modules/storage.bicep` still declares it; deleted 2026-11-03 |
 | Create `csh-dev-plane` | `modules/plane.bicep` still declares it; deleted earlier |
 | Create `csh-dev-plane-identity` | `modules/identity.bicep` still declares it |
+| Create `csh-dev-env` | `modules/environment.bicep` still declares it; deleted 2026-11-03 03:17Z |
 
-**Stop if** `what-if` reports anything outside that table. A fourth create, or any
-modify or delete, means the deployed state differs from what this plan believes,
-and the cost model and the phase ordering were built on a wrong baseline. Three
-creates is the expected answer and the reason Phase 2 removes those modules first.
+`csh-dev-hermes` is not on that list even though `modules/hermes.bicep` still
+declares it, because the module is gated on `deployHermes`
+(`infra/main.bicep:222`), which is false in both the template default (`:21`) and
+`infra/params/dev.bicepparam:48`, and the pipeline pins it false too
+(`pipelines/azure-pipelines.yml:35`). A gated-off module is not evaluated, so it
+produces no create. `modules/jobs.bicep` is inert for the same reason, via
+`deployWorker` (`infra/main.bicep:197`). If anyone sets either flag true before
+Phase 6, the count grows and the stop rule below fires correctly.
+
+**This step cannot pass as things stand, measured on 2026-11-04.** A `what-if` of
+the committed template against `rg-csh-dev` does not return a resource list at all.
+It fails preflight validation:
+
+```
+$ az deployment group what-if -g rg-csh-dev \
+    --template-file infra/main.bicep \
+    --parameters infra/params/dev.bicepparam
+ERROR: InvalidTemplateDeployment ...
+ValidationForResourceFailed - Validation failed for a resource.
+MaxNumberOfGlobalEnvironmentsInSubExceeded - The subscription
+'b44e1a7e-e9e1-4c4d-a9d0-028fb4515f51' cannot have more than 5 Container App
+Environments.
+```
+
+Two independent things are wrong, and only one of them is the quota.
+
+1. The subscription already holds **six** Container Apps environments, so the
+   `Create csh-dev-env` row above can never be satisfied. This is the blocker, and
+   Phase 7 is where it is answered.
+2. The baseline step needs a `PLANE_IMAGE` environment variable that
+   `infra/params/dev.bicepparam:31` reads and that no shell here exports, so the run
+   above only got as far as the template error because the variable was supplied.
+   A fresh reader following step 3 literally hits `Error BCP427: Environment
+   variable "PLANE_IMAGE" does not exist` first. Supply any image URI to get past
+   it, since the value only affects the plane, which is about to be deleted:
+
+   ```
+   $ PLANE_IMAGE=mcr.microsoft.com/azuredocs/containerapps-helloworld:latest \
+       az deployment group what-if -g rg-csh-dev ...
+   ```
+
+**So Phase 1 records the baseline as a documented failure, not a passing check.**
+The honest statement of the baseline is: the template declares four resources the
+operator has deleted, and Azure refuses to preview it because a fifth environment
+would exceed a subscription-wide quota. Store that output with the ADR, and treat
+the four-create table above as what the template intends rather than what the
+command returns.
+
+**Stop if** the failure is anything other than the quota error or the missing
+`PLANE_IMAGE` variable. A different message means the baseline moved and the four
+rows above need re-deriving.
 
 ## Phase 2: port the infrastructure modules
 
@@ -663,12 +725,66 @@ account is already deleted, so `modules/storage.bicep` and every share in it mus
 be removed from the template in the same change, or a pipeline run recreates an
 empty account nobody wants.
 
-**Check:** `bicep build infra/main.bicep` produces no warnings, and
-`az deployment group what-if` reports the VM, disk, NIC, NSG and ACR as the only
-creates.
+**Deleting that one module is not a one-file change, and the plan said it was.**
+Measured with `az bicep build` on a copy of the template with only the storage
+module block removed: **11 errors**, all `BCP057: The name "storage" does not exist
+in the current context`. Every reader has to move in the same commit:
 
-**Stop if** `what-if` reports modify or delete on the vault or either identity,
-or reports a create for the storage account.
+| Reader | What it takes from `storage` | Line |
+|---|---|---|
+| `module acaStorage` | `accountName`, the three share names | `infra/main.bicep:155-158` |
+| `module plane` | `accountName`, `queueName`, `evidenceContainerName` | `:181-183` |
+| `module jobs` | `accountName`, `queueName` | `:209-210` |
+| top-level outputs | `accountName`, `queueName` | `:255-256` |
+
+`module plane` and `module jobs` are also the two readers of `environment`. So the
+storage removal drags the ACA app modules with it, and Phase 2 cannot land as
+"port the VM modules and delete storage" with the ACA modules still declared. Do one
+of two things, explicitly:
+
+- **Preferred: take the whole ACA surface out here.** Delete `storage.bicep`,
+  `aca-storage.bicep`, `environment.bicep`, `plane.bicep`, `jobs.bicep` and
+  `hermes.bicep` with their module calls, plus the `planeIdentity` module call and
+  the four outputs that read them (`planeFqdn`, `workerJobName`,
+  `storageAccountName`, `queueName`). Move `csh-dev-logs` into its own module, and
+  rewire the vault's identity parameters as Phase 7 describes so the surviving
+  `csh-dev-hermes-identity` is the VM identity. Measured on 2026-11-04, that
+  template builds with **zero errors** and its `what-if` returns
+  `1 to modify, 4 no change`: the modify is `csh-dev-monthly` repeatedly dropping an
+  `endDate` that ARM recomputes, and there are no creates. That is the end state
+  Phase 7 was describing, reached in one change instead of two.
+- **Otherwise: keep the ACA modules and keep `storage.bicep`.** Any shape that
+  deletes storage but keeps `plane`, `jobs` or `acaStorage` does not compile.
+
+Prefer the first. The second leaves a template that recreates a storage account the
+operator deleted, which is the thing this phase exists to prevent.
+
+**Check:** `az bicep build --file infra/main.bicep` exits 0, and
+`az deployment group what-if` returns creates for `vm-csh-dev`, `disk-csh-dev-data`,
+`nic-csh-dev` and `nsg-csh-dev-vm` (the Terraform names at
+`terraform/main.tf:27,107,145,193`, which the port keeps), plus the ACR if it lands
+here, and **no create for `cshdevfilesb6lmephspqf2u`, `csh-dev-env`,
+`csh-dev-plane`, `csh-dev-plane-identity` or `csh-dev-hermes`.**
+
+Two measured caveats about that what-if, so the check is not tuned to an impossible
+target:
+
+- **It cannot report "no changes".** `module budget` never sets
+  `properties.timePeriod.endDate`, so ARM returns one and every `what-if` reports
+  `csh-dev-monthly` as a modify of that single field. Measured on the end-state
+  template: `1 to modify, 4 no change`. A modify on the budget alone is expected,
+  and pinning `endDate` in `budget.bicep` is the fix if that noise is unwanted.
+  Passing the start date as `'2026-10-01T00:00:00Z'` instead of `'2026-10-01'` does
+  **not** remove it; that was tried.
+- **`deployHermes` and `deployWorker` must stay false on the alternative path.** If
+  the ACA modules are kept, `hermes.bicep` and `jobs.bicep` are declared but not
+  evaluated while those params are false, so they produce no creates. Flipping
+  either true reintroduces creates, and for Hermes it starts a second Discord
+  gateway. On the preferred path both modules and both params are gone, so this
+  cannot arise.
+
+**Stop if** `what-if` reports a create for the storage account, `csh-dev-env`, or
+`csh-dev-plane`, or reports modify or delete on the vault or either identity.
 
 ## Phase 3: publish the OS image and the container image
 
@@ -741,19 +857,20 @@ exists.
 **Stop if** `rpm-ostree status` names `fedora-coreos`. Wrong image, and every host
 unit assumes ucore packages.
 
-## Phase 6: move Hermes onto the VM
+## Phase 6: stand Hermes up on the VM
 
-There is no state to migrate. `hermes-data` was the only copy of whatever Hermes
-kept there, and it was deleted with the storage account on 2026-11-03.
+Hermes is not being migrated. The operator deleted `csh-dev-hermes` on 2026-11-03
+in preparation for this deployment model, so this phase is a fresh stand-up: there
+is no serving gateway to overlap with, and no cutover race to lose.
 
-That is a data loss, and this plan does not pretend otherwise. What limits it:
-the app still reports `Running`, healthy, one replica, zero restarts through
-2026-11-03 02:00, with no requests served, so it is a gateway process rather than
-a service holding user state. If it did keep a session database there, the next
-Discord conversation starts empty.
+There is no state to carry either. `hermes-data` was the only copy of whatever
+Hermes kept, and it went with the storage account on 2026-11-03. If it held a
+session database, the next Discord conversation starts empty. That is a data loss
+this plan does not pretend otherwise about, and it is moot now: the process that
+would have read that state is gone.
 
-**Order still matters: add before remove.** The container app keeps serving
-Discord until the quadlet has served long enough to trust.
+Because nothing serves in the meantime, the bot is offline until this phase lands.
+That is accepted, not an incident.
 
 1. **Write the quadlet.** Same image pinned by digest
    (`nousresearch/hermes-agent@sha256:55e192fb...`), same args (`gateway run`),
@@ -761,48 +878,130 @@ Discord until the quadlet has served long enough to trust.
    baked into the unit.
 2. **Drop `WORKFLOW_PLANE_URL`.** It points at a deleted app, and the plane is not
    coming back in this plan. Leaving it set means Hermes retries a dead host.
-3. **Mount `/srv/hermes` at `/opt/data`.** The app mounts `/opt/data` today, so
-   the quadlet keeps that path and only the backing store changes.
+3. **Mount `/srv/hermes` at `/opt/data`.** The app mounted `/opt/data`, so the
+   quadlet keeps that path and the backing store becomes the data disk.
 4. **Run it beside OpenCode.** `podman ps` shows both healthy.
-5. **Cut over Discord.** Stop the container app, then watch the bot answer from
-   the VM. Do not delete the app.
-6. **Retire after the window.** One week of real traffic plus one VM restart, then
-   delete `csh-dev-hermes`.
+5. **Confirm Discord answers from the VM.** The bot comes back online once, from
+   the quadlet, with no second gateway anywhere to duplicate replies.
 
 The VM carries exactly one identity, `csh-dev-hermes-identity`, so
-`host/bin/lib-imds.sh:9` resolves without a `client_id` and needs no change. Two
-identities on one VM would make that call ambiguous.
+`host/bin/lib-imds.sh:5-11` sends no `client_id` and needs no change. Attaching a
+second identity breaks that call: Microsoft Learn's IMDS token reference marks
+`client_id` (and `object_id`/`msi_res_id`) as "Required, if your VM has multiple
+user-assigned managed identities". The 11 secrets resolve only while that identity
+is the sole one.
 
-**Check:** a Discord message is answered with the container app stopped, and the
-answer survives a VM restart.
+**Check:** a Discord message is answered from the VM, and the answer survives a VM
+restart.
 
-**Stop if** the bot answers while the container app is still running after
-cutover. Two gateways on one token duplicate replies.
+**Stop if** a second gateway appears. The container app is already deleted, so a
+second one means a stale deployment run recreated it, and that run must be stopped
+rather than tolerated.
 
-## Phase 7: remove the Container Apps deployment
+## Phase 7: retire the Container Apps declarations
 
-Only after Phase 6 step 5.
+Only after Phase 6's check passes, **and only if Phase 2 took the second path.** If
+Phase 2 removed the whole ACA surface as recommended, steps 1 to 6 are already done
+and this phase is a verification, not an edit. Two items still apply either way: the
+`csh-dev-logs` declarer check and the orphaned role assignment cleanup below. The
+steps are kept because the alternative path leaves them outstanding, and because
+they are the record of what "retire the ACA deployment" means.
 
-1. Delete `modules/plane.bicep`, `modules/hermes.bicep`, `modules/jobs.bicep`,
-   `modules/environment.bicep`, and their module
-   calls in `infra/main.bicep`. `modules/storage.bicep` went in Phase 2, since
-   leaving it would recreate the deleted account.
-2. Delete the now-unused parameters in `infra/params/dev.bicepparam`, including
-   `planeCustomHostnames`, `customDomainCertificateId`, the Hermes recipe, and
-   the worker recipe.
-3. Delete the `Plane` and `Hermes` stages from `pipelines/azure-pipelines.yml`.
-4. Delete `scripts/resolve-plane-image.sh` and `scripts/verify-pin.sh` if nothing
+This phase was written when `csh-dev-env` and `csh-dev-hermes` still existed. Both
+were deleted on 2026-11-03, so the steps below delete template code and nothing in
+Azure. Read it that way: it retires declarations that no longer describe reality.
+
+1. Delete `modules/plane.bicep`, `modules/hermes.bicep`, `modules/environment.bicep`,
+   `modules/aca-storage.bicep` and `modules/jobs.bicep`, with their module calls in
+   `infra/main.bicep`. `modules/storage.bicep` goes too, since leaving it recreates
+   the deleted account.
+2. **Why all six go together, measured.** Removing only the storage module produces
+   **11 `BCP057` errors**, because `acaStorage`, `plane`, `jobs` and two top-level
+   outputs all read `storage.outputs`. Removing the environment module breaks
+   `aca-storage.bicep` (`environment.outputs.environmentName`,
+   `infra/main.bicep:154`) and three others that take `environmentId`. A template
+   that references a deleted module does not compile, so this is one atomic change.
+   A template with all six removed builds with **zero errors** (`az bicep build`,
+   measured 2026-11-04).
+3. **Nothing is lost for the jobs work.** `modules/jobs.bicep` is the Shape-A
+   worker: a KEDA `azure-queue` scaler over the storage account this plan deletes,
+   taking `storageAccountName` and `queueName` from `modules/storage.bicep`. It
+   cannot run in this shape, and it is gated on `deployWorker`, which defaults to
+   false (`infra/main.bicep:19`). It is retrievable from git history when the
+   git-transport design replaces it. Deleting it is honest about the fact that it
+   was never working infrastructure.
+4. Delete the now-unused parameters in `infra/params/dev.bicepparam`, including
+   `planeCustomHostnames`, `customDomainCertificateId`, the Hermes recipe and the
+   worker recipe, since `jobs.bicep` no longer references them.
+5. Delete the `Plane` and `Hermes` stages from `pipelines/azure-pipelines.yml`.
+6. Delete `scripts/resolve-plane-image.sh` and `scripts/verify-pin.sh` if nothing
    else calls them.
-5. Delete the Container Apps environment by hand or with a deployment stack,
-   since incremental mode will not remove it. `csh-dev-plane-identity` is already
-   gone, so there is nothing to delete for it.
-6. **Keep the budget at 200** unless the measured actuals land above it. The new
-   shape prices at 183 to 196, so the existing 200 hard budget is correct and
-   changing it would hide a regression.
+7. **Keep the budget at 200** unless the measured actuals land above it. The
+   documented shape prices at 183 to 196, so the existing 200 hard budget is
+   correct and changing it would hide a regression.
 
-**Check:** `what-if` reports no changes after the removal, the resource group
-holds only the resources this plan intends, and the first full month's actual
-lands under 200 without the budget being raised.
+**Two things must be rewired, not just deleted, and this phase did not say so.**
+Removing the ACA modules leaves two survivors pointing at things that go away:
+
+- **`csh-dev-logs` needs a declarer.** It is declared only by
+  `modules/environment.bicep` (`:8`), which step 1 deletes. It billed 0.00 NZD in
+  October while receiving Hermes logs, because the workspace sits inside the free
+  ingestion grant. Move it into its own small module in the same change, or the
+  workspace becomes a live resource with no writer.
+- **`csh-dev-hermes-identity` must become the VM identity.** The VM carries exactly
+  one identity, and `host/bin/lib-imds.sh:5-11` sends no `client_id`, which needs
+  that identity to be the only one attached. `modules/identity.bicep` is reusable for
+  it as-is. Measured: rewiring the ungated Hermes identity into the vault's
+  `planeIdentityPrincipalId` and setting `hermesIdentityPrincipalId` to `''` builds
+  clean, passes `az deployment group validate`, and keeps the live role assignment
+  `4350edc6-fab2-5609-933f-d05413f419de` as a **no change**, because its GUID derives
+  from the principal that survives. Leaving both parameters pointed at that same
+  principal also validates and previews clean, but it declares two role assignments
+  with the same GUID and the same scope, which is redundant rather than meaningful.
+  Pass the principal through one parameter only.
+
+**Check:** `az bicep build --file infra/main.bicep` exits 0,
+`az deployment group validate` exits 0, and `az deployment group what-if` reports
+**no creates**, `csh-dev-monthly` as a modify of the single recomputed `endDate`
+field, and no change to the vault, the vault role
+assignment, `csh-dev-hermes-identity` or `csh-dev-logs`. Measured on the end-state
+template: `1 to modify, 4 no change`.
+
+`what-if` reporting "no changes" is not achievable and must not be the check. It
+cannot see extra resources either: a resource that exists in Azure but is absent
+from the template is ignored, not reported. Pair it with
+`az resource list -g rg-csh-dev` and `az consumption budget list`. Measured
+2026-11-04, the first returns **exactly three** entries, `csh-dev-logs`,
+`csh-devkvb6lmephspqf2u` and `csh-dev-hermes-identity`, and the second returns
+`csh-dev-monthly`. The budget is a subscription-level `Microsoft.Consumption`
+object, so it does not appear in `az resource list`.
+
+**Why the environment is not recreated, which reverses an earlier version of this
+phase.** That version kept `modules/environment.bicep` so the environment would be
+recreated for the jobs work. Measured 2026-11-04, the subscription holds **six**
+Container Apps environments against a limit of five, so a `what-if` fails
+validation with `MaxNumberOfGlobalEnvironmentsInSubExceeded`: "The subscription
+cannot have more than 5 Container Apps Environments."
+
+| Environment | Resource group | Region |
+|---|---|---|
+| `aca-jhl-agent-prod` | `rg-jhl-agent-prod` | East US |
+| `vera-env` | `rg-vera` | Australia East |
+| `aca-jhl-agent-dev` | `rg-jhl-agent-dev-aue` | Australia East |
+| `aca-jhl-agent-prod` | `rg-jhl-agent-prod-aue` | Australia East |
+| `cae-jacobsen-content` | `rg-jacobsen-content` | New Zealand North |
+| `cae-jcs-website-staging` | `rg-jcs-website-staging` | New Zealand North |
+
+Keeping the module would therefore make every deployment fail, not cost nothing
+quietly. One of those six must be retired before the jobs substrate can exist, and
+that decision belongs to the owners of those resource groups.
+
+**One orphan to clean up, measured.** The deleted `csh-dev-plane-identity` left a
+`Key Vault Secrets User` assignment on the vault whose principal
+`cc0e503c-d2e9-4d78-8ca8-746e15fbcf9e` no longer resolves: `az ad sp show` returns
+"This resource does not exist". The surviving assignment belongs to
+`csh-dev-hermes-identity`. Remove the orphan in this phase, since a grant to a
+deleted principal is noise that hides a real one.
 
 **Stop if** the first full month exceeds 200. That means a line in the table above
 was underestimated, and the table is the thing to correct, not the budget.
@@ -814,10 +1013,21 @@ was underestimated, and the table is the thing to correct, not the budget.
    `docs/runbook.md:232-285` against a throwaway disk. Confirm the retention rule
    deleted only snapshots older than 30 days.
 3. **Cost proof.** Read the next month's actuals against the new budget, and
-   confirm the shape lands at 183 to 196 rather than near 246.
+   confirm the shape lands at 183 to 196 rather than near 246. If the jobs plugin
+   has landed by then, expect lower: `docs/headless-hosting-options.md` prices the
+   anchor-plus-jobs shape at 118 to 131 before job hours.
 
 Then file these as work items:
 
+- **Retire one ACA environment so the jobs substrate can exist.** The subscription
+  is at the five-environment limit with six in place, so no new environment can be
+  created. That decision belongs to the owners of those other resource groups. Until
+  it is taken, the ACA jobs design in `docs/headless-hosting-options.md` has nowhere
+  to run.
+- The ACA jobs plugin. It is what makes a 4 GiB anchor sufficient, and it is
+  blocked on the item above and on the shape of `modules/jobs.bicep`: the module
+  present today is queue-driven over the storage account this plan deletes, so it
+  is a starting point rather than the design.
 - Delete the idle gate, or keep it, now that pinning makes it a no-op.
 - The dead `WORKFLOW_PLANE_URL`, which Phase 6 removes rather than points at a
   deleted host.
