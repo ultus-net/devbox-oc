@@ -33,10 +33,13 @@ because they are project state, not code.
    | `pipelines/devbox-os.yml` | manual or scheduled, publishes the OS image |
    | `pipelines/devbox-image.yml` | on `main` when `image/` changes |
 
-3. **Create the Azure service connection.** All three pipelines reference
+3. **Create the Azure service connection.** Both image pipelines reference
    `azureSubscription: devbox-image`. Create a service connection with that exact
-   name, or rename it in the three pipeline files. Use workload identity
+   name, or rename it in both pipeline files. Use workload identity
    federation, not a secret.
+
+   `pipelines/devbox-verify.yml` holds no service connection on purpose, so a
+   fork can run the PR gate unchanged. Do not point it at one.
 
 4. **Grant the service connection least privilege.** It needs:
 
@@ -44,9 +47,18 @@ because they are project state, not code.
    |---|---|---|
    | The resource group | Contributor | create the VM, disk, network, Key Vault |
    | The container registry | `Container Registry Repository Writer` | push and pull, no delete |
-   | The subscription or VM scope | `Virtual Machine Contributor` | the idle gate deallocates the VM |
+   | The resource group | User Access Administrator | create the role assignments Terraform defines |
 
-   The pipeline builds images and applies Terraform. It does not need owner rights.
+   The last row is required and is not obvious. `terraform/main.tf` creates five
+   role assignments unconditionally, and `terraform/schedule.tf` creates a sixth
+   when `schedule_start_utc` is set. Contributor cannot grant any of them, so
+   apply fails with `AuthorizationFailed`. User Access Administrator is the
+   narrow built-in that can grant them. Scope it to the resource group, not the
+   subscription.
+
+   The pipeline does not apply Terraform. Nothing in `pipelines/` invokes it, so a
+   `terraform apply` is a step you run, per `docs/runbook.md`. The role table above
+   is what the apply needs when it runs as the service connection.
 
 ## The one write back to GitHub
 
@@ -88,7 +100,8 @@ tools manage the same resource.
 2. Run `pipelines/devbox-os.yml` once to publish the OS image. Note the managed
    image ID it prints.
 3. Set `os_image_id` in the Terraform variables to that ID.
-4. Apply Terraform, or let the pipeline do it.
+4. Apply Terraform yourself, from a machine with the service connection's
+   credentials. No pipeline file invokes `terraform apply`.
 5. Run `pipelines/devbox-image.yml` to build and promote the container image.
 6. Follow `docs/runbook.md` from the first deploy.
 

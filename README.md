@@ -38,12 +38,20 @@ flowchart LR
 | Layer | Built by | Updated by |
 |---|---|---|
 | OS image (`ucore-minimal`) | `pipelines/devbox-os.yml`, building a VHD from the upstream bootc container pinned by digest | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
-| Container image | `pipelines/devbox-image.yml` into ACR | `podman auto-update` on the `:prod` tag, gated by the idle check |
+| Container image | `pipelines/devbox-image.yml` into ACR | `podman auto-update` on the `:prod` tag, kept only if the health check passes |
 | Data disk | not built | nightly incremental snapshot |
-| Tailnet path | `tailscaled` enabled by Ignition, then `oc-tailnet.service` | both must be up; without them the box is Bastion-only |
+| Tailnet path | `tailscaled` enabled by Ignition, then `oc-tailnet.service` | both must be up; without them the box has no data path |
 
 Fusing the first two would make every OpenCode release an OS rebuild plus a
 reboot. They stay separate on purpose.
+
+The container update is not gated on idleness. `podman-auto-update.timer` fires
+on its own schedule, and it restarts the container when `:prod` moves. The health
+check decides whether a new image is kept, not whether a session is running.
+`CHANGELOG.md` records this as a known gap.
+
+Bastion Developer is not created by this repo. Enable it by hand before you need
+console access, because it is the fallback when the tailnet path is down.
 
 ## The idle contract
 
@@ -110,19 +118,33 @@ Individual suites:
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is published over the tailnet |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk, never a named volume on the OS disk |
 | `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools, rejects a tag, and builds a Gen2 image from the pinned bootc ref |
-| `os/butane/tests/test_bootc_image.sh` | no rebase unit, marker path, or runtime rebase returns to the Ignition config |
-| `os/butane/tests/test_units_have_scripts.sh` | every unit runs a script that is baked into the image |
+| `os/tests/test_build_os_image_one_vhd.sh` | a build that yields more than one VHD aborts instead of uploading an arbitrary file |
+| `os/butane/tests/test_bootc_image.sh` | no rebase unit, marker path, or runtime rebase returns to the Ignition config, in the source and the compiled artifact |
+| `os/butane/tests/test_units_have_scripts.sh` | every unit runs a script that is baked into the image, and the artifact reproduces from its source |
+| `os/butane/tests/test_tailscale_enabled.sh` | `tailscaled` is enabled, so the join has a daemon to talk to |
+| `os/butane/tests/test_units_load_their_env.sh` | every unit loads the env file that defines the variables its script reads |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
 | `terraform/tests/no_public_ip.sh` | no public IP and no internet-allow ingress |
 | `terraform/tests/no_scheduled_stop.sh` | no scheduled hard stop ever returns |
 | `terraform/tests/data_disk_protected.sh` | the data disk stays `prevent_destroy` |
+| `terraform/tests/key_vault_name_derived.sh` | the vault name is derivable from tfvars, without state |
+| `terraform/tests/authkey_is_stored.sh` | the Tailscale auth key reaches Key Vault |
+| `terraform/tests/authkey_name_matches_build.sh` | the auth key's secret name agrees with the Ignition build default |
+| `terraform/tests/password_secret_name_matches.sh` | the password's secret name agrees across Terraform, the script, and Ignition |
+| `terraform/tests/variables_documented.sh` | every variable without a default is documented in the example |
 | `pipelines/tests/test_os_pipeline.sh` | the OS pipeline installs podman, pins its builder, and keeps the Azure credential across `sudo` |
+| `pipelines/tests/test_pipeline_shape.sh` | the PR gate has a `pr:` trigger, no service connection, and installs its own tooling |
+| `tests/docs_complete.sh` | the recovery topics stay written down |
+| `tools/tests/test_oc.sh` | the wake-and-connect wrapper starts the box and waits for health |
+
+`./tests/verify.sh` makes 26 `run` calls over 25 distinct suite files: the
+`no_public_ip` script runs twice, once against a violating fixture and once
+against a clean one. The table above lists all 25 files.
 
 Every guard listed above was checked against a mutation it is meant to catch, and
-the mutation was confirmed to land before the result was trusted. Two have a
-documented negative control: the integrity test rejects a corrupted tarball, and
-the idle gate rejects a forced-allow pin check.
+the mutation was confirmed to land before the result was trusted. One has a
+documented negative control: the integrity test rejects a corrupted tarball.
 
 ## What is not verified here
 
