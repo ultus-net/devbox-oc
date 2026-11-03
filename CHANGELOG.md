@@ -71,6 +71,38 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The OS pipeline dropped `AZURE_CONFIG_DIR` and `HOME` when it crossed the
+  `sudo` boundary. AzureCLI@2 keeps its token there, so on a real agent `az` ran
+  as root with no credential and reported nobody logged in, after a long build.
+  Both variables are preserved now, and `pipelines/tests/test_os_pipeline.sh`
+  guards that with the podman install and the builder digest pin. That guard also
+  stopped matching substrings: it tokenises the logical line, drops the comment,
+  and requires the script path in command position behind `sudo`, so a commented
+  invocation is caught.
+
+- The digest pin accepted `@sha256:` with nothing after it, which resolves to
+  whatever the registry serves. It now requires 64 hex digits, in pure bash
+  because the precondition cases run with a stripped `PATH` with no `grep`.
+
+- `test_bootc_image.sh` read only the Butane source, so a stale or hand-edited
+  `ucore.ign` reached a VM unguarded while the parity check skipped for want of
+  Butane. It now scans both documents, including every scalar in the parsed
+  document rather than three named keys, and the ban list gains `bootc switch`.
+
+- The documentation claimed things the code does not do. `docs/pipelines.md` said
+  all three pipelines carry a service connection and that a pipeline applies
+  Terraform. Neither is true: only the two image pipelines carry one, and
+  `terraform apply` is a manual step. The runbook read the rollback digest from
+  `/srv/devbox/image/prod-digest.txt`, a path nothing writes, because the record
+  lives in the repo. `README.md` listed 14 of the gate's 25 suites, called the
+  container update idle-gated when the health check is what gates it, and claimed
+  a second documented negative control that does not exist.
+
+- The service connection's role table granted Contributor alone, which fails at
+  apply with `AuthorizationFailed`: the configuration creates five role
+  assignments unconditionally, and a sixth when the scheduled start is enabled.
+  It now names User Access Administrator scoped to the resource group.
+
 - Cockpit no longer listens on `0.0.0.0:9090`. ucore-minimal's shipped
   `cockpit.socket` binds every interface, and the service behind it runs
   `privileged` with `/` mounted, so the box had a root-equivalent web console
@@ -320,6 +352,11 @@ All notable changes to this project. One entry per landed change, newest first.
 - All three pipeline files parse as YAML but have never executed.
 - `pipelines/devbox-image.yml` and `pipelines/devbox-os.yml` carry placeholder
   registry and storage account names that must be set before first use.
+- `podman-auto-update.timer` is not gated on idleness. It follows `:prod` on its
+  own schedule and restarts the container when the tag moves, so an update can
+  land during a running session. The health check decides whether the new image
+  is kept, not whether a session is in flight. The design intended an idle gate;
+  none is implemented.
 - The image-integrity suite is skipped in CI, because nothing there extracts the
   tarball it inspects. The sha512 check runs only where someone has one, so a
   corrupted artifact would pass the pipeline gate.

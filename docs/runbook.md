@@ -304,8 +304,12 @@ digest is what tells you what that tag used to point at.
 
 ```sh
 sudo podman auto-update --dry-run          # what would change
-cat /srv/devbox/image/prod-digest.txt      # what prod pointed at
+cat ~/devbox-oc/image/prod-digest.txt      # what prod pointed at, from your clone
 ```
+
+The digest record lives in the repo, not on the host. Read it from your working
+copy, or from the Azure Pipelines run that committed it. Nothing writes it to the
+data disk, so a path under `/srv` would name a file that does not exist.
 
 To pin back to a known-good digest, re-point `:prod` at it and restart the
 quadlet-generated unit:
