@@ -115,6 +115,11 @@ All notable changes to this project. One entry per landed change, newest first.
   claims that need updating. All of it is outstanding work rather than existing
   coverage.
 
+  The shape diagram now shows Azure only, since that is what the plan changes, and
+  tags every resource **new** or **kept** so it matches the inventory table beside
+  it. The previous version omitted the NIC, NSG, subnet, Log Analytics and the
+  network boundary.
+
   The cost section now carries a measured November instead of a projection alone.
   The same CostManagement query with daily granularity shows the storage account at
   15.21 and 15.35 NZD per day on 2026-11-01 and 11-02, 1.84 on the delete day, and

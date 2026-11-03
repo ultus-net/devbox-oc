@@ -87,30 +87,57 @@ design behind a bigger number. The budget does not move.
 
 ## Shape after this plan
 
+Azure only, because that is what this plan changes. Tagged **new** for resources this
+plan creates and **kept** for the three that are already live.
+
 ```mermaid
-flowchart LR
-  subgraph AZ["Azure: rg-csh-dev, newzealandnorth"]
-    subgraph VM["vm-csh-dev (no public IP)"]
-      OC["opencode container<br/>podman quadlet"]
-      HM["hermes container<br/>podman quadlet"]
-      IDLE["oc-idle.timer<br/>pinned, never deallocates"]
+flowchart TB
+  subgraph RG["rg-csh-dev · newzealandnorth · Bicep-owned, one writer"]
+    subgraph NET["network · new"]
+      NSG["nsg-csh-dev-vm · new<br/>deny inbound Internet"]
+      NIC["nic-csh-dev · new<br/>no public IP, no NAT gateway"]
     end
-    DD["disk-csh-dev-data<br/>/srv"]
-    KV["csh-devkvb6lmephspqf2u<br/>11 secrets"]
-    ID["csh-dev-hermes-identity<br/>only identity on the VM"]
-    ACR["ACR (new)<br/>ABAC permissions"]
-    SNAP["incremental snapshots<br/>weekly, 30 day retention"]
+
+    subgraph VMR["vm-csh-dev · new · B2as_v2, 2 vCPU / 8 GiB"]
+      OC["opencode container<br/>loopback only"]
+      HM["hermes container<br/>loopback only"]
+      TOOL["toolbox container<br/>loopback only"]
+      IDLE["oc-idle.timer"]
+      SNPT["oc-snapshot.timer"]
+    end
+
+    OS["os disk P6 · new<br/>64 GiB Premium_LRS"]
+    DD["disk-csh-dev-data E10 · new<br/>128 GiB, /srv, Detach"]
+    ACR["ACR Basic · new<br/>ABAC permissions"]
+    KV["csh-devkvb6lmephspqf2u · kept<br/>11 secrets, purge protection"]
+    LOG["csh-dev-logs · kept<br/>jobs log sink"]
+    ID["csh-dev-hermes-identity · kept<br/>sole identity on the VM"]
   end
-  VM --> DD
-  DD -.->|"weekly"| SNAP
-  VM -.->|"IMDS, single identity"| KV
-  ID -.-> KV
-  VM --> ACR
+
+  BUD["csh-dev-monthly · kept<br/>200 NZD hard budget"]
+  TS["tailnet clients<br/>outside Azure"]
+
+  TS -.->|"HTTPS, tailnet serve<br/>no public ingress"| VMR
+  NSG --- NIC
+  NIC --- VMR
+  VMR --- OS
+  VMR --- DD
+  SNPT -.->|"weekly, 30 day"| DD
+  VMR -.->|"IMDS, no client_id"| KV
+  ID -.->|"Secrets User"| KV
+  VMR -->|"image pull"| ACR
+  VMR -.-> LOG
+  BUD -.-> RG
 ```
 
-There is no storage account in this shape. It was deleted on 2026-11-03, taking
-the three shares and the `workflow-evidence` blobs with it. That removes the
-migration source and the image staging path, so the plan no longer has either.
+Absent on purpose: no storage account, no Container Apps environment, no container
+app. The template declares none of them, so an incremental deployment cannot recreate
+them. Everything the VM runs stays on loopback, and its only outbound traffic is
+HTTPS to the model providers and Discord.
+
+The storage account was deleted on 2026-11-03, taking the three shares and the
+`workflow-evidence` blobs with it. That removes the migration source and the image
+staging path, so the plan no longer has either.
 
 Kept: the resource group, the vault, `csh-dev-hermes-identity`, `csh-dev-logs`, and
 the budget. Already gone, deleted by the operator on 2026-11-03:
