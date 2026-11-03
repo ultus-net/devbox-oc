@@ -56,6 +56,21 @@ All notable changes to this project. One entry per landed change, newest first.
   new shape at 183 to 196 NZD/month with no NAT gateway, no static IP and no
   storage account, and keeps the budget at 200 rather than raising it to cover the
   cost.
+- `docs/headless-hosting-options.md`: whether the OpenCode server can run
+  serverless. It cannot scale to zero on Container Apps, because OpenCode forces
+  SQLite WAL mode and WAL needs shared memory on one host, while Azure Files is the
+  only durable volume Container Apps offers. NFS Azure Files is mountable and still
+  fails, so the locking point is not the blocker. Session state survives a restart,
+  so the blocker is the storage type and not the scale-to-zero. The OpenCode claims
+  carry the script that produced them: WAL forced, the same session id after a
+  restart, 134 to 147 MiB idle RSS, 134 OpenAPI paths, and 401/401/200 for no
+  credentials, a wrong password and the right one. The
+  doc prices a `B2als_v2` anchor plus ACA jobs at 118 to 131 NZD/month as a floor,
+  rising to 133 to 175 at a plausible 50 to 100 job-hours, with break-even against
+  `B2as_v2` at 135 job-hours. It corrects two errors from the first draft: there is
+  no `opencode attach` subcommand, and the API lives at `/api`, not `/global`.
+  Finally it records the live state: `csh-dev-env` and `csh-dev-hermes` were deleted
+  on 2026-11-03, so the jobs substrate must be rebuilt rather than merely kept.
 - Cockpit published over the tailnet on its own HTTPS port, default 8443. ucore
   ships Cockpit and switches firewalld to the server profile so it is reachable,
   so the box would otherwise have a second root-equivalent door from the VNet.

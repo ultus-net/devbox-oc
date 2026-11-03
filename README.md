@@ -166,6 +166,8 @@ Anything requiring credentials is unproven until the first real run.
   subscription.
 - `docs/superpowers/specs/` holds the design and its verified facts.
 - `docs/superpowers/plans/` holds the implementation plan.
+- `docs/headless-hosting-options.md` answers whether the OpenCode server can run
+  serverless, and prices the anchor-plus-jobs shape against the VM-only plan.
 
 ## Status
 
