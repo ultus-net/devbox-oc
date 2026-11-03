@@ -73,7 +73,7 @@ deployment target, so there is no resource to import and no state to drift.
 | 11 | Storage | No storage account. Data disk plus snapshots only |
 | 12 | Backup model | Git and Azure DevOps are the backup. Snapshots are an undo |
 | 13 | Snapshots | Weekly, 30 day retention |
-| 14 | Budget | Stay at 200. The new shape prices at 183 to 192 |
+| 14 | Budget | Stay at 200. The new shape prices at 183 to 196 |
 | 15 | VM size | **`B2as_v2`, 2 vCPU / 8 GiB** as the starting SKU. Container jobs are phase 2, so local subagents stay on the box |
 | 16 | Container jobs | Deferred. Phase 2, after the VM is proven |
 
@@ -244,22 +244,37 @@ ACR bills per day, so it uses 730/24 = 30.42 days, not 30:
 |---|---|---|---|
 | Compute | `Standard_B2as_v2`, 2 vCPU / 8 GiB | 0.0998/hr | 129.48 |
 | Data disk | `E10`, 128 GiB StandardSSD_LRS | 13.7088/mo | 24.36 |
+| Data disk transactions | `E10 LRS Disk Operations`, unbudgeted below | 0.002/10K | 0 to 4 |
 | OS disk | `P6`, 64 GiB Premium_LRS | 10.207/mo | 18.14 |
 | ACR | Basic registry | 0.1666/day | 9.01 |
 | Key Vault | 11 secrets, standard | | 0.03 |
 | Egress | default outbound access | 0 | 0 |
 | NAT gateway | **not deployed** | | 0 |
 | Static IP | **not deployed** | | 0 |
-| **Subtotal** | | | **181.02** |
+| **Subtotal** | | | **181.02 to 185.02** |
 | Snapshots, weekly, 30 day retention | 4.5 runs, 2 to 10 GB changed | | 2.1 to 10.6 |
-| **Total** | | | **183 to 192** |
+| **Total** | | | **183 to 196** |
 
-181.02 is the sum of the rounded rows above. Computed from unrounded values it is
-181.03, and the 0.01 is rounding, not a missing line. The total range is unaffected.
+181.02 is the sum of the rounded rows above with transactions at zero. Computed
+from unrounded values it is 181.03, and the 0.01 is rounding, not a missing line.
 
-Against the 200 NZD budget, that is under it, with 8 to 17 NZD of headroom. The
-low end is the one to plan against: 200 minus 192. The compute is 129 of the 181,
-so the only large lever left is the SKU.
+**Standard SSD bills transactions, and an earlier version of this table did not.**
+`E10 LRS Disk Operations` is 0.002 USD per 10K, so 0.36 NZD per million
+operations. Capacity-only pricing is wrong for this disk type. A dev box doing git
+checkouts, image pulls and builds plausibly runs 1 to 10 million operations a
+month, which is 0.36 to 3.6 NZD. The table says 0 to 4 because that is the honest
+range before measurement, and the low bound of the total is therefore optimistic.
+
+This is the same pricing class as the line that fired the budget, which is why it
+is called out rather than folded into the disk row. The 242.33 NZD was not stored
+bytes either. If the first month's actuals show this line above 5 NZD, the answer
+is to measure IOPS per workload, not to move to Standard HDD: that trades 0.0005
+per 10K for latency on a box whose whole job is interactive builds.
+
+Against the 200 NZD budget, that is under it, with 4 to 17 NZD of headroom. The
+low end is the one to plan against: 200 minus 196, which is the total with disk
+transactions at the top of their range. The compute is 129 of the 181, so the only
+large lever left is the SKU.
 
 ### The VM size, verified
 
@@ -782,7 +797,7 @@ Only after Phase 6 step 5.
    since incremental mode will not remove it. `csh-dev-plane-identity` is already
    gone, so there is nothing to delete for it.
 6. **Keep the budget at 200** unless the measured actuals land above it. The new
-   shape prices at 183 to 192, so the existing 200 hard budget is correct and
+   shape prices at 183 to 196, so the existing 200 hard budget is correct and
    changing it would hide a regression.
 
 **Check:** `what-if` reports no changes after the removal, the resource group
@@ -799,7 +814,7 @@ was underestimated, and the table is the thing to correct, not the budget.
    `docs/runbook.md:232-285` against a throwaway disk. Confirm the retention rule
    deleted only snapshots older than 30 days.
 3. **Cost proof.** Read the next month's actuals against the new budget, and
-   confirm the shape lands at 183 to 192 rather than near 246.
+   confirm the shape lands at 183 to 196 rather than near 246.
 
 Then file these as work items:
 

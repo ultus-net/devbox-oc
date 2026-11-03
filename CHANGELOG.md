@@ -53,7 +53,7 @@ All notable changes to this project. One entry per landed change, newest first.
   six resources that remain, the six impedance points a naive port fails on, the
   actual October cost of 455.64 NZD against a 200 NZD budget, and the decision to
   pin the VM awake so the Hermes Discord gateway stays reachable. It prices the
-  new shape at 183 to 192 NZD/month with no NAT gateway, no static IP and no
+  new shape at 183 to 196 NZD/month with no NAT gateway, no static IP and no
   storage account, and keeps the budget at 200 rather than raising it to cover the
   cost.
 - Cockpit published over the tailnet on its own HTTPS port, default 8443. ucore
