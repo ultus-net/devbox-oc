@@ -1,351 +1,485 @@
-# Deployment plan: first real run
+# Deployment plan: replace the ACA deployment with a Bicep-owned devbox VM
 
-Status: draft, for working through together.
-Baseline: `main` at b13eb1a. Nothing in this repo has ever run against a real
-Azure subscription.
+Status: draft decisions settled, pending review. Baseline: `main` at `b13eb1a`.
+Nothing in this repo has ever run against a real Azure subscription.
 
 Target: `rg-csh-dev` in `newzealandnorth`, subscription
-`b44e1a7e-e9e1-4c4d-a9d0-028fb4515f51` (Pay-As-You-Go). That resource group
-already exists and is in use, which changes this plan from a greenfield build to
-an adoption.
+`b44e1a7e-e9e1-4c4d-a9d0-028fb4515f51` (Pay-As-You-Go).
+
+The shape has changed from "adopt the resource group into Terraform" to
+"replace the Container Apps deployment with a VM, inside the Bicep that already
+owns the resource group". The resource group, the vault and the identities stay.
+The deployment mechanism changes hands.
 
 ---
 
-## What already exists
+## Who owns `rg-csh-dev` today
 
-Read from the subscription with `az resource list -g rg-csh-dev`, which returns
-eight entries: seven top-level resources plus one child. The seven are what the
-portal shows in the screenshot, and the child is the environment's certificate.
+Read from Azure DevOps, not assumed. The owner is Bicep, in project
+`AzureAppDev`, repo `csh-dev`, and it is deployed by pipeline.
 
-| Resource | Name | Type | Disposition |
-|---|---|---|---|
-| Container Apps Environment | `csh-dev-env` | `Microsoft.App/managedEnvironments` | Adopt. Consumption profile, no VNet integration. |
-| Environment certificate | `csh-dev-env/cf-origin-ultus` | `managedEnvironments/certificates` | Child of the environment. Cloudflare Origin CA. |
-| Container app | `csh-dev-hermes` | `Microsoft.App/containerApps` | Migrates to a quadlet on the new VM. |
-| Identity | `csh-dev-hermes-identity` | User-assigned identity | Has Key Vault Secrets User on the vault. |
-| Identity | `csh-dev-plane-identity` | User-assigned identity | Belongs to the plane, not to Hermes. |
-| Key Vault | `csh-devkvb6lmephspqf2u` | Key Vault | Adopt. Holds 11 secrets. |
-| Log Analytics | `csh-dev-logs` | Workspace | Reuse. |
-| Storage account | `cshdevfilesb6lmephspqf2u` | Storage account | Reuse for the OS VHD. |
-| ACR | none in this group | Container registry | **Must be created.** |
+| Fact | Evidence |
+|---|---|
+| Target scope is the existing resource group | `infra/main.bicep`: `targetScope = 'resourceGroup'` |
+| Deployed by pipeline | `pipelines/azure-pipelines.yml`: `az deployment group create --resource-group rg-csh-dev --template-file infra/main.bicep` |
+| Last change | 2026-10-21, PR 1183, `fix(hermes): seed the Discord gate and the model provider key into the profile .env` |
+| The decision it encodes | `docs/decisions/0001-aca-over-vm.md`, status accepted, 2026-10-09 |
 
-The resource group itself is the container for those eight, not an entry in the
-list. There is no ACR anywhere in the subscription matching `csh`, so Phase 1
-creates one.
+What that template declares, all of it in `rg-csh-dev` unless noted:
 
-Storage shares, read separately with `az storage share-rm list`: `hermes-data`
-(Hermes state, migrates to the data disk), `plane-state` and `augur-workspace`
-(not this project's, leave).
+| Module | Declares |
+|---|---|
+| `modules/environment.bicep` | `csh-dev-logs`, `csh-dev-env` |
+| `modules/storage.bicep` | `cshdevfilesb6lmephspqf2u`, shares `plane-state`, `augur-workspace`, `hermes-data` |
+| `modules/keyvault.bicep` | `csh-devkvb6lmephspqf2u`, plus the role assignments |
+| `modules/identity.bicep` | `csh-dev-plane-identity`, `csh-dev-hermes-identity` (when Hermes is on) |
+| `modules/plane.bicep` | `csh-dev-plane` |
+| `modules/hermes.bicep` | `csh-dev-hermes` |
+| `modules/budget.bicep` | `csh-dev-monthly`, 200 NZD hard, alerts at 60 and 100 percent |
 
-### The environment constrains the network plan
+## Two corrections to earlier claims in this session
 
-`csh-dev-env` is a Consumption-only environment with `vnetConfiguration: null`,
-so it owns no subnet and does not collide with the VNet Terraform creates. Its
-static IP is `172.204.116.151`, and its default domain is
-`salmonhill-b7ee3ceb.newzealandnorth.azurecontainerapps.io`, which is the domain
-in Hermes's dead `WORKFLOW_PLANE_URL`. That confirms the URL pointed at an app in
-*this* environment, and the app was deleted while the environment stayed.
+**The vault name is derivable, and I said it was not.** I claimed the vault
+`csh-devkvb6lmephspqf2u` could not be reached by derivation and had to become an
+input variable. That was true only of this repo's Terraform formula,
+`sha256(var.subscription_id)` at `terraform/main.tf:272`. The real derivation is
+Bicep's `uniqueString(resourceGroup().id)` in `infra/modules/keyvault.bicep`. It
+produces 13 characters, so `csh-dev` + `kv` + `b6lmephspqf2u` is 22 characters,
+exactly the live name. The same suffix produces `cshdevfilesb6lmephspqf2u` at 24
+characters. No input variable is needed, and the whole "three suites depend on
+it" branch of the previous plan is dead.
 
-Three consequences for adoption:
+**No import step exists.** I said the resource group needed
+`terraform import azurerm_resource_group.this`. In Bicep the resource group is
+the deployment target, so there is no resource to import and no state to drift.
 
-- Terraform must not manage `csh-dev-env`. It is absent from the configuration
-  and does not need to be there. Leave it unmanaged and it bills only its
-  Consumption usage.
-- The VNet Terraform creates (`vnet-${name_prefix}`, `terraform/main.tf:8`) is
-  independent of the environment, because the environment is not VNet-injected.
-  No address-space negotiation is needed.
-- The environment outlives this migration. Retiring `csh-dev-hermes` does not
-  remove it, so decide separately whether it should be deleted once the last app
-  is gone.
+## Decisions taken
 
-Subscription and vault confirmed with `az group show` and `az keyvault show`.
+| # | Decision | Taken |
+|---|---|---|
+| 1 | Availability of Hermes | Pin the VM awake, 24/7 |
+| 2 | Vault name | Moot. Bicep already derives the live name |
+| 3 | Purge protection | Turn it on, permanently |
+| 4 | Identity on the VM | Attach `csh-dev-hermes-identity` as the only identity |
+| 5 | Rollback window | Container app stays defined one week plus one restart |
+| 6 | ACR role mode | `AbacRepositoryPermissions`, matching the Terraform default |
+| 7 | IaC ownership | Port the VM into `csh-dev` Bicep, retire the ACA modules |
+| 8 | ADR | Supersede `0001-aca-over-vm.md` with a new ADR in `csh-dev` |
+| 9 | Plan scope | This document, rewritten now |
 
-## Corrections to earlier claims in this session
-
-**The resource inventory was wrong twice.** I first listed seven resources and
-omitted `csh-dev-env`, its Cloudflare certificate, and `csh-dev-plane-identity`.
-Correcting that, I then wrote "ten entries" and then "nine", both by counting the
-output in my head instead of asking for the length. Measured with
-`az resource list -g rg-csh-dev --query "length(@)"` the answer is 8: seven
-top-level resources plus one child. The table above is that list, and the only
-row beyond those eight is the ACR that Phase 1 creates.
-
-**Hermes is not broken.** I said it was, because `WORKFLOW_PLANE_URL` points at
-`csh-dev-plane.salmonhill-b7ee3ceb.newzealandnorth.azurecontainerapps.io` and that
-container app no longer exists. The gateway process answers Discord without the
-plane, and you confirmed the bot works. `az containerapp show` reports
-`runningStatus: Running` and `provisioningState: Succeeded`. The dead URL is a
-latent dependency, not an outage: anything routed through the plane is
-unavailable until a plane exists again.
-
-That distinction matters for sequencing. Hermes is a working system, so the
-migration is a cutover with rollback, not a rebuild.
-
----
+Decision 1 is the one that changes the code. Pinning means the idle gate stops
+doing anything useful, and that is a deliberate cost, not an oversight.
 
 ## Shape after this plan
 
 ```mermaid
 flowchart LR
   subgraph AZ["Azure: rg-csh-dev, newzealandnorth"]
-    subgraph VM["vm-<prefix> (no public IP)"]
+    subgraph VM["vm-csh-dev (no public IP)"]
       OC["opencode container<br/>podman quadlet"]
       HM["hermes container<br/>podman quadlet"]
-      IDLE["oc-idle.timer"]
+      IDLE["oc-idle.timer<br/>pinned, never deallocates"]
     end
-    DD["data disk /srv"]
-    KV["Key Vault<br/>csh-devkv..."]
-    ACR["ACR (new)"]
-    ST["storage account<br/>VHD + evidence"]
-    CA["csh-dev-hermes<br/>container app: retired last"]
+    DD["disk-csh-dev-data<br/>/srv"]
+    KV["csh-devkvb6lmephspqf2u<br/>11 secrets"]
+    ID["csh-dev-hermes-identity<br/>only identity on the VM"]
+    ACR["ACR (new)<br/>ABAC permissions"]
+    ST["cshdevfilesb6lmephspqf2u<br/>OS VHD only"]
   end
   VM --> DD
-  OC -.->|"IMDS"| KV
-  HM -.->|"IMDS"| KV
+  VM -.->|"IMDS, single identity"| KV
+  ID -.-> KV
   VM --> ACR
-  CA -.->|"until cutover"| KV
+  ST -.->|"image build"| ACR
 ```
 
-Two quadlets on one VM, one identity, one vault. Hermes keeps its Discord
-surface and gains the data disk. The container app is retired only after the
-quadlet has served for a decided period.
+Gone after this plan: `csh-dev-plane`, `csh-dev-env`, `csh-dev-logs`, and the
+`hermes-data` share. Kept: the resource group, the vault, both identities, the
+storage account, and the budget.
 
-## The constraint that shapes everything: idle
+## What already exists
+
+`az resource list -g rg-csh-dev --query "length(@)"` returns 8 entries: seven
+top-level resources plus one child. The seven are what the portal shows.
+
+| Resource | Name | Type | After this plan |
+|---|---|---|---|
+| Container Apps Environment | `csh-dev-env` | `Microsoft.App/managedEnvironments` | Delete, one cleanup step |
+| Environment certificate | `csh-dev-env/cf-origin-ultus` | `managedEnvironments/certificates` | Goes with the environment |
+| Container app | `csh-dev-hermes` | `Microsoft.App/containerApps` | Delete after the rollback window |
+| Identity | `csh-dev-hermes-identity` | User-assigned identity | **Keep.** Becomes the VM identity |
+| Identity | `csh-dev-plane-identity` | User-assigned identity | Retire with the plane |
+| Key Vault | `csh-devkvb6lmephspqf2u` | Key Vault | **Keep.** 11 secrets |
+| Log Analytics | `csh-dev-logs` | Workspace | Delete, one cleanup step |
+| Storage account | `cshdevfilesb6lmephspqf2u` | Storage account | **Keep** for the OS VHD |
+
+The resource group is the container for those eight, not an entry in the list.
+There is no ACR anywhere in the subscription matching `csh`, so the template must
+create one.
+
+Shares, read with the ARM API: `hermes-data` is the migration source and is
+deleted after cutover. `plane-state` and `augur-workspace` belong to the plane
+and go with it. All three are `TransactionOptimized`, 16 GiB quota, SMB.
+
+## Why replace rather than add
+
+The VM must live in the same resource group as the vault and the identity. Two
+tools writing that group is a real hazard, and the vault is where it lands.
+
+```mermaid
+flowchart LR
+  B["csh-dev Bicep<br/>every pipeline run"] -->|"re-PUT declared properties"| V["csh-devkvb6lmephspqf2u"]
+  T["devbox-oc Terraform<br/>terraform apply"] -->|"declares the same properties"| V
+  V --> R["last writer wins:<br/>tags, publicNetworkAccess,<br/>softDeleteRetentionInDays"]
+```
+
+Bicep declares `publicNetworkAccess: 'Enabled'`, `softDeleteRetentionInDays: 7`
+and no `tags` on the vault. The Terraform at `terraform/main.tf:119-142` declares
+all three. Whichever runs last resets the other, and neither plan expresses the
+other's intent. The storage account and the three shares have the same problem.
+
+One writer per resource group is the rule that removes this class of bug. Since
+Bicep already holds the group and the vault, the VM goes into Bicep.
+
+## The constraint that decides the cost model: idle
 
 `oc-idle-check` deallocates the VM after 45 idle minutes. Its five busy signals
 are all OpenCode API endpoints (`host/bin/oc-idle-check:93-121`), and its
 container check asks only about `opencode.service`
 (`host/bin/oc-idle-check:123-125`).
 
-Hermes is a Discord gateway. It holds a websocket and does work when a message
-arrives, including at 3am. The idle gate cannot see any of that. So the moment
-Hermes moves onto this VM, the box will deallocate under a live bot and the bot
-will stop answering.
+Hermes is a Discord gateway. It holds a websocket and answers at any hour. None
+of those five signals can see it. Move Hermes onto the box unchanged and the box
+deallocates under a live bot.
 
-Three ways out, and this is decision 1:
+Decision 1 was pin the box awake, so this plan pins it and pays for it. The
+mechanism already exists: `host/bin/oc-idle-check:47-50` exits early when
+`/var/lib/oc-idle/pin` exists, and `/var/lib` persists across reboots. Ignition
+creates that file at first boot.
 
-| Option | Effect | Cost |
-|---|---|---|
-| A. Pin the box awake | Hermes always available; idle gate defeated | ~63 USD/month, loses the main cost lever |
-| B. Add a sixth signal | Gate watches the Hermes process or its last-activity stamp | Code change in `oc-idle-check`, new suite |
-| C. Keep Hermes on the container app | Bot stays always-on, VM stays cheap | Hermes does not move; contradicts the goal |
+Two honest notes about pinning:
 
-I recommend **B**, with the pin as the interim. A Discord gateway shows liveness
-in its own logs, so a stamp file refreshed on activity is the same pattern the
-OpenCode signals already use. It is a real code change and needs its own PR.
+- **The scheduled start becomes pointless.** With the box never deallocating,
+  the Logic App in `terraform/schedule.tf:8` and its role assignment at
+  `terraform/schedule.tf:21` wake a machine that is always awake. They are not
+  ported.
+- **The idle gate becomes dead code that still runs** every five minutes. Keeping
+  it is deliberate: if Hermes ever leaves the box, removing one file restores
+  cost control. Deleting it is a follow-up item, not part of this change.
 
-Do not pick A by default. It silently converts a cost-optimised design into a
-fixed-cost one.
+## What the actuals say
 
----
+October, `rg-csh-dev`, ActualCost, grouped by resource and meter, in NZD:
+
+| Line | NZD |
+|---|---|
+| Azure Files `Standard Transactions` | 242.33 |
+| Azure Files `LRS Write Operations` | 63.09 |
+| `csh-dev-hermes` compute, all meters | 97.66 |
+| `csh-dev-plane` compute, all meters | 39.67 |
+| Azure Files reads, protocol, stored | 12.91 |
+| `csh-devkvb6lmephspqf2u` | 0.03 |
+| **Total** | **455.64** |
+
+Against the live budget of 200 NZD hard, that is 2.3 times over, with alerts
+already configured at 60 and 100 percent.
+
+Two conclusions, both measured:
+
+- **The transaction line is not stored bytes.** `LRS Data Stored` is 0.07 NZD.
+  The 242.33 NZD is SMB mount churn: at file-service scope the `Transactions`
+  metric runs at about 136,000 per hour, every hour, and the `ApiName` breakdown
+  is dominated by `Create`, `Close` and `QueryInfo`. Moving Hermes state to the
+  local data disk removes Hermes' share of that class. I cannot state a number
+  for Hermes alone, because the `FileShare` dimension returns `<All>` at
+  file-service scope, so the saving is a prediction to verify after cutover, not
+  a claim.
+- **The budget must move in the same change.** A 24/7 `Standard_B2as_v2` is
+  0.0998 USD/hour, about 130 NZD/month at 1 USD = 1.7773 NZD. That alone is most
+  of the current soft threshold. Leaving the budget at 200 guarantees another
+  false alarm.
+
+## The impedance points, worked out
+
+This is where a naive port fails. Each was checked against the file it concerns.
+
+### 1. The identity is gated on Hermes being deployed
+
+`infra/main.bicep` creates the Hermes identity inside
+`module hermesIdentity ... = if (deployHermes)`. Retiring the container app sets
+`deployHermes=false`, and the identity the VM now depends on would be deleted
+with it. The section that removes the app must not remove the identity.
+
+**Fix:** move the identity out of the `deployHermes` condition and give it its
+own module call with no gate, before the VM module consumes `identityId`. The
+resource name `csh-dev-hermes-identity` must not change, because that name is in
+the live role assignment.
+
+### 2. The `hermes-data` share is also gated on `deployHermes`
+
+`infra/modules/storage.bicep` declares `hermesShare ... if (deployHermes)`.
+Incremental mode leaves undeclared resources alone, so dropping the app does not
+drop the share. That is what makes the rollback window possible: the container
+app keeps writing its state while the VM is proven.
+
+**Fix:** leave the share in place through the cutover, then delete it explicitly,
+either by hand or through a deployment stack. Do not assume the template removal
+deletes it.
+
+### 3. Ignition cannot be rendered inside the template
+
+`os/butane/build.sh:9` requires `VAULT_NAME`, `ACR_NAME`, `DISK_ID`, `RG`,
+`SUBSCRIPTION_ID` and `SSH_PUBKEY`, and substitutes them into `ucore.ign`. The
+vault and storage names come from `uniqueString()`, which is an ARM function with
+no faithful offline equivalent, so the build script cannot reproduce them.
+
+**Fix:** two-stage deployment in one pipeline run.
+
+1. Stage one deploys network, disk and ACR, and outputs the disk resource id.
+2. The pipeline builds `ucore.ign` from those outputs.
+3. Stage two deploys the VM with `customData` as a parameter.
+
+`loadFileAsBase64` has a 96 KB limit, and the current `os/butane/ucore.ign` is
+18,569 bytes, about 24.2 KB base64, so it fits. Use a generated parameters file
+rather than an inline argument, because the base64 will not survive shell
+quoting at that size.
+
+**Stop if** the Ignition grows past roughly 70 KB, because base64 plus JSON
+escaping starts crowding the limit.
+
+### 4. The OS image id is produced by this repo's pipeline
+
+`os/build-os-image.sh:108` prints the image id and
+`pipelines/devbox-os.yml:15-17` still names `rg-devbox-oc`,
+`stdevboxocimages` and `westeurope`. The image is built by `devbox-oc`, so the
+Bicep cannot compute the id. It becomes a required parameter with no default, so
+a deploy without it fails instead of booting a stale image.
+
+Keep `os/build-os-image.sh:77,80` and the `--bootc-default-fs ext4` argument.
+Keep the `sha256sum` provenance line at `:96`.
+
+### 5. ACR role mode uses ARM enum names, not CLI names
+
+`az acr create --role-assignment-mode` takes `rbac` or `rbac-abac`. The Bicep
+property `roleAssignmentMode` takes `AbacRepositoryPermissions` or
+`LegacyRegistryPermissions`. Using the CLI spelling in Bicep validates and then
+fails at deploy.
+
+**Fix:** set `AbacRepositoryPermissions` explicitly, and grant the VM identity
+`Container Registry Repository Reader` (`b93aa761-3e63-49ed-ac28-beffa264f7ac`).
+Do not grant `AcrPull` (`7f951dda-4ed3-4680-a7ca-43fe172d538d`), which ABAC mode
+ignores.
+
+### 6. Egress costs money while the box is deallocated
+
+The Terraform subnet sets `default_outbound_access_enabled = false`
+(`terraform/main.tf:23`), so an explicit egress method is mandatory, and it chose
+a NAT gateway plus a static public IP (`terraform/main.tf:68-77`).
+
+Those bill by the hour whether or not the VM is running. The retail API prices a
+standard NAT gateway at 0.045 USD/hour and a static IP at 0.006 USD/hour, so
+roughly 37 USD, about 66 NZD, per month with the VM stopped. That is real money
+against a 200 NZD budget and it buys nothing while the box is pinned anyway.
+
+The retail API returns NAT gateway pricing in the `Global` region only, with no
+`newzealandnorth` row, so treat 0.045 as indicative and confirm against the
+invoice. Simpler alternative to evaluate at implementation: leave
+`defaultOutboundAccess` at its default for this subnet, which removes both
+charges. Verify against the subscription's March 2026 private-subnet default
+before relying on it.
 
 ## Phase 0: what you hold
 
 | Item | Why | Check |
 |---|---|---|
-| `rg-csh-dev` ownership | adoption | `az group show -n rg-csh-dev` |
-| Role-grant rights at RG scope | Terraform declares 5 role assignments unconditionally plus a 6th with the schedule (`terraform/main.tf:213,241,248,254,288`, `terraform/schedule.tf:21`) | you can grant User Access Administrator |
-| Tailscale tailnet + reusable auth key | only data path | admin console |
-| Hermes Discord app credentials | already in the vault | `DISCORD-BOT-TOKEN` present |
-| `hermes-data` share contents | migration source | you have read access to the share |
+| Rights on `csh-dev` in `AzureAppDev` | the change lands there | you can open a PR on `main` |
+| Rights to grant roles at RG scope | the template assigns roles to two principals | you can grant User Access Administrator |
+| Tailscale tailnet plus a reusable auth key | the only data path | admin console |
+| `hermes-data` read access | migration source | `Storage File Data SMB Share Reader` or the account key |
+| Azure DevOps service connection | the pipeline authenticates twice | `jhl-agent-service-connection` present |
 
-`hermes-data` is an Azure Files share. Reading it needs
-`Storage File Data SMB Share Reader` or an account key. My current identity has
-neither, which is why the migration needs you for that step.
+`hermes-data` is an Azure Files share. My identity has neither the SMB share role
+nor the account key, so the state copy in Phase 6 is yours or needs a grant.
 
-## Phase 1: adopt the resource group, create only what is missing
+## Phase 1: establish the baseline and supersede the ADR
 
-1. **Make the vault name an input.** Terraform derives
-   `kv-${name_prefix}-${sha256(subscription)[:n]}` (`terraform/main.tf:272`).
-   With `name_prefix = "csh-dev"` that computes to `kv-csh-dev-b9bed3f8`, which
-   is not `csh-devkvb6lmephspqf2u`. The existing vault cannot be reached by the
-   derivation, so `local.key_vault_name` becomes a variable with the existing
-   name as its value.
+1. **Record the actuals** in the new ADR: 455.64 NZD against the 200 hard budget.
+   That is the fired revisit trigger in `0001-aca-over-vm.md`, which lists
+   "sustained mostly-active load pushes both apps past the hard budget alert".
+2. **Write `docs/decisions/0002-vm-over-aca.md`** in `csh-dev`, citing 0001 as
+   superseded, with the measured numbers and the accepted cost of pinning.
+3. **Run `az deployment group what-if`** on the current template and store the
+   output with the ADR. This is the record of what the baseline actually is.
 
-   This is a code change with three dependants:
-   `terraform/tests/key_vault_name_derived.sh`,
-   `terraform/tests/authkey_name_matches_build.sh`, and
-   `terraform/tests/password_secret_name_matches.sh`. It ships as its own PR.
+**Check:** the ADR names 455.64, 242.33 and 200, and `what-if` reports no changes
+on an unchanged template.
 
-2. **Import the resource group** before the first plan:
-   `terraform import azurerm_resource_group.this /subscriptions/b44e1a7e-.../resourceGroups/rg-csh-dev`.
-   Without this the plan tries to create a group that exists.
+**Stop if** `what-if` reports changes on an unchanged template. That means the
+committed Bicep does not match the deployed state, and the whole plan is built on
+a false baseline.
 
-3. **Create the ACR.** `az acr create -n <name> -g rg-csh-dev --sku Basic`,
-   with `acr_resource_group = "rg-csh-dev"` and `acr_name` set. Choose the role
-   mode deliberately: `acr_abac_enabled` decides whether the pull identity needs
-   `Container Registry Repository Reader` or `AcrPull` (`terraform/main.tf:275-284`).
+## Phase 2: port the infrastructure modules
 
-4. **Decide the vault's purge protection.** The existing vault has
-   `purgeProtection: null` while `terraform/main.tf:138` sets
-   `purge_protection_enabled = true`. Importing will show this as a change that
-   Azure cannot apply in the other direction: purge protection cannot be turned
-   off once on. Set the Terraform value to match reality, or accept that the
-   plan reports a permanent diff.
+New modules in `csh-dev/infra/modules`, ported from the Terraform that already
+encodes these invariants. Each invariant keeps a guard, because a rule with no
+reader is a rule that drifts.
 
-5. **Service connection** named `devbox-image`, with Contributor, Container
-   Registry Repository Writer, and User Access Administrator at RG scope.
+| New module | Ports from | Invariant to keep |
+|---|---|---|
+| `network.bicep` | `terraform/main.tf:7-117` | No public IP on the NIC; inbound deny from Internet |
+| `disk.bicep` | `terraform/main.tf:192-204` | 128 GiB `StandardSSD_LRS`, must survive a VM rebuild |
+| `acr.bicep` | Phase 1 of the old plan | ABAC mode, Basic SKU |
+| `vm.bicep` | `terraform/main.tf:144-210` | ucore image, Ignition custom data, user-assigned identity only |
+| `roles.bicep` | `terraform/main.tf:241-292` | KV Secrets User, self power, disk snapshot, ACR pull |
 
-**Check:** `terraform plan` shows no create for the resource group or the vault,
-and no destroy of anything.
+Compose them in `infra/main.bicep` after the existing modules.
 
-**Stop if** the plan wants to replace the vault. That is the 11 secrets.
+Rename nothing that exists. The vault name, storage account, share names and both
+identity names are referenced by live role assignments and by the running container
+app; a rename is an outage, not a refactor.
 
-## Phase 2: publish the OS image
+**Check:** `bicep build infra/main.bicep` produces no warnings, and
+`az deployment group what-if` reports the VM, disk, NIC, NSG and ACR as the only
+creates.
 
-Unchanged from the merged runbook, with the adopted names.
+**Stop if** `what-if` reports modify or delete on the vault, the storage account
+or either identity.
+
+## Phase 3: publish the OS image and the container image
+
+Unchanged from this repo, with the adopted names.
 
 1. Set `resourceGroup: rg-csh-dev` and `storageAccount: cshdevfilesb6lmephspqf2u`
-   in `pipelines/devbox-os.yml`. Leave the builder digest pinned.
-2. Run the pipeline. Record the image ID, the VHD sha256, and
+   in `pipelines/devbox-os.yml:15-16`.
+2. Run the OS pipeline. Record the image id, the VHD sha256, and
    `az image show -n <name> -g rg-csh-dev --query hyperVGeneration`.
+3. Set `acrName` in `pipelines/devbox-image.yml:9` to the new registry, and run
+   it before the first boot, because `host/quadlet/opencode.container:17` points
+   at `:prod`, which does not exist until this phase.
 
-**Check:** image ID matches `^/subscriptions/.+/providers/Microsoft.Compute/images/.+$`
-and `hyperVGeneration` is `V2`.
+**Check:** image id matches `^/subscriptions/.+/providers/Microsoft.Compute/images/.+$`,
+`hyperVGeneration` is `V2`, and `az acr repository show-tags` lists `prod`.
 
 **Stop if** the builder fails. Likely causes, in order: podman storage not shared
-with the builder, bootc ref not in local storage, missing declared root
-filesystem (handled by `--bootc-default-fs ext4`, `os/build-os-image.sh:77,80`).
+with the builder container, bootc ref not in local storage, missing declared root
+filesystem, which `--bootc-default-fs ext4` at `os/build-os-image.sh:77,80` covers.
 
-## Phase 3: build and promote the container image
+## Phase 4: deploy the VM, two stages
 
-Do this before the first boot. The VM is created running, and its quadlet points
-at `:prod` (`host/quadlet/opencode.container:17`), which does not exist until
-this phase.
+1. **Stage one:** deploy network, disk and ACR. Capture the disk resource id from
+   the deployment output.
+2. **Build Ignition** with the stage-one outputs plus the OS image id:
+   `./os/butane/build.sh` in this repo.
+3. **Stage two:** deploy the VM with `customData` from the generated parameters
+   file. Pin `imageReference.id` to the Phase 3 image id as a required parameter.
 
-1. Run `pipelines/devbox-image.yml` against the new ACR.
-2. Confirm `:prod` exists and `image/prod-digest.txt` holds one 64-hex digest.
+**Check:** `grep -c placeholder os/butane/ucore.ign` returns 0, and the deployed
+VM has no public IP: `az vm show -n vm-csh-dev -g rg-csh-dev --query
+"{nic:networkProfile.networkInterfaces[0].id}"` then confirm the NIC has no
+`publicIpAddress` block.
 
-**Check:** `az acr repository show-tags -n <acr> --repository devbox` lists the
-sha tag and `prod`.
+**Stop if** the VM resource is recreated on a later apply. Bicep re-applies all
+properties on redeploy, and a changed `customData` rolls the VM. That is safe
+only because the data disk is a separate resource, and it is not safe until the
+disk is verified unattached to the OS lifecycle.
 
-## Phase 4: generate Ignition with the adopted names
-
-1. `terraform -chdir=terraform init`, then decide the state backend.
-2. Export the runbook values. `VAULT_NAME` is now
-   `csh-devkvb6lmephspqf2u` directly, not a console derivation.
-3. `./os/butane/build.sh`.
-
-**Check:** `grep -c placeholder os/butane/ucore.ign` returns 0. The plan-time
-precondition at `terraform/main.tf:183` asserts the same.
-
-## Phase 5: apply
-
-1. `terraform -chdir=terraform plan -out=tfplan`.
-2. Read the plan for: no public IP, the data disk protected, `os_image_id` equal
-   to the Phase 2 ID, and no replacement of the vault or the resource group.
-3. Apply.
-
-**Check:** the box deallocates itself after 45 idle minutes. That is the idle gate
-and the cost model both working.
-
-## Phase 6: verify the boot
+## Phase 5: verify the boot
 
 ```
 ssh core@devbox "sudo rpm-ostree status"
 ssh core@devbox "systemctl is-active tailscaled oc-secrets oc-tailnet opencode"
 ssh core@devbox "systemctl is-enabled tailscaled"
 ssh core@devbox "sudo podman ps --format '{{.Names}} {{.Status}}'"
+ssh core@devbox "test -e /var/lib/oc-idle/pin && echo pinned"
 ```
 
-**Check:** the booted deployment names `ucore-minimal`, all four units active,
-`tailscaled` enabled, the container healthy.
+**Check:** the booted deployment names `ucore-minimal`, all four units are
+active, `tailscaled` is enabled, the container is healthy, and the pin file
+exists.
 
 **Stop if** `rpm-ostree status` names `fedora-coreos`. Wrong image, and every host
 unit assumes ucore packages.
 
-## Phase 7: connect, and confirm one door
+## Phase 6: migrate Hermes onto the VM
 
-1. `opencode pair --url https://devbox.<tailnet>.ts.net`, and the TUI.
-2. Cockpit at `https://devbox.<tailnet>.ts.net:8443`.
+A migration, because Hermes works today. `az containerapp show` reports
+`runningStatus: Running`, `provisioningState: Succeeded`, revision
+`csh-dev-hermes--0000008`.
 
-**Check:** the TUI runs a command, Cockpit loads over the tailnet,
-`nc -z 127.0.0.1 9090` succeeds on the host, and there is no public IP.
+**Order matters: add before remove.** The container app keeps serving Discord
+until the quadlet has served long enough to trust.
 
-## Phase 8: migrate Hermes onto the VM
+1. **Move the state.** Copy `hermes-data` to `/srv/hermes` on the data disk. The
+   app mounts `/opt/data` today, so the quadlet keeps that path and only the
+   backing store changes.
+2. **Write the quadlet.** Same image pinned by digest
+   (`nousresearch/hermes-agent@sha256:55e192fb...`), same args
+   (`gateway run`), same `WORKFLOW_PLANE_URL`, and the two secrets fetched from
+   Key Vault by the `oc-secrets` pattern rather than baked into the unit. The VM
+   carries exactly one identity, `csh-dev-hermes-identity`, so
+   `host/bin/lib-imds.sh:9` resolves without a `client_id` and needs no change.
+   Two identities on one VM would make that call ambiguous.
+3. **Run it beside OpenCode.** `podman ps` shows both healthy.
+4. **Cut over Discord.** Stop the container app, then watch the bot answer from
+   the VM. Do not delete the app.
+5. **Retire after the window.** One week of real traffic plus one VM restart, then
+   delete `csh-dev-hermes`, then the `hermes-data` share.
 
-This is the phase that was not in the previous plan. It is a migration, because
-Hermes currently works.
+**Check:** a Discord message is answered with the container app stopped, and the
+answer survives a VM restart.
 
-**Order matters: add before remove.** The container app stays up and serving
-Discord until the quadlet has run long enough to trust.
+**Stop if** the bot answers while the container app is still running after
+cutover. Two gateways on one token duplicate replies.
 
-1. **Decide idle handling first.** Option B from the constraint table: add a
-   signal to `oc-idle-check` so Hermes activity keeps the box up. Its own PR,
-   with a suite that proves the gate no longer deallocates under activity.
-   Interim: pin the box awake, and accept the cost for the migration window.
+## Phase 7: remove the Container Apps deployment
 
-2. **Move the state.** Copy `hermes-data` from the Azure Files share to
-   `/srv/hermes` on the data disk. The container mounts `/opt/data` today
-   (`properties.template.containers[0].volumeMounts`), so the quadlet keeps that
-   mount path and only the backing store changes.
+Only after Phase 6 step 5.
 
-3. **Write the quadlet.** Same image, pinned by the digest currently deployed
-   (`nousresearch/hermes-agent@sha256:55e192fb...`), same args (`gateway run`),
-   same four env vars. The two secrets come from Key Vault by the existing
-   `oc-secrets` pattern, not from the quadlet. Reuse `csh-dev-hermes-identity`
-   or give the VM identity its own grant; do not create a third identity.
+1. Delete `modules/plane.bicep`, `modules/hermes.bicep`, `modules/jobs.bicep`,
+   `modules/aca-storage.bicep`, `modules/environment.bicep`, and their module
+   calls in `infra/main.bicep`.
+2. Delete the now-unused parameters in `infra/params/dev.bicepparam`, including
+   `planeCustomHostnames`, `customDomainCertificateId`, the Hermes recipe, and
+   the worker recipe.
+3. Delete the `Plane` and `Hermes` stages from `pipelines/azure-pipelines.yml`.
+4. Delete `scripts/resolve-plane-image.sh` and `scripts/verify-pin.sh` if nothing
+   else calls them.
+5. Delete `csh-dev-plane-identity` and the environment by hand or with a
+   deployment stack, since incremental mode will not remove them.
+6. **Raise the budget** in `modules/budget.bicep` to match the pinned cost, in the
+   same PR.
 
-4. **Run it beside OpenCode.** Both quadlets, one VM, `podman-restart.service`
-   already enabled. Confirm `podman ps` shows both healthy.
+**Check:** `what-if` reports no changes after the removal, the resource group
+holds only the resources this plan intends, and the budget amount reflects a
+24/7 VM.
 
-5. **Cut over Discord.** Stop the container app, watch the bot answer from the
-   VM. Keep the app's definition (do not delete) for the rollback window.
+**Stop if** the budget change lands after the removal. A removal that lowers cost
+and a pin that raises it must not straddle a month boundary separately.
 
-6. **Retire after a decided period.** Delete `csh-dev-hermes` only after the
-   quadlet has served through at least one real workload and one VM restart.
+## Phase 8: prove recovery, then close the gaps
 
-**Check:** a Discord message gets an answer with the container app stopped, and
-the answer survives a VM restart with the box woken by `oc`.
-
-**Stop if** the bot answers while the container app is still running after the
-cutover. That means two gateways are live on one token, which Discord permits but
-which will duplicate replies.
-
-## Phase 9: prove recovery, then close the gaps
-
-1. **Rebuild proof.** Apply again, confirm the data disk reattaches and `/srv`
-   survives, including `/srv/hermes`.
-2. **Idle proof.** Leave idle past the threshold, confirm deallocation and that
-   `oc` wakes it. With Hermes on the box, this now proves the idle signal too.
-3. **Snapshot proof.** Run `oc-snapshot`, then the restore drill at
+1. **Rebuild proof.** Redeploy the VM, confirm `/srv` returns with `/srv/hermes`.
+2. **Snapshot proof.** Run `oc-snapshot`, then the restore drill at
    `docs/runbook.md:232-285` against a throwaway disk.
+3. **Cost proof.** Read the next month's actuals against the new budget, and
+   confirm the Files transaction line falls as predicted.
 
-Then file, as work items: the plan's two sequencing defects if not resolved here,
-the non-idle-gated `podman auto-update`, the CI-skipped integrity suite, and
-whatever `terraform plan` reveals that `validate` cannot.
+Then file these as work items:
 
----
-
-## Decisions
-
-1. **Idle with Hermes on the box.** Option A pin, Option B new signal, or Option C
-   keep Hermes on the container app? I recommend B with A as the interim. This is
-   the decision that most changes the cost and the code.
-
-2. **Vault name.** Confirm it becomes an input variable holding
-   `csh-devkvb6lmephspqf2u`, shipped as its own PR with the three suites updated.
-   The alternative, renaming the vault to match the derivation, means migrating
-   11 secrets and is not worth it.
-
-3. **Purge protection.** Match Terraform to the vault's current `null`, or turn it
-   on and accept that it is permanent? Turning it on is the safer default for a
-   vault holding production credentials.
-
-4. **Hermes identity.** Reuse `csh-dev-hermes-identity` for the quadlet, or grant
-   the VM's system-assigned identity `Key Vault Secrets User` and retire the
-   user-assigned one? Reusing is fewer moving parts. Retiring it is cleaner if the
-   container app is truly going away.
-
-5. **Rollback window.** How long does the container app stay defined after
-   cutover before deletion? I would say one week of real use plus one restart.
+- Delete the idle gate, or keep it, now that pinning makes it a no-op.
+- Decide the NAT gateway, per impedance point 6.
+- The dead `WORKFLOW_PLANE_URL`. Anything Hermes routes through the plane stays
+  unavailable until a plane exists again.
+- `podman auto-update` has no idle gate, so an update can restart the bot at any
+  hour. That mattered less when the box slept.
 
 ## What this plan does not cover
 
-- The dead `WORKFLOW_PLANE_URL`. Anything Hermes routes through the plane stays
-  unavailable until a plane exists. Out of scope here, and worth its own item.
-- `plane-state` and `augur-workspace` shares. Not this project's resources.
-- Multi-box deployments. The vault name collides within one subscription by
-  design (`terraform/main.tf:119-128`), and after this change it is an explicit
-  input, so a second box needs a second vault name by hand.
-- Rotating the vault secrets after the VM is live.
+- Rebuilding the plane. Removing `csh-dev-plane` leaves its ingress hostnames
+  doing nothing.
+- Rotating the 11 vault secrets after the VM is live.
+- A second devbox. Nothing here is parameterised for two VMs in one resource
+  group; the names are fixed.
+- The `test-seed-config.sh` and `mutation-check.sh` coverage in `csh-dev`, which
+  becomes dead when the Hermes init container goes. Deleting tests needs its own
+  justification, not a footnote.
