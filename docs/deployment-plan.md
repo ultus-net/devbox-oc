@@ -357,14 +357,19 @@ pressure moves off the box. That is a phase 2 resizing decision, not a phase 1 o
 Three conclusions, each measured:
 
 - **The transaction line was never stored bytes.** `LRS Data Stored` was 0.07 NZD.
-  The 242.33 NZD was 65,439,848 SMB operations at 0.0370 NZD per 10K, dominated by
+  The 242.33 NZD was SMB operation volume at 0.0370 NZD per 10K, dominated by
   `Create`, `Close` and `QueryInfo` at about 136,700 an hour around the clock.
+  The volume and the rate are a rounded pair: 65,439,848 operations at exactly
+  0.0370 gives 242.13, and 242.33 over 0.0370 gives 65,494,595. The charge is real
+  and the two figures disagree by 55,000 operations, which is rate rounding across
+  a month rather than a missing line.
 - **That traffic was Hermes, not the plane.** An earlier version could not attribute
   it. The deletion settled it: `csh-dev-plane` is gone from the resource group, and
   the rate did not move, 135,682 in the 18:00 hour on 2026-11-02 against 136,672 on
   2026-10-20 when both apps ran. With the plane gone, `hermes-data` was the only
-  mounted share. The shape is 12 file Creates and 12 Closes a second with almost no
-  Writes, which is a polling loop, not storage.
+  mounted share. 136,700 an hour is 38 operations a second, and the shape is 12
+  file Creates, 12 Closes and about 14 `QueryInfo` calls a second, with almost no
+  Writes. That is a polling loop, not storage.
 - **The VM is not the saving.** The compute is 129.48, against 137.33 for both
   container apps. The saving is 318 NZD of Files transactions that disappear
   because a VM has a disk next to it, and a container app does not.
@@ -372,8 +377,8 @@ Three conclusions, each measured:
 ### The NAT gateway, deleted
 
 64.87 NZD/month, removed. The argument and the platform rule are in impedance
-point 6; the only thing worth repeating here is that the earlier version treated a
-choice this repo made as a platform requirement.
+point 6. The earlier version treated a choice this repo made as a platform
+requirement, which is how 64.87 NZD/month of avoidable cost entered the design.
 
 ### Snapshots are an undo, not a backup
 
@@ -402,13 +407,15 @@ git-backup model: 2.1 to 10.6 NZD/month instead of a line that only grows, and
 the loss it accepts is up to seven days of uncommitted work rather than one. If
 that is too much to lose, the fix is a push, not a denser snapshot schedule.
 
-4.5 runs is the honest count: a 30 day window over a 7 day period holds four
-complete runs and part of a fifth, so 30/7. The earlier version wrote "4 to 5" and
-then priced it at the high end. The rate is 0.132 USD/GB-month for changed blocks,
-which is why the cost tracks changed bytes per run and not disk size.
+The run count is rounded up, deliberately. A 30 day window over a 7 day period is
+30/7 = 4.29 runs, and 4.29 at 2 GB is 2.01 NZD. The table prices 4.5, which gives
+2.11, because the fifth run is partially retained and a cost estimate that rounds
+up is the one that cannot surprise. The 0.132 USD/GB-month rate applies to changed
+blocks, so the cost tracks changed bytes per run and not disk size.
 
 `host/bin/oc-snapshot` creates only. The retention rule is new work: delete
-snapshots older than 30 days in the same job, after the newest one is verified.
+snapshots oldest first until only those inside the 30 day window remain, and never
+delete the newest one, whatever the date arithmetic says.
 
 That reverses a documented decision, so every file carrying the old rule changes in
 the same PR that adds the timer. Today `docs/runbook.md:286-294` says "Retention is
@@ -423,8 +430,8 @@ git-backup model they are an undo for uncommitted work, and an undo that grows
 without limit is a bill with no matching risk reduction.
 
 **Required edits, all in the PR that lands the timer.** An earlier version of this
-section named two runbook lines and missed three other files, which would have
-shipped a repo that disagrees with itself in five places. The full set:
+section named two files and missed four, which would have shipped a repo that
+disagrees with itself. The full set:
 
 | File | What is wrong today | Edit |
 |---|---|---|
@@ -539,17 +546,13 @@ fixed address buys nothing, so it is not ported.
 The NAT gateway rate is a `Global` retail row (`Standard Gateway`, 0.045 USD/hour).
 There is no `newzealandnorth` row for it, so treat the gateway rate as indicative.
 The static IP rate is regional and measured (`Standard IPv4 Static Public IP`,
-0.005 USD/hour). 0.050 USD/hour over 730 hours is 64.87 NZD/month. That is the
-figure this plan removes.
+0.005 USD/hour). 0.050 USD/hour over 730 hours is 64.87 NZD/month, which is the
+figure this plan removes. `Basic` static IP is cheaper at 0.0036 and cannot be
+used here: NAT gateway requires a Standard SKU address.
 
-The old table said 0.045 + 0.006, which does not produce 64.87 and was wrong in the
-rate, not the total. `Basic` static IP is cheaper at 0.0036, and would not work
-here: NAT gateway requires a Standard SKU address.
-
-One more line the previous version omitted: NAT gateway bills data processed at
-0.045 USD/GB, and 64.87 covers only the gateway hours. Any real traffic would add
-to it, which makes the deleted design worse than the number this plan claims to
-save.
+64.87 covers only the gateway hours. NAT gateway also bills data processed at
+0.045 USD/GB, so any real traffic adds to it and the deleted design was worse than
+the number this plan claims to save.
 
 **Set the property explicitly.** Omitting `defaultOutboundAccess` is not the same
 as `true`: subnets created against an API version after 2026-03-31 default to
@@ -562,9 +565,8 @@ denies inbound from the Internet, and no public IP is attached, so
 | Item | Why | Check |
 |---|---|---|
 | Rights on `csh-dev` in `AzureAppDev` | the change lands there | you can open a PR on `main` |
-| A service connection that can assign roles in `rg-csh-dev` | the template assigns roles to two principals | `jhl-agent-service-connection` resolves to `sp-azdevops-jhl-agent`, which holds `User Access Administrator` **on `rg-csh-dev`** |
+| A service connection that authenticates the pipeline and can assign roles in `rg-csh-dev` | the pipeline deploys twice and the template assigns roles to two principals | `jhl-agent-service-connection` resolves to `sp-azdevops-jhl-agent`, which holds `Contributor` at subscription scope and `User Access Administrator` **on `rg-csh-dev`** |
 | Tailscale tailnet plus a reusable auth key | the only data path | admin console |
-| Azure DevOps service connection | the pipeline authenticates twice | `jhl-agent-service-connection` present |
 
 The privilege requirement is already satisfied, and it is narrower than the
 previous version of this plan claimed. Measured:
@@ -581,12 +583,9 @@ needs: role assignments on resources in the group, and no ability to assign
 anything at subscription scope. No new grant is required, and the operator identity
 already holds `Owner` at subscription scope, so nothing is blocked on this either.
 
-The earlier wording ("you can grant User Access Administrator") read as a
-prerequisite to go and obtain, and it overstated the scope needed. It was wrong in
-both directions: the grant exists, and `User Access Administrator` at resource-group
-scope would be broader than the template requires. Do not add
-`Role Based Access Control Administrator` or subscription-scope UAA to make this
-work. Nothing here needs it.
+Do not add `Role Based Access Control Administrator` or subscription-scope User
+Access Administrator to make this work. Nothing here needs it, and widening the
+scope would be a privilege increase with no matching requirement.
 
 The `hermes-data` row is gone from the previous version: the share no longer
 exists, so there is no migration source to read and nothing needs an SMB role or
@@ -602,12 +601,24 @@ the account key.
 3. **Run `az deployment group what-if`** on the current template and store the
    output with the ADR. This is the record of what the baseline actually is.
 
-**Check:** the ADR names 455.64, 242.33 and 200, and `what-if` reports no changes
-on an unchanged template.
+**Check:** the ADR names 455.64, 242.33 and 200, and `what-if` is explained.
 
-**Stop if** `what-if` reports changes on an unchanged template. That means the
-committed Bicep does not match the deployed state, and the whole plan is built on
-a false baseline.
+**Expect drift, and require it to be exactly these three creates.** An earlier
+version of this plan said `what-if` should report no changes. It cannot: the
+committed template still declares resources the operator has already deleted, so
+an incremental `what-if` will report creates. That is the honest baseline, not a
+failure:
+
+| `what-if` reports | Why |
+|---|---|
+| Create `cshdevfilesb6lmephspqf2u` | `modules/storage.bicep` still declares it; deleted 2026-11-03 |
+| Create `csh-dev-plane` | `modules/plane.bicep` still declares it; deleted earlier |
+| Create `csh-dev-plane-identity` | `modules/identity.bicep` still declares it |
+
+**Stop if** `what-if` reports anything outside that table. A fourth create, or any
+modify or delete, means the deployed state differs from what this plan believes,
+and the cost model and the phase ordering were built on a wrong baseline. Three
+creates is the expected answer and the reason Phase 2 removes those modules first.
 
 ## Phase 2: port the infrastructure modules
 
@@ -622,7 +633,12 @@ reader is a rule that drifts.
 | `acr.bicep` | `terraform/main.tf` ACR and role assignment blocks | ABAC mode, Basic SKU |
 | `vm.bicep` | `terraform/main.tf:144-210` | ucore image, Ignition custom data, user-assigned identity only |
 | `roles.bicep` | `terraform/main.tf:241-292` | KV Secrets User, self power, disk snapshot, ACR pull |
-| `backup.bicep` | `host/bin/oc-snapshot` | weekly snapshot, keep 30 days |
+
+There is deliberately no `backup.bicep`. Snapshots are taken by
+`host/bin/oc-snapshot` from inside the VM, which is where retention lands, and an
+earlier version of this plan proposed a Bicep module for it as well. Two systems
+taking snapshots of the same disk against one 0.132 USD/GB-month rate is a cost
+model that cannot be right, so the Bicep stage does not own snapshots at all.
 
 Compose them in `infra/main.bicep` after the existing modules.
 
@@ -668,8 +684,9 @@ filesystem, which `--bootc-default-fs ext4` at `os/build-os-image.sh:77,80` cove
 ## Phase 4: deploy the VM, two stages
 
 1. **Stage one:** deploy the vnet, subnet with `defaultOutboundAccess: true`, NSG,
-   disk, ACR and the weekly snapshot job. No NAT gateway and no public IP. Capture
-   the disk resource id from the deployment output.
+   disk and ACR. No NAT gateway and no public IP. No snapshot job either:
+   snapshots are host-side, on the timer in `os/butane/ucore.bu`. Capture the disk
+   resource id from the deployment output.
 2. **Build Ignition** with the stage-one outputs plus the OS image id:
    `./os/butane/build.sh` in this repo. Two `os/butane/ucore.bu` edits must land
    first, both from this plan: the `/var/lib/oc-idle/pin` file (see "The constraint
@@ -754,17 +771,16 @@ Only after Phase 6 step 5.
 1. Delete `modules/plane.bicep`, `modules/hermes.bicep`, `modules/jobs.bicep`,
    `modules/environment.bicep`, and their module
    calls in `infra/main.bicep`. `modules/storage.bicep` went in Phase 2, since
-   leaving it would recreate the deleted account. Do not look for a module called
-   `aca-storage.bicep`: an earlier version of this plan named it, and the real
-   file is `modules/storage.bicep`.
+   leaving it would recreate the deleted account.
 2. Delete the now-unused parameters in `infra/params/dev.bicepparam`, including
    `planeCustomHostnames`, `customDomainCertificateId`, the Hermes recipe, and
    the worker recipe.
 3. Delete the `Plane` and `Hermes` stages from `pipelines/azure-pipelines.yml`.
 4. Delete `scripts/resolve-plane-image.sh` and `scripts/verify-pin.sh` if nothing
    else calls them.
-5. Delete `csh-dev-plane-identity` and the environment by hand or with a
-   deployment stack, since incremental mode will not remove them.
+5. Delete the Container Apps environment by hand or with a deployment stack,
+   since incremental mode will not remove it. `csh-dev-plane-identity` is already
+   gone, so there is nothing to delete for it.
 6. **Keep the budget at 200** unless the measured actuals land above it. The new
    shape prices at 183 to 192, so the existing 200 hard budget is correct and
    changing it would hide a regression.
