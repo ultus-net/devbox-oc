@@ -74,6 +74,7 @@ the deployment target, so there is no resource to import and no state to drift.
 | 12 | Backup model | Git and Azure DevOps are the backup. Snapshots are an undo |
 | 13 | Snapshots | Weekly, 30 day retention |
 | 14 | Budget | Stay at 200. The new shape prices at 183 to 193 |
+| 15 | VM size | **Open.** `B2as_v2` is priced; `B2als_v2` is verified cheaper and viable once subagents move to jobs. Needs a measured decision |
 
 Decisions 1 and 12 are the two that change the code. Pinning makes the idle gate a
 no-op, and treating git as the backup is what makes weekly snapshots enough rather
@@ -219,6 +220,78 @@ Prices API, 730 hours, 1 USD = 1.7773 NZD (frankfurter.app, 2026-11-02):
 
 Against the 200 NZD budget, that is under it, with roughly 10 to 17 NZD of
 headroom. The compute is 129 of the 181, so the only large lever left is the SKU.
+
+### The VM size, verified
+
+The sizes below come from two independent sources that agree: the retail API
+`armSkuName` with its `MemoryGB` capability, and Microsoft's Basv2 size table.
+
+| SKU | vCPU | Memory | Base CPU | Credits banked/hr | Max banked | USD/hr | NZD/month |
+|---|---|---|---|---|---|---|---|
+| `B2ats_v2` | 2 | 1 GiB | 20% | 24 | 576 | 0.0125 | 16.22 |
+| `B2als_v2` | 2 | 4 GiB | 30% | 36 | 864 | 0.0499 | 64.74 |
+| `B2as_v2` | 2 | 8 GiB | 40% | 48 | 1,152 | 0.0998 | 129.48 |
+| `B4als_v2` | 4 | 8 GiB | 30% | 72 | 1,728 | 0.177 | 229.64 |
+
+`B2as_v2` at 2 vCPU / 8 GiB is confirmed. So is the claim that `B2als_v2` is
+2 vCPU / 4 GiB and `B2ats_v2` is 2 vCPU / 1 GiB.
+
+**The "untested" hedge was wrong, and there is a measurement.** As a
+representative figure, this workstation holds 16 OpenCode processes totalling
+5.33 GiB RSS, an average of 341 MiB each. A server container plus one Hermes
+gateway is two processes, not sixteen, so 4 GiB is not obviously too small. It is
+still a guess for the host, the kernel and the container together, which is why
+the schedule below exists rather than a recommendation.
+
+What 8 GiB buys over 4:
+
+| | `B2als_v2` | `B2as_v2` |
+|---|---|---|
+| Memory | 4 GiB | 8 GiB, 24.36 NZD/month more |
+| Base CPU | 30% of 2 vCPU | 40% of 2 vCPU |
+| Credits banked/hr | 36 | 48 |
+| Sustained CPU before throttling | 0.6 vCPU | 0.8 vCPU |
+
+Both are burstable, so the sustained figure is the one that matters for a long
+compile. The larger SKU also carries a higher baseline, which is a second reason
+not to read the choice as memory-only.
+
+**How to settle it without guessing.** Deploy `B2als_v2` first. A resize is a
+deallocate and a SKU change on the same disk, so the decision is reversible.
+Measure:
+
+```
+ssh core@devbox "free -m"
+ssh core@devbox "sudo podman stats --no-stream"
+ssh core@devbox "cat /sys/fs/cgroup/cpu.stat"
+```
+
+Resize up if any of these hold: swap is in use at steady state, `podman stats`
+approaches the memory limit, or `cpu.stat` shows `nr_throttled` climbing during a
+build. The resize is one property in `vm.bicep` and a reboot.
+
+### The subagent plan changes this sizing
+
+The operator intends an OpenCode plugin that runs subagents as Azure Container
+Apps jobs rather than as local processes. That moves peak memory off the box: the
+box then hosts one OpenCode server and one Hermes gateway, and jobs bill per
+second only while they run.
+
+Container Apps job rates, `newzealandnorth`, per second:
+
+| Meter | USD/second | Per hour |
+|---|---|---|
+| `Standard vCPU Active Usage` | 0.000036 | 0.1296 per vCPU |
+| `Standard Memory Active Usage` | 0.000005 | 0.018 per GiB |
+| `Standard vCPU Idle Usage` | 0.000005 | near zero when idle |
+
+A subagent at 1 vCPU and 2 GiB for ten minutes is about 0.0276 USD, or 0.05 NZD.
+Cheap enough to be uninteresting at low volume, and a reason to size the box for
+idle rather than peak. Do not size the VM for subagent concurrency that will not
+run on it.
+
+This is also why `B2als_v2` becomes the reasonable default once that plugin
+exists: the box stops being where the memory pressure lives.
 
 Three conclusions, each measured:
 
