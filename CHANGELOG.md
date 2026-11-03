@@ -103,6 +103,13 @@ All notable changes to this project. One entry per landed change, newest first.
   Consumption environment has no standing charge is not restated: it remains
   unverified in `docs/headless-hosting-options.md`, and the meter's scope is what to
   re-check if the jobs substrate is ever rebuilt.
+
+  The cost section now carries a measured November instead of a projection alone.
+  The same CostManagement query with daily granularity shows the storage account at
+  15.21 and 15.35 NZD per day on 2026-11-01 and 11-02, 1.84 on the delete day, then
+  zero. At that rate the account alone passes the 200 NZD budget in 13 days.
+  `rg-csh-dev` is 37.83 NZD month-to-date, 32.40 of it storage, so the delete is the
+  largest single saving in the plan and billing confirms it landed.
 - The OS image is built from the ucore-minimal bootc container instead of being
   plain Fedora CoreOS that rebased onto ucore at boot. Fedora publishes no ucore
   VHD, so the previous design applied ucore's bare-metal install recipe to a cloud

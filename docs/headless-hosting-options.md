@@ -102,8 +102,8 @@ block storage and a VM does. That is the whole difference.
 
 **One headless server is small, and starts instantly.** 134 to 147 MiB RSS idle, and
 under 0.2 s to bind. The 341 MiB figure in the current plan
-(`docs/deployment-plan.md:296`) is the average across 16 interactive instances on a
-workstation, which is a different object.
+(`docs/deployment-plan.md:325-327`) is the average across 16 interactive instances
+on a workstation, which is a different object.
 
 That reopens the sizing question. One server plus the Hermes gateway plus the host
 is roughly **0.6 to 1.2 GiB**, which fits `B2als_v2` at 4 GiB without the 8 GiB the
@@ -193,12 +193,13 @@ Hermes belongs on the VM. That is settled by the constraint, not by preference.
 
 ## The finding that changes the current plan, and its live state
 
-The plan's Phase 7 deletes `modules/plane.bicep`, `modules/hermes.bicep`,
-`modules/jobs.bicep` and `modules/environment.bicep` with their module calls
-(`docs/deployment-plan.md:786-788`), and deletes the "worker recipe" parameter
-(`:790-792`). The inventory flags `csh-dev-env` and `csh-dev-logs` for deletion at
-`:126` and `:131`, and the "Gone after this plan" list repeats it at `:115`. The
-environment is what jobs run in, and the workspace is where their logs land.
+The plan's Phase 7 deletes all six ACA modules, `plane`, `hermes`, `environment`,
+`jobs`, `aca-storage` and `storage`, with their module calls
+(`docs/deployment-plan.md:939-943`), and deletes the worker recipe parameter
+(`:957-960`). The inventory no longer lists `csh-dev-env` as a resource to keep,
+because it is already gone, and `modules/environment.bicep` is named as drift that
+still declares it alongside `csh-dev-logs` (`:139-144`). The environment is what
+jobs run in, and the workspace is where their logs land.
 
 The live state has already moved past the plan. Read with `az` on 2026-11-04:
 
@@ -261,7 +262,7 @@ blocker worth acting on first: a substrate that cannot be created has no meter b
 | Azure DevOps auth | Not yet decided. A PAT in a job container is a new secret surface, and workload identity federation for Azure DevOps is the alternative. Named as unverified below rather than assumed |
 | Key Vault access | A separate user-assigned identity for jobs with `Key Vault Secrets User`. Not the VM identity, which must stay the only one on the VM so `host/bin/lib-imds.sh:5-11` sends no `client_id` |
 | Dispatch | The plugin calls the jobs start API on the VM's managed identity. Needs a custom role with `jobs/read`, `jobs/start/action` and `jobs/executions/read` only. The reason is blast radius: built-in Contributor has no `dataActions` so it cannot read a secret value, but it can rewrite vault access policy, which reaches secret values indirectly, and it can delete the job and its environment |
-| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:161`). No second tool writes `rg-csh-dev` |
+| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:167`). No second tool writes `rg-csh-dev` |
 | Results | The job pushes `oc-job/<execution>` back; the VM polls executions and merges |
 | Re-entrancy | A retry re-pushes the same branch name, so the result must be overwritten, not appended. Idempotence is a requirement of the plugin, not a natural property |
 

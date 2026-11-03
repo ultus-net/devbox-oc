@@ -242,6 +242,31 @@ from the document:
   command uses `az rest`. The API rate-limits repeated queries with a 429, so
   re-running it needs a pause between attempts.
 
+### What November confirms, measured three days after the delete
+
+The same query with the window ending `2026-11-06T00:00:00Z` and
+`granularity: Daily` shows the deletion in billing rather than in the activity log.
+Grouped by resource, in NZD:
+
+| Day | Storage account | `csh-dev-hermes` |
+|---|---|---|
+| 2026-11-01 | 15.21 | 0 |
+| 2026-11-02 | 15.35 | 4.81 |
+| 2026-11-03 | 1.84 | 0.63 |
+| 2026-11-04 | 0 | 0 |
+| 2026-11-05 | 0 | 0 |
+
+Three things follow, and each is measured, not projected:
+
+- **Storage was the whole bill, and it was transaction-driven.** 15.21 and 15.35
+  NZD per day to serve one bot polling an SMB share. At that rate the storage
+  account alone passes the 200 NZD budget in 13 days, before any compute.
+- **The line stops at the delete.** 1.84 on 2026-11-03 is the partial day, then
+  zero. This is the check that the "zero from 2026-11-03" claim above needed.
+- **Month-to-date total is 37.83 NZD.** 32.40 is the storage account, 5.44 is the
+  container app, and the Key Vault and Log Analytics rows stay at 0.00. The 0.01
+  against the summed total is rounding across grouped rows.
+
 The new shape, priced at retail for `newzealandnorth` from the Azure Retail
 Prices API, 730 hours per month, 1 USD = 1.7773 NZD (frankfurter.app, 2026-11-02).
 ACR bills per day, so it uses 730/24 = 30.42 days, not 30:
