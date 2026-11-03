@@ -802,10 +802,10 @@ in the current context`. Every reader has to move in the same commit:
 | `module jobs` | `accountName`, `queueName` | `:209-210` |
 | top-level outputs | `accountName`, `queueName` | `:255-256` |
 
-`module plane` and `module jobs` are also the two modules that read both `storage`
-and `environment`. So the storage removal drags the ACA app modules with it, and
-Phase 2 cannot land as "port the VM modules and delete storage" with the ACA modules
-still declared. Do one of two things, explicitly:
+`module acaStorage`, `module plane` and `module jobs` are the three modules that read
+both `storage` and `environment`. So the storage removal drags the ACA app modules
+with it, and Phase 2 cannot land as "port the VM modules and delete storage" with the
+ACA modules still declared. Do one of two things, explicitly:
 
 - **Preferred: take the whole ACA surface out here.** Delete `storage.bicep`,
   `aca-storage.bicep`, `environment.bicep`, `plane.bicep`, `jobs.bicep` and
@@ -813,8 +813,8 @@ still declared. Do one of two things, explicitly:
   module calls and the four outputs that read them (`planeFqdn`, `workerJobName`,
   `storageAccountName`, `queueName`). Move `csh-dev-logs` into its own module, and
   rewire the vault's identity parameters as Phase 7 describes so the surviving
-  `csh-dev-hermes-identity` is the VM identity. Measured on 2026-11-04 on exactly
-  that copy, with the VM modules not yet composed: it builds with **zero errors**,
+  `csh-dev-hermes-identity` is the VM identity. Measured on 2026-11-04 on a copy of
+  that shape, with the VM modules not yet composed: it builds with **zero errors**,
   and its `what-if` returns `1 to modify, 4 no change, 1 unsupported` over five
   resources: the budget, the vault, the vault role assignment,
   `csh-dev-hermes-identity` and `csh-dev-logs`. The unsupported entry is the role
