@@ -13,36 +13,73 @@ an adoption.
 
 ## What already exists
 
-Read from the subscription, not assumed:
+Read from the subscription with `az resource list -g rg-csh-dev`, which returns
+eight entries: seven top-level resources plus one child. The seven are what the
+portal shows in the screenshot, and the child is the environment's certificate.
 
-| Resource | Name | Disposition |
-|---|---|---|
-| Resource group | `rg-csh-dev` | Adopt. Terraform imports it. |
-| Key Vault | `csh-devkvb6lmephspqf2u` | Adopt. Holds 11 secrets. |
-| Storage account | `cshdevfilesb6lmephspqf2u` | Reuse for the OS VHD. |
-| File share | `hermes-data` | Hermes state. Migrates to the data disk. |
-| File share | `plane-state`, `augur-workspace` | Not this project's. Leave. |
-| Container app | `csh-dev-hermes` | Migrates to a quadlet on the new VM. |
-| Identity | `csh-dev-hermes-identity` | Has Key Vault Secrets User on the vault. |
-| Log Analytics | `csh-dev-logs` | Reuse. |
-| ACR | none in this group | **Must be created.** |
+| Resource | Name | Type | Disposition |
+|---|---|---|---|
+| Container Apps Environment | `csh-dev-env` | `Microsoft.App/managedEnvironments` | Adopt. Consumption profile, no VNet integration. |
+| Environment certificate | `csh-dev-env/cf-origin-ultus` | `managedEnvironments/certificates` | Child of the environment. Cloudflare Origin CA. |
+| Container app | `csh-dev-hermes` | `Microsoft.App/containerApps` | Migrates to a quadlet on the new VM. |
+| Identity | `csh-dev-hermes-identity` | User-assigned identity | Has Key Vault Secrets User on the vault. |
+| Identity | `csh-dev-plane-identity` | User-assigned identity | Belongs to the plane, not to Hermes. |
+| Key Vault | `csh-devkvb6lmephspqf2u` | Key Vault | Adopt. Holds 11 secrets. |
+| Log Analytics | `csh-dev-logs` | Workspace | Reuse. |
+| Storage account | `cshdevfilesb6lmephspqf2u` | Storage account | Reuse for the OS VHD. |
+| ACR | none in this group | Container registry | **Must be created.** |
+
+The resource group itself is the container for those eight, not an entry in the
+list. There is no ACR anywhere in the subscription matching `csh`, so Phase 1
+creates one.
+
+Storage shares, read separately with `az storage share-rm list`: `hermes-data`
+(Hermes state, migrates to the data disk), `plane-state` and `augur-workspace`
+(not this project's, leave).
+
+### The environment constrains the network plan
+
+`csh-dev-env` is a Consumption-only environment with `vnetConfiguration: null`,
+so it owns no subnet and does not collide with the VNet Terraform creates. Its
+static IP is `172.204.116.151`, and its default domain is
+`salmonhill-b7ee3ceb.newzealandnorth.azurecontainerapps.io`, which is the domain
+in Hermes's dead `WORKFLOW_PLANE_URL`. That confirms the URL pointed at an app in
+*this* environment, and the app was deleted while the environment stayed.
+
+Three consequences for adoption:
+
+- Terraform must not manage `csh-dev-env`. It is absent from the configuration
+  and does not need to be there. Leave it unmanaged and it bills only its
+  Consumption usage.
+- The VNet Terraform creates (`vnet-${name_prefix}`, `terraform/main.tf:8`) is
+  independent of the environment, because the environment is not VNet-injected.
+  No address-space negotiation is needed.
+- The environment outlives this migration. Retiring `csh-dev-hermes` does not
+  remove it, so decide separately whether it should be deleted once the last app
+  is gone.
 
 Subscription and vault confirmed with `az group show` and `az keyvault show`.
-There is no container registry matching `csh` anywhere in the subscription, so
-Phase 1 must create one.
 
-## Correction to an earlier claim
+## Corrections to earlier claims in this session
 
-I said Hermes was broken because `WORKFLOW_PLANE_URL` points at
-`csh-dev-plane.salmonhill-b7ee3ceb.newzealandnorth.azurecontainerapps.io`, and
-that container app no longer exists. That was wrong as a conclusion. The gateway
-process is what answers Discord, and it runs whether or not the plane is
-reachable. You confirmed the bot is working. The dead URL is a latent dependency,
-not an outage: anything that routes through the plane is unavailable until the
-plane exists again.
+**The resource inventory was wrong twice.** I first listed seven resources and
+omitted `csh-dev-env`, its Cloudflare certificate, and `csh-dev-plane-identity`.
+Correcting that, I then wrote "ten entries" and then "nine", both by counting the
+output in my head instead of asking for the length. Measured with
+`az resource list -g rg-csh-dev --query "length(@)"` the answer is 8: seven
+top-level resources plus one child. The table above is that list, and the only
+row beyond those eight is the ACR that Phase 1 creates.
 
-Correcting the record matters because it changes the migration risk. Hermes is a
-working system, so the cutover is a migration with rollback, not a rebuild.
+**Hermes is not broken.** I said it was, because `WORKFLOW_PLANE_URL` points at
+`csh-dev-plane.salmonhill-b7ee3ceb.newzealandnorth.azurecontainerapps.io` and that
+container app no longer exists. The gateway process answers Discord without the
+plane, and you confirmed the bot works. `az containerapp show` reports
+`runningStatus: Running` and `provisioningState: Succeeded`. The dead URL is a
+latent dependency, not an outage: anything routed through the plane is
+unavailable until a plane exists again.
+
+That distinction matters for sequencing. Hermes is a working system, so the
+migration is a cutover with rollback, not a rebuild.
 
 ---
 
