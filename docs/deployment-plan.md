@@ -45,7 +45,7 @@ operator just deleted. That is the first hazard to remove, before any VM work.
 **The vault name is derivable, and an earlier version said it was not.** That
 version claimed the vault `csh-devkvb6lmephspqf2u` could not be reached by
 derivation and had to become an input variable. That was true only of this repo's
-Terraform formula, `sha256(var.subscription_id)` at `terraform/main.tf:272`. The
+Terraform formula, `sha256(var.subscription_id)` at `terraform/main.tf:271`. The
 real derivation is Bicep's `uniqueString(resourceGroup().id)` in
 `infra/modules/keyvault.bicep`. It produces 13 characters, so `csh-dev` + `kv` +
 `b6lmephspqf2u` is 22 characters, exactly the live name. The same suffix produces
@@ -121,10 +121,10 @@ The one live object it removes is an orphaned Key Vault role assignment, in Phas
 ## What already exists
 
 Read with `az resource list -g rg-csh-dev` on 2026-11-04. Three entries remain,
-down from six, because `csh-dev-env` and `csh-dev-hermes` were deleted on
+down from six: `csh-dev-env`, its certificate and `csh-dev-hermes` were deleted on
 2026-11-03 at 03:17Z (activity log, `Microsoft.App/managedEnvironments/delete`,
-Succeeded). An app has no life outside its environment, so deleting the
-environment removed both.
+Succeeded). An app and a certificate have no life outside their environment, so the
+one delete removed all three entries.
 
 | Resource | Name | Type | After this plan |
 |---|---|---|---|
@@ -161,9 +161,11 @@ flowchart LR
 
 Bicep declares `publicNetworkAccess: 'Enabled'`, `softDeleteRetentionInDays: 7`
 and no `tags` on the vault. The Terraform at `terraform/main.tf:119-142` declares
-all three. Whichever runs last resets the other, and neither plan expresses the
-other's intent. The vault is the remaining shared object now that the storage
-account is gone, and it is the one that matters.
+`soft_delete_retention_days` and `tags` explicitly, and inherits
+`public_network_access_enabled` from the provider default, which is enabled.
+Whichever runs last resets the other, and neither plan expresses the other's intent.
+The vault is the remaining shared object now that the storage account is gone, and it
+is the one that matters.
 
 One writer per resource group is the rule that removes this class of bug. Since
 Bicep already holds the group and the vault, the VM goes into Bicep.
@@ -212,7 +214,7 @@ Two honest notes about pinning:
 
 October, `rg-csh-dev`, ActualCost grouped by resource and meter, in NZD. These
 are the numbers that fired the budget, and they are history: the storage account
-and the plane are already gone, so the Files line is zero from 2026-11-03.
+and the plane are already gone, so the Files line is zero after 2026-11-03.
 
 | Line | NZD | Still billed after this change |
 |---|---|---|
@@ -261,9 +263,10 @@ Three things follow, and each is measured, not projected:
   NZD per day to serve one bot polling an SMB share. At that rate the storage
   account alone crosses the 200 NZD budget on day 14, before any compute.
 - **The line stops at the delete.** 1.84 on 2026-11-03 is the partial day, and the
-  query returns no row for either resource after it. The window ends mid-day on
-  2026-11-04, so a re-run a day later is what confirms the zeros; the claim above
-  says zero from 2026-11-03 and this is the evidence so far.
+  query returns no row for either resource after it. The window runs to
+  2026-11-06, so the rows stop at 11-03 because no later day has cost recorded yet
+  on 2026-11-04. A re-run a day later is what confirms the zeros; the claim above
+  says zero after 2026-11-03, and this is the evidence so far.
 - **Month-to-date total is 37.83 NZD.** 32.39 is the storage account, 5.44 is the
   container app, and the Key Vault and Log Analytics rows are 0.00.
 
@@ -569,7 +572,7 @@ ignores.
 
 The Terraform subnet sets `default_outbound_access_enabled = false`
 (`terraform/main.tf:23`), so it needed an explicit egress method and chose a NAT
-gateway plus a static public IP (`terraform/main.tf:68-77`).
+gateway plus a static public IP (`terraform/main.tf:68-88`).
 
 That flag is a choice this repo made. Microsoft documents the alternative plainly:
 "You can still configure subnets as nonprivate using any supported method (ARM
@@ -603,8 +606,10 @@ the number this plan claims to save.
 **Set the property explicitly.** Omitting `defaultOutboundAccess` is not the same
 as `true`: subnets created against an API version after 2026-03-31 default to
 `false`, and the symptom is a VM that boots with no egress at all. The NSG still
-denies inbound from the Internet, and no public IP is attached, so
-`terraform/tests/no_public_ip.sh` keeps passing.
+denies inbound from the Internet, and no public IP is attached. The guard does not
+follow automatically: `terraform/tests/no_public_ip.sh` reads a Terraform plan, so it
+stops covering the VM at the moment Phase 2 ports it into Bicep. Phase 2 names the
+replacement reader.
 
 ## Phase 0: what you hold
 
@@ -726,7 +731,9 @@ rows above need re-deriving.
 
 New modules in `csh-dev/infra/modules`, ported from the Terraform that already
 encodes these invariants. Each invariant keeps a guard, because a rule with no
-reader is a rule that drifts.
+reader is a rule that drifts. The guard moves with the resource, and the tests in
+this repo cannot follow it: `terraform/tests/*.sh` read a Terraform plan, and the VM,
+NIC, NSG and disk leave that plan here.
 
 | New module | Ports from | Invariant to keep |
 |---|---|---|
@@ -735,6 +742,24 @@ reader is a rule that drifts.
 | `acr.bicep` | `terraform/main.tf` ACR and role assignment blocks | ABAC mode, Basic SKU |
 | `vm.bicep` | `terraform/main.tf:144-210` | ucore image, Ignition custom data, user-assigned identity only |
 | `roles.bicep` | `terraform/main.tf:241-292` | KV Secrets User, self power, disk snapshot, ACR pull |
+
+**Where the guards land, and it is `csh-dev`, not here.** Two checks replace the
+three invariant tests, and both are new work in `csh-dev`:
+
+- **A check over the compiled template**, in the `csh-dev` pipeline before the deploy
+  step. Assert that the build emits no `Microsoft.Network/publicIPAddresses`, that
+  the NSG inbound rule is `Deny`, that the subnet sets `defaultOutboundAccess: true`,
+  that the data disk sets `deleteOption: Detach` so a VM delete leaves it behind, and
+  that no resource expresses a timed deallocate. This runs on every pull request, so
+  it fails the run rather than the review.
+- **A post-deploy read.** `az vm show`, `az network nic show` and
+  `az network nsg rule list` against `rg-csh-dev`, asserting no public IP and the deny
+  rule. This is the one that catches drift, because it reads the deployed object
+  rather than the template.
+
+Until both exist, these invariants are enforced by nothing that runs. That is the
+cost of moving the VM out of this repo, and the plan names it instead of claiming the
+old tests still cover a resource they can no longer see.
 
 There is deliberately no `backup.bicep`. Snapshots are taken by
 `host/bin/oc-snapshot` from inside the VM, which is where retention lands, and an
@@ -777,7 +802,9 @@ of two things, explicitly:
   that copy, with the VM modules not yet composed: it builds with **zero errors**,
   and its `what-if` returns `1 to modify, 4 no change, 1 unsupported` over five
   resources: the budget, the vault, the vault role assignment,
-  `csh-dev-hermes-identity` and `csh-dev-logs`. That proves the ACA removal
+  `csh-dev-hermes-identity` and `csh-dev-logs`. The unsupported entry is the role
+  assignment's `principalType`, which `what-if` cannot resolve, not a sixth
+  resource. That proves the ACA removal
   compiles and produces no creates; it does not preview the VM, disk, NIC, NSG or
   ACR, which are the rest of this phase.
 - **Otherwise: keep the ACA modules and keep `storage.bicep`.** Any shape that
@@ -787,8 +814,8 @@ Prefer the first. The second leaves a template that recreates a storage account 
 operator deleted, which is the thing this phase exists to prevent.
 
 **Check:** `az bicep build --file infra/main.bicep` exits 0, and
-`az deployment group what-if` returns creates for `vm-csh-dev`, `disk-csh-dev-data`,
-`nic-csh-dev` and `nsg-csh-dev-vm` (the Terraform names at
+`az deployment group what-if` returns creates for `nsg-csh-dev-vm`,
+`nic-csh-dev`, `vm-csh-dev` and `disk-csh-dev-data` (the Terraform names at
 `terraform/main.tf:27,107,145,193`, which the port keeps), plus the ACR if it lands
 here, and **no create for `cshdevfilesb6lmephspqf2u`, `csh-dev-env`,
 `csh-dev-plane`, `csh-dev-plane-identity` or `csh-dev-hermes`.**
@@ -799,7 +826,9 @@ target:
 - **It cannot report "no changes".** `module budget` never sets
   `properties.timePeriod.endDate`, so ARM returns one and every `what-if` reports
   `csh-dev-monthly` as a modify of that single field. Measured on the ACA-removal
-  template: `1 to modify, 4 no change, 1 unsupported`. The unsupported entry is the
+  template: `1 to modify, 4 no change, 1 unsupported`. That copy also reformatted
+  `startDate`, because it carried the experiment described next; the committed
+  template leaves `startDate` alone. The unsupported entry is the
   `kv-secrets-user` role assignment, whose resource id depends on a principal id
   that is only known during deployment, so `what-if` cannot resolve it. A modify on
   the budget alone is expected, and pinning `endDate` in `budget.bicep` is the fix
@@ -809,8 +838,9 @@ target:
   the ACA modules are kept, `hermes.bicep` and `jobs.bicep` are declared but not
   evaluated while those params are false, so they produce no creates. Flipping
   either true reintroduces creates, and for Hermes it starts a second Discord
-  gateway. On the preferred path both modules and both params are gone, so this
-  cannot arise.
+  gateway. On the preferred path both module calls are gone, so neither flag can
+  produce a resource. The parameters themselves survive until Phase 7 step 4 removes
+  them.
 
 **Stop if** `what-if` reports a create for the storage account, `csh-dev-env`, or
 `csh-dev-plane`, or reports modify or delete on the vault or either identity.
@@ -930,9 +960,11 @@ rather than tolerated.
 ## Phase 7: retire the Container Apps declarations
 
 Only after Phase 6's check passes, **and only if Phase 2 took the second path.** If
-Phase 2 removed the whole ACA surface as recommended, steps 1 to 6 are already done
-and this phase is a verification, not an edit. Two items still apply either way: the
-`csh-dev-logs` declarer check and the orphaned role assignment cleanup below. The
+Phase 2 removed the whole ACA surface as recommended, steps 1 to 3 are already done
+and this phase begins at step 4. Steps 4 to 6 are not covered by Phase 2: the unused
+parameters, the two pipeline stages and the two scripts outlive the modules. The
+`csh-dev-logs` declarer is also done on that path, and the orphaned role assignment
+cleanup applies either way. The
 steps are kept because the alternative path leaves them outstanding, and because
 they are the record of what "retire the ACA deployment" means.
 

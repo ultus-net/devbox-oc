@@ -67,7 +67,7 @@ MiB, so quote that range rather than a single figure. Bind time spans 0.12 to
 round figure is needed.
 
 The October cost figures are not reproduced above. They come from the plan's own
-CostManagement query, documented at `docs/deployment-plan.md:233-244`, re-run here
+CostManagement query, documented at `docs/deployment-plan.md:235-246`, re-run here
 for October 2026 grouped by `ResourceId` and by `Meter`. Reuse that recipe rather
 than a second one.
 
@@ -102,7 +102,7 @@ block storage and a VM does. That is the whole difference.
 
 **One headless server is small, and starts instantly.** 134 to 147 MiB RSS idle, and
 under 0.2 s to bind. The 341 MiB figure in the current plan
-(`docs/deployment-plan.md:325-327`) is the average across 16 interactive instances
+(`docs/deployment-plan.md:328-330`) is the average across 16 interactive instances
 on a workstation, which is a different object.
 
 That reopens the sizing question. One server plus the Hermes gateway plus the host
@@ -195,8 +195,8 @@ Hermes belongs on the VM. That is settled by the constraint, not by preference.
 
 The plan's Phase 7 deletes all six ACA modules, `plane`, `hermes`, `environment`,
 `jobs`, `aca-storage` and `storage`, with their module calls
-(`docs/deployment-plan.md:943-946`), and deletes the worker recipe parameter
-(`:962-964`). The inventory no longer lists `csh-dev-env` as a resource to keep,
+(`docs/deployment-plan.md:975-978`), and deletes the worker recipe parameter
+(`:994-996`). The inventory no longer lists `csh-dev-env` as a resource to keep,
 because it is already gone, and `modules/environment.bicep` is named as drift that
 still declares it alongside `csh-dev-logs` (`:140-144`). The environment is what
 jobs run in, and the workspace is where their logs land.
@@ -219,7 +219,7 @@ Three specific plan edits follow:
    preferred path and Phase 7 both delete along with the environment module. Move
    the workspace into its own module, or into `infra/main.bicep`, in the same
    change. Otherwise a kept workspace has no writer, which breaks the one-writer
-   rule at `docs/deployment-plan.md:168`.
+   rule at `docs/deployment-plan.md:170`.
 2. Strike the Hermes rollback window. It is spent: the app was deleted 2026-11-03,
    so Phase 6 is a fresh stand-up rather than a cutover.
 3. **Delete `modules/environment.bicep` and do not recreate the environment.** This
@@ -233,7 +233,7 @@ Three specific plan edits follow:
 So the jobs design has a precondition this document did not previously name:
 **one of the six existing environments must be retired before the substrate can
 exist.** That is a decision for the owners of `rg-jhl-agent-prod`,
-`rg-jhl-agent-dev-aue`, `rg-vera`, `rg-jacobsen-content` and
+`rg-jhl-agent-dev-aue`, `rg-jhl-agent-prod-aue`, `rg-vera`, `rg-jacobsen-content` and
 `rg-jcs-website-staging`, not something this repo can take.
 
 Cost to keep, and what October proved. `csh-dev-logs` billed **0.00 NZD** in October
@@ -262,7 +262,7 @@ blocker worth acting on first: a substrate that cannot be created has no meter b
 | Azure DevOps auth | Not yet decided. A PAT in a job container is a new secret surface, and workload identity federation for Azure DevOps is the alternative. Named as unverified below rather than assumed |
 | Key Vault access | A separate user-assigned identity for jobs with `Key Vault Secrets User`. Not the VM identity, which must stay the only one on the VM so `host/bin/lib-imds.sh:5-11` sends no `client_id` |
 | Dispatch | The plugin calls the jobs start API on the VM's managed identity. Needs a custom role with `jobs/read`, `jobs/start/action` and `jobs/executions/read` only. The reason is blast radius: built-in Contributor has no `dataActions` so it cannot read a secret value, but it can rewrite vault access policy, which reaches secret values indirectly, and it can delete the job and its environment |
-| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:168`). No second tool writes `rg-csh-dev` |
+| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:170`). No second tool writes `rg-csh-dev` |
 | Results | The job pushes `oc-job/<execution>` back; the VM polls executions and merges |
 | Re-entrancy | A retry re-pushes the same branch name, so the result must be overwritten, not appended. Idempotence is a requirement of the plugin, not a natural property |
 
@@ -279,8 +279,8 @@ run.
 2. **Start on `B2as_v2`** as the plan says, because subagents are local until the
    plugin exists. Availability is confirmed for both SKUs: `az vm list-skus
    --location newzealandnorth --resource-type virtualMachines --size Standard_B2as_v2`
-   returns it with no restrictions, and the same check for `Standard_B2als_v2`
-   returns it with no restrictions and zones 1, 2, 3.
+   returns it with no restrictions and zones 1, 2, 3, and the same check for
+   `Standard_B2als_v2` returns the same.
 3. **Free an ACA environment slot, then build the jobs plugin.** The plugin is what
    makes a 4 GiB anchor sufficient, and it is worth up to 64.74 NZD/month, but it
    cannot be scheduled until one of the six existing environments is retired. Treat
