@@ -46,6 +46,11 @@ All notable changes to this project. One entry per landed change, newest first.
 - `AGENTS.md` recording the invariants a change must not break, the gate command,
   and the test-writing rules this repo learned the hard way.
 - MIT licence.
+- `docs/deployment-plan.md`: the phase-ordered plan for the first real run
+  against `rg-csh-dev`, covering adoption of the existing resource group, vault
+  and storage account, the ACR that does not exist yet, and the migration of the
+  Hermes gateway from its container app onto a quadlet on the new VM. It records
+  the idle-gate constraint that makes that migration unsafe without a new signal.
 - Cockpit published over the tailnet on its own HTTPS port, default 8443. ucore
   ships Cockpit and switches firewalld to the server profile so it is reachable,
   so the box would otherwise have a second root-equivalent door from the VNet.
