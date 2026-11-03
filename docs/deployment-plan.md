@@ -40,21 +40,21 @@ What that template declares, all of it in `rg-csh-dev` unless noted:
 A pipeline run on this template today would recreate the storage account the
 operator just deleted. That is the first hazard to remove, before any VM work.
 
-## Two corrections to earlier claims in this session
+## Two corrections to earlier versions of this plan
 
-**The vault name is derivable, and I said it was not.** I claimed the vault
-`csh-devkvb6lmephspqf2u` could not be reached by derivation and had to become an
-input variable. That was true only of this repo's Terraform formula,
-`sha256(var.subscription_id)` at `terraform/main.tf:272`. The real derivation is
-Bicep's `uniqueString(resourceGroup().id)` in `infra/modules/keyvault.bicep`. It
-produces 13 characters, so `csh-dev` + `kv` + `b6lmephspqf2u` is 22 characters,
-exactly the live name. The same suffix produces `cshdevfilesb6lmephspqf2u` at 24
-characters. No input variable is needed, and the whole "three suites depend on
-it" branch of the previous plan is dead.
+**The vault name is derivable, and an earlier version said it was not.** That
+version claimed the vault `csh-devkvb6lmephspqf2u` could not be reached by
+derivation and had to become an input variable. That was true only of this repo's
+Terraform formula, `sha256(var.subscription_id)` at `terraform/main.tf:272`. The
+real derivation is Bicep's `uniqueString(resourceGroup().id)` in
+`infra/modules/keyvault.bicep`. It produces 13 characters, so `csh-dev` + `kv` +
+`b6lmephspqf2u` is 22 characters, exactly the live name. The same suffix produces
+`cshdevfilesb6lmephspqf2u` at 24 characters. No input variable is needed, and the
+whole "three suites depend on it" branch of the previous plan is dead.
 
-**No import step exists.** I said the resource group needed
-`terraform import azurerm_resource_group.this`. In Bicep the resource group is
-the deployment target, so there is no resource to import and no state to drift.
+**No import step exists.** An earlier version required
+`terraform import azurerm_resource_group.this`. In Bicep the resource group is the
+deployment target, so there is no resource to import and no state to drift.
 
 ## Decisions taken
 
@@ -81,7 +81,7 @@ Decisions 1 and 12 are the two that change the code. Pinning makes the idle gate
 no-op, and treating git as the backup is what makes weekly snapshots enough rather
 than nightly ones.
 
-Decision 14 is the one to hold me to. The previous version of this plan proposed
+Decision 14 is the binding constraint on this plan. The previous version proposed
 raising the budget to cover the pinned cost, which would have hidden a 246 NZD
 design behind a bigger number. The budget does not move.
 
@@ -155,7 +155,8 @@ flowchart LR
 Bicep declares `publicNetworkAccess: 'Enabled'`, `softDeleteRetentionInDays: 7`
 and no `tags` on the vault. The Terraform at `terraform/main.tf:119-142` declares
 all three. Whichever runs last resets the other, and neither plan expresses the
-other's intent. The storage account and the three shares have the same problem.
+other's intent. The vault is the remaining shared object now that the storage
+account is gone, and it is the one that matters.
 
 One writer per resource group is the rule that removes this class of bug. Since
 Bicep already holds the group and the vault, the VM goes into Bicep.
@@ -202,8 +203,28 @@ and the plane are already gone, so the Files line is zero from 2026-11-03.
 | `csh-devkvb6lmephspqf2u` | 0.03 | Yes |
 | **Total** | **455.64** | |
 
+Two things about that table are worth stating, because a reader cannot check them
+from the document:
+
+- **The rows are rounded, so they do not sum to the total.** They add to 455.69
+  against a stated 455.64, and the 0.05 is rounding across the grouped rows, not a
+  missing line. The total is the authoritative figure and the rows are indicative.
+- **It is a reproduced query, not a remembered number.** Re-run it with:
+  - Scope: `/subscriptions/b44e1a7e-e9e1-4c4d-a9d0-028fb4515f51/resourceGroups/rg-csh-dev`
+  - `POST .../providers/Microsoft.CostManagement/query?api-version=2023-11-01`
+  - `type: ActualCost`, `timeframe: Custom`, `2026-10-01T00:00:00Z` to
+    `2026-11-01T00:00:00Z`
+  - `granularity: None`, aggregation `Sum` on `Cost`, grouped by dimension
+    `ResourceId` and dimension `Meter`
+  - `az rest --method post` with that body, then sum the returned rows
+
+  `az costmanagement` does not exist in the CLI as installed here, which is why the
+  command uses `az rest`. The API rate-limits repeated queries with a 429, so
+  re-running it needs a pause between attempts.
+
 The new shape, priced at retail for `newzealandnorth` from the Azure Retail
-Prices API, 730 hours, 1 USD = 1.7773 NZD (frankfurter.app, 2026-11-02):
+Prices API, 730 hours per month, 1 USD = 1.7773 NZD (frankfurter.app, 2026-11-02).
+ACR bills per day, so it uses 730/24 = 30.42 days, not 30:
 
 | Line | SKU | USD | NZD/month |
 |---|---|---|---|
@@ -218,6 +239,9 @@ Prices API, 730 hours, 1 USD = 1.7773 NZD (frankfurter.app, 2026-11-02):
 | **Subtotal** | | | **181.02** |
 | Snapshots, weekly, 30 day retention | estimate, changed blocks | | 2 to 12 |
 | **Total** | | | **183 to 193** |
+
+181.02 is the sum of the rounded rows above. Computed from unrounded values it is
+181.03, and the 0.01 is rounding, not a missing line. The total range is unaffected.
 
 Against the 200 NZD budget, that is under it, with roughly 10 to 17 NZD of
 headroom. The compute is 129 of the 181, so the only large lever left is the SKU.
@@ -248,10 +272,11 @@ What 8 GiB buys over 4:
 
 | | `B2als_v2` | `B2as_v2` |
 |---|---|---|
-| Memory | 4 GiB | 8 GiB, 24.36 NZD/month more |
+| Memory | 4 GiB | 8 GiB |
 | Base CPU | 30% of 2 vCPU | 40% of 2 vCPU |
 | Credits banked/hr | 36 | 48 |
 | Sustained CPU before throttling | 0.6 vCPU | 0.8 vCPU |
+| Cost | 64.74 NZD/month | 129.48 NZD/month, **64.74 more** |
 
 Both are burstable, so the sustained figure is the one that matters for a long
 compile. The larger SKU also carries a higher baseline, which is a second reason
@@ -270,7 +295,7 @@ ssh core@devbox "cat /sys/fs/cgroup/cpu.stat"
 
 Downsize to `B2als_v2` when all three hold: no swap in use at steady state, peak
 `podman stats` under about 3 GiB including the host, and `cpu.stat` showing
-`nr_throttled` flat during a build. Anything else means the 24.36 NZD/month for
+`nr_throttled` flat during a build. Anything else means the 64.74 NZD/month for
 the larger SKU is buying real headroom.
 
 ### Why 8 GiB, not 4
@@ -286,9 +311,9 @@ This workstation is the evidence for how quickly that adds up: 16 processes,
 is five processes, which fits in 4 GiB, but a fan-out is how an agent turns into
 five more, and swapping during a build is the failure this repo must not ship.
 
-The 4 GiB SKU stays in the plan as the resize target rather than the starting
-point. Starting large and shrinking on evidence is a decision that cannot break
-work. Starting small and growing on evidence is one that can.
+So `B2as_v2` is the starting point and `B2als_v2` is the resize target. Starting
+large and shrinking on evidence is a decision that cannot break work. Starting
+small and growing on evidence is one that can.
 
 ### Container jobs are phase 2
 
@@ -319,33 +344,21 @@ Three conclusions, each measured:
 - **The transaction line was never stored bytes.** `LRS Data Stored` was 0.07 NZD.
   The 242.33 NZD was 65,439,848 SMB operations at 0.0370 NZD per 10K, dominated by
   `Create`, `Close` and `QueryInfo` at about 136,700 an hour around the clock.
-- **That traffic was Hermes, not the plane.** I said earlier I could not attribute
-  it. That was wrong, and the deletion settled it: `csh-dev-plane` is gone from the
-  resource group, and the rate did not move, 135,682 in the 18:00 hour on
-  2026-11-02 against 136,672 on 2026-10-20 when both apps ran. With the plane gone,
-  `hermes-data` was the only mounted share. The shape is 12 file Creates and 12
-  Closes a second with almost no Writes, which is a polling loop, not storage.
+- **That traffic was Hermes, not the plane.** An earlier version could not attribute
+  it. The deletion settled it: `csh-dev-plane` is gone from the resource group, and
+  the rate did not move, 135,682 in the 18:00 hour on 2026-11-02 against 136,672 on
+  2026-10-20 when both apps ran. With the plane gone, `hermes-data` was the only
+  mounted share. The shape is 12 file Creates and 12 Closes a second with almost no
+  Writes, which is a polling loop, not storage.
 - **The VM is not the saving.** The compute is 129.48, against 137.33 for both
   container apps. The saving is 318 NZD of Files transactions that disappear
   because a VM has a disk next to it, and a container app does not.
 
 ### The NAT gateway, deleted
 
-`terraform/main.tf:23` sets `default_outbound_access_enabled = false`, which is a
-choice this repo made, not a platform requirement. Microsoft states the opposite:
-
-> You can still configure subnets as nonprivate using any supported method (ARM
-> templates, portal, CLI, PowerShell).
-
-That comment on the Terraform was carried into the first version of this plan as
-if it were a requirement, and the NAT gateway plus static IP it forced costs
-64.87 NZD/month. Nothing needs it: Tailscale dials out, needs no inbound path and
-no stable egress address, and `defaultOutboundAccess: true` attaches no public IP
-to the resource, so `terraform/tests/no_public_ip.sh` still passes.
-
-Set `defaultOutboundAccess: true` explicitly in the subnet resource. Do not omit
-the property: subnets created against an API version after 2026-03-31 default to
-`false`, and the failure is a VM with no egress at all.
+64.87 NZD/month, removed. The argument and the platform rule are in impedance
+point 6; the only thing worth repeating here is that the earlier version treated a
+choice this repo made as a platform requirement.
 
 ### Snapshots are an undo, not a backup
 
@@ -364,18 +377,42 @@ the cost:
 
 | Schedule | Runs held in 30 days | Changed per run | NZD/month |
 |---|---|---|---|
-| Weekly, 30 day retention | 4 to 5 | 2 GB | 2.3 |
-| Weekly, 30 day retention | 4 to 5 | 10 GB | 11.7 |
+| Weekly, 30 day retention | 4.5 | 2 GB | 2.1 |
+| Weekly, 30 day retention | 4.5 | 10 GB | 10.6 |
 | Nightly, 30 day retention | 30 | 2 GB | 14.1 |
 | Nightly, no retention (today) | grows without limit | 2 GB | 14.1 and rising |
 
 Weekly plus 30 days is the operator decision, and it is the right one under a
-git-backup model: 2.3 to 11.7 NZD/month instead of a line that only grows, and
+git-backup model: 2.1 to 10.6 NZD/month instead of a line that only grows, and
 the loss it accepts is up to seven days of uncommitted work rather than one. If
 that is too much to lose, the fix is a push, not a denser snapshot schedule.
 
+4.5 runs is the honest count: a 30 day window over a 7 day period holds four
+complete runs and part of a fifth, so 30/7. The earlier version wrote "4 to 5" and
+then priced it at the high end. The rate is 0.132 USD/GB-month for changed blocks,
+which is why the cost tracks changed bytes per run and not disk size.
+
 `host/bin/oc-snapshot` creates only. The retention rule is new work: delete
 snapshots older than 30 days in the same job, after the newest one is verified.
+
+That reverses a documented decision, so the runbook changes in the same PR. Today
+`docs/runbook.md:286-294` says "Retention is deliberately manual. Removing backups
+from a timer is a destructive action that deserves a human decision, so no
+automation does it." Leaving that in place while shipping a timer gives the repo
+two contradicting answers to the same question, and the runbook is the one an
+operator reads during a restore.
+
+The reversal is justified because the premise changed. Retention was manual while
+snapshots were the backup, so deleting one destroyed the only copy. Under a
+git-backup model they are an undo for uncommitted work, and an undo that grows
+without limit is a bill with no matching risk reduction.
+
+**Required edit, same PR:** rewrite the "Prune snapshots" section to state that
+`oc-snapshot.timer` prunes while holding a 30 day window, keep the listing command
+as the way to inspect what survived, and keep "never remove the newest snapshot
+before a verified restore" as the manual rule for anything older than the window.
+Also correct `docs/runbook.md:227-230`, which says nightly with a 24 hour recovery
+point, to weekly with a 7 day recovery point.
 
 ## The impedance points, worked out
 
@@ -462,7 +499,7 @@ subnet provides egress with no gateway and no address.
 
 | | NAT gateway + static IP | `defaultOutboundAccess: true` |
 |---|---|---|
-| Hourly charge | 0.045 + 0.006 USD | 0 |
+| Hourly charge | 0.045 gateway + 0.005 static IP = 0.050 USD | 0 |
 | Monthly, NZD | 64.87 | 0 |
 | Public IP on the NIC | none | none |
 | Inbound path | none | none |
@@ -473,9 +510,20 @@ Nothing in this design needs a stable egress address. Tailscale dials out from t
 host, accepts no inbound connection, and resolves peers by name on the tailnet. The
 fixed address buys nothing, so it is not ported.
 
-The NAT gateway rate is a `Global` retail row, since there is no
-`newzealandnorth` row for it, so treat 0.045 as indicative. The static IP rate is
-regional and measured.
+The NAT gateway rate is a `Global` retail row (`Standard Gateway`, 0.045 USD/hour).
+There is no `newzealandnorth` row for it, so treat the gateway rate as indicative.
+The static IP rate is regional and measured (`Standard IPv4 Static Public IP`,
+0.005 USD/hour). 0.050 USD/hour over 730 hours is 64.87 NZD/month. That is the
+figure this plan removes.
+
+The old table said 0.045 + 0.006, which does not produce 64.87 and was wrong in the
+rate, not the total. `Basic` static IP is cheaper at 0.0036, and would not work
+here: NAT gateway requires a Standard SKU address.
+
+One more line the previous version omitted: NAT gateway bills data processed at
+0.045 USD/GB, and 64.87 covers only the gateway hours. Any real traffic would add
+to it, which makes the deleted design worse than the number this plan claims to
+save.
 
 **Set the property explicitly.** Omitting `defaultOutboundAccess` is not the same
 as `true`: subnets created against an API version after 2026-03-31 default to
@@ -488,9 +536,31 @@ denies inbound from the Internet, and no public IP is attached, so
 | Item | Why | Check |
 |---|---|---|
 | Rights on `csh-dev` in `AzureAppDev` | the change lands there | you can open a PR on `main` |
-| Rights to grant roles at RG scope | the template assigns roles to two principals | you can grant User Access Administrator |
+| A service connection that can assign roles in `rg-csh-dev` | the template assigns roles to two principals | `jhl-agent-service-connection` resolves to `sp-azdevops-jhl-agent`, which holds `User Access Administrator` **on `rg-csh-dev`** |
 | Tailscale tailnet plus a reusable auth key | the only data path | admin console |
 | Azure DevOps service connection | the pipeline authenticates twice | `jhl-agent-service-connection` present |
+
+The privilege requirement is already satisfied, and it is narrower than the
+previous version of this plan claimed. Measured:
+
+```
+$ az role assignment list --scope .../resourceGroups/rg-csh-dev \
+    --assignee 0d974b77-d3c7-405e-bc9b-d9c4b413bd64
+User Access Administrator   .../resourceGroups/rg-csh-dev
+```
+
+`sp-azdevops-jhl-agent` holds `Contributor` at subscription scope and `User Access
+Administrator` scoped to `rg-csh-dev` alone. That is exactly the shape the template
+needs: role assignments on resources in the group, and no ability to assign
+anything at subscription scope. No new grant is required, and the operator identity
+already holds `Owner` at subscription scope, so nothing is blocked on this either.
+
+The earlier wording ("you can grant User Access Administrator") read as a
+prerequisite to go and obtain, and it overstated the scope needed. It was wrong in
+both directions: the grant exists, and `User Access Administrator` at resource-group
+scope would be broader than the template requires. Do not add
+`Role Based Access Control Administrator` or subscription-scope UAA to make this
+work. Nothing here needs it.
 
 The `hermes-data` row is gone from the previous version: the share no longer
 exists, so there is no migration source to read and nothing needs an SMB role or
