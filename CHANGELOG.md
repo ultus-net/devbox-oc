@@ -50,7 +50,7 @@ All notable changes to this project. One entry per landed change, newest first.
   against `rg-csh-dev`. The plan is written against the Bicep in Azure DevOps
   project `AzureAppDev`, repo `csh-dev`, which owns that resource group today, and
   replaces the Container Apps deployment with a Bicep-owned VM. It records the
-  six resources that remain, the six impedance points a naive port fails on, the
+  three resources that remain, the six impedance points a naive port fails on, the
   actual October cost of 455.64 NZD against a 200 NZD budget, and the decision to
   pin the VM awake so the Hermes Discord gateway stays reachable. It prices the
   new shape at 183 to 196 NZD/month with no NAT gateway, no static IP and no
@@ -106,10 +106,11 @@ All notable changes to this project. One entry per landed change, newest first.
 
   The cost section now carries a measured November instead of a projection alone.
   The same CostManagement query with daily granularity shows the storage account at
-  15.21 and 15.35 NZD per day on 2026-11-01 and 11-02, 1.84 on the delete day, then
-  zero. At that rate the account alone passes the 200 NZD budget in 13 days.
-  `rg-csh-dev` is 37.83 NZD month-to-date, 32.40 of it storage, so the delete is the
-  largest single saving in the plan and billing confirms it landed.
+  15.21 and 15.35 NZD per day on 2026-11-01 and 11-02, 1.84 on the delete day, and
+  no row for either deleted resource after it. At that rate the account alone
+  crosses the 200 NZD budget on day 14. `rg-csh-dev` is 37.83 NZD month-to-date,
+  32.39 of it storage, so the delete is the largest single saving in the plan and
+  billing confirms it landed.
 - The OS image is built from the ucore-minimal bootc container instead of being
   plain Fedora CoreOS that rebased onto ucore at boot. Fedora publishes no ucore
   VHD, so the previous design applied ucore's bare-metal install recipe to a cloud

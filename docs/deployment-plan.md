@@ -115,7 +115,8 @@ migration source and the image staging path, so the plan no longer has either.
 Kept: the resource group, the vault, `csh-dev-hermes-identity`, `csh-dev-logs`, and
 the budget. Already gone, deleted by the operator on 2026-11-03:
 `csh-dev-env`, `csh-dev-hermes`, `csh-dev-plane`, `csh-dev-plane-identity` and
-`cshdevfilesb6lmephspqf2u`. Nothing in this plan deletes a live resource.
+`cshdevfilesb6lmephspqf2u`. Nothing in this plan deletes a live workload resource.
+The one live object it removes is an orphaned Key Vault role assignment, in Phase 7.
 
 ## What already exists
 
@@ -242,30 +243,29 @@ from the document:
   command uses `az rest`. The API rate-limits repeated queries with a 429, so
   re-running it needs a pause between attempts.
 
-### What November confirms, measured three days after the delete
+### What November confirms, one day after the delete
 
-The same query with the window ending `2026-11-06T00:00:00Z` and
-`granularity: Daily` shows the deletion in billing rather than in the activity log.
-Grouped by resource, in NZD:
+The same query with the window `2026-11-01T00:00:00Z` to `2026-11-06T00:00:00Z` and
+`granularity: Daily`, run on 2026-11-04, shows the deletion in billing rather than in
+the activity log. Grouped by resource, in NZD:
 
 | Day | Storage account | `csh-dev-hermes` |
 |---|---|---|
 | 2026-11-01 | 15.21 | 0 |
 | 2026-11-02 | 15.35 | 4.81 |
 | 2026-11-03 | 1.84 | 0.63 |
-| 2026-11-04 | 0 | 0 |
-| 2026-11-05 | 0 | 0 |
 
 Three things follow, and each is measured, not projected:
 
 - **Storage was the whole bill, and it was transaction-driven.** 15.21 and 15.35
   NZD per day to serve one bot polling an SMB share. At that rate the storage
-  account alone passes the 200 NZD budget in 13 days, before any compute.
-- **The line stops at the delete.** 1.84 on 2026-11-03 is the partial day, then
-  zero. This is the check that the "zero from 2026-11-03" claim above needed.
-- **Month-to-date total is 37.83 NZD.** 32.40 is the storage account, 5.44 is the
-  container app, and the Key Vault and Log Analytics rows stay at 0.00. The 0.01
-  against the summed total is rounding across grouped rows.
+  account alone crosses the 200 NZD budget on day 14, before any compute.
+- **The line stops at the delete.** 1.84 on 2026-11-03 is the partial day, and the
+  query returns no row for either resource after it. The window ends mid-day on
+  2026-11-04, so a re-run a day later is what confirms the zeros; the claim above
+  says zero from 2026-11-03 and this is the evidence so far.
+- **Month-to-date total is 37.83 NZD.** 32.39 is the storage account, 5.44 is the
+  container app, and the Key Vault and Log Analytics rows are 0.00.
 
 The new shape, priced at retail for `newzealandnorth` from the Azure Retail
 Prices API, 730 hours per month, 1 USD = 1.7773 NZD (frankfurter.app, 2026-11-02).
@@ -657,7 +657,7 @@ the account key.
 
 **Check:** the ADR names 455.64, 242.33 and 200, and `what-if` is explained.
 
-**Expect drift, and require it to be exactly these four creates.** An earlier
+**Expect drift, but you cannot verify it as these four creates.** An earlier
 version of this plan said `what-if` should report no changes. It cannot: the
 committed template still declares resources the operator has already deleted, so
 an incremental `what-if` will report creates. That is the honest baseline, not a
@@ -773,11 +773,13 @@ of two things, explicitly:
   the four outputs that read them (`planeFqdn`, `workerJobName`,
   `storageAccountName`, `queueName`). Move `csh-dev-logs` into its own module, and
   rewire the vault's identity parameters as Phase 7 describes so the surviving
-  `csh-dev-hermes-identity` is the VM identity. Measured on 2026-11-04, that
-  template builds with **zero errors** and its `what-if` returns
-  `1 to modify, 4 no change`: the modify is `csh-dev-monthly` repeatedly dropping an
-  `endDate` that ARM recomputes, and there are no creates. That is the end state
-  Phase 7 was describing, reached in one change instead of two.
+  `csh-dev-hermes-identity` is the VM identity. Measured on 2026-11-04 on exactly
+  that copy, with the VM modules not yet composed: it builds with **zero errors**,
+  and its `what-if` returns `1 to modify, 4 no change, 1 unsupported` over five
+  resources: the budget, the vault, the vault role assignment,
+  `csh-dev-hermes-identity` and `csh-dev-logs`. That proves the ACA removal
+  compiles and produces no creates; it does not preview the VM, disk, NIC, NSG or
+  ACR, which are the rest of this phase.
 - **Otherwise: keep the ACA modules and keep `storage.bicep`.** Any shape that
   deletes storage but keeps `plane`, `jobs` or `acaStorage` does not compile.
 
@@ -796,11 +798,13 @@ target:
 
 - **It cannot report "no changes".** `module budget` never sets
   `properties.timePeriod.endDate`, so ARM returns one and every `what-if` reports
-  `csh-dev-monthly` as a modify of that single field. Measured on the end-state
-  template: `1 to modify, 4 no change`. A modify on the budget alone is expected,
-  and pinning `endDate` in `budget.bicep` is the fix if that noise is unwanted.
-  Passing the start date as `'2026-10-01T00:00:00Z'` instead of `'2026-10-01'` does
-  **not** remove it; that was tried.
+  `csh-dev-monthly` as a modify of that single field. Measured on the ACA-removal
+  template: `1 to modify, 4 no change, 1 unsupported`. The unsupported entry is the
+  `kv-secrets-user` role assignment, whose resource id depends on a principal id
+  that is only known during deployment, so `what-if` cannot resolve it. A modify on
+  the budget alone is expected, and pinning `endDate` in `budget.bicep` is the fix
+  if that noise is unwanted. Passing the start date as `'2026-10-01T00:00:00Z'`
+  instead of `'2026-10-01'` does **not** remove it; that was tried.
 - **`deployHermes` and `deployWorker` must stay false on the alternative path.** If
   the ACA modules are kept, `hermes.bicep` and `jobs.bicep` are declared but not
   evaluated while those params are false, so they produce no creates. Flipping
@@ -989,11 +993,13 @@ Removing the ACA modules leaves two survivors pointing at things that go away:
 `az deployment group validate` exits 0, and `az deployment group what-if` reports
 **no creates**, `csh-dev-monthly` as a modify of the single recomputed `endDate`
 field, and no change to the vault, the vault role
-assignment, `csh-dev-hermes-identity` or `csh-dev-logs`. Measured on the end-state
-template: `1 to modify, 4 no change`.
+assignment, `csh-dev-hermes-identity` or `csh-dev-logs`. The Phase 2 caveat still
+applies, including its `1 unsupported` role-assignment entry. Measured on the
+ACA-removal template before the VM modules are composed:
+`1 to modify, 4 no change, 1 unsupported`, so this check needs re-measuring once
+Phase 2 has landed the VM stack.
 
-`what-if` reporting "no changes" is not achievable and must not be the check. It
-cannot see extra resources either: a resource that exists in Azure but is absent
+`what-if` cannot see extra resources: a resource that exists in Azure but is absent
 from the template is ignored, not reported. Pair it with
 `az resource list -g rg-csh-dev` and `az consumption budget list`. Measured
 2026-11-04, the first returns **exactly three** entries, `csh-dev-logs`,
@@ -1045,7 +1051,7 @@ was underestimated, and the table is the thing to correct, not the budget.
 Then file these as work items:
 
 - **Retire one ACA environment so the jobs substrate can exist.** The subscription
-  is at the five-environment limit with six in place, so no new environment can be
+  holds six environments against a limit of five, so no new environment can be
   created. That decision belongs to the owners of those other resource groups. Until
   it is taken, the ACA jobs design in `docs/headless-hosting-options.md` has nowhere
   to run.
