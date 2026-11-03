@@ -73,7 +73,7 @@ deployment target, so there is no resource to import and no state to drift.
 | 11 | Storage | No storage account. Data disk plus snapshots only |
 | 12 | Backup model | Git and Azure DevOps are the backup. Snapshots are an undo |
 | 13 | Snapshots | Weekly, 30 day retention |
-| 14 | Budget | Stay at 200. The new shape prices at 183 to 193 |
+| 14 | Budget | Stay at 200. The new shape prices at 183 to 192 |
 | 15 | VM size | **`B2as_v2`, 2 vCPU / 8 GiB** as the starting SKU. Container jobs are phase 2, so local subagents stay on the box |
 | 16 | Container jobs | Deferred. Phase 2, after the VM is proven |
 
@@ -173,9 +173,23 @@ of those five signals can see it. Move Hermes onto the box unchanged and the box
 deallocates under a live bot.
 
 Decision 1 was pin the box awake, so this plan pins it and pays for it. The
-mechanism already exists: `host/bin/oc-idle-check:47-50` exits early when
-`/var/lib/oc-idle/pin` exists, and `/var/lib` persists across reboots. Ignition
-creates that file at first boot.
+mechanism half exists: `host/bin/oc-idle-check:47-50` exits early when
+`/var/lib/oc-idle/pin` exists, and `/var/lib` persists across reboots. What is
+missing is the file itself.
+
+**This is new work, not an existing behaviour.** `os/butane/ucore.bu` declares no
+`/var/lib/oc-idle/pin` entry: grep for `pin` over that file matches only the
+`dropins:` keys at `os/butane/ucore.bu:222` and `:233`. `docs/runbook.md:376-377`
+shows the operator creating and removing the file by hand, which is what the
+mechanism was built for. An earlier version of this plan claimed Ignition creates
+it at first boot, and that was wrong.
+
+**Required edit, same PR as the Butane change:** add the file to
+`os/butane/ucore.bu` as a `storage.files` entry with `path:
+/var/lib/oc-idle/pin`, `mode: 0644` and empty contents. Then recompile
+`os/butane/ucore.ign` with `os/butane/build-placeholder.sh`, because that artifact
+must stay byte-identical and a hand edit fails the gate. Set `BUTANE` when running
+`./tests/verify.sh`, or the reproducibility check prints `SKIP` and still exits 0.
 
 Two honest notes about pinning:
 
@@ -237,14 +251,15 @@ ACR bills per day, so it uses 730/24 = 30.42 days, not 30:
 | NAT gateway | **not deployed** | | 0 |
 | Static IP | **not deployed** | | 0 |
 | **Subtotal** | | | **181.02** |
-| Snapshots, weekly, 30 day retention | estimate, changed blocks | | 2 to 12 |
-| **Total** | | | **183 to 193** |
+| Snapshots, weekly, 30 day retention | 4.5 runs, 2 to 10 GB changed | | 2.1 to 10.6 |
+| **Total** | | | **183 to 192** |
 
 181.02 is the sum of the rounded rows above. Computed from unrounded values it is
 181.03, and the 0.01 is rounding, not a missing line. The total range is unaffected.
 
-Against the 200 NZD budget, that is under it, with roughly 10 to 17 NZD of
-headroom. The compute is 129 of the 181, so the only large lever left is the SKU.
+Against the 200 NZD budget, that is under it, with 8 to 17 NZD of headroom. The
+low end is the one to plan against: 200 minus 192. The compute is 129 of the 181,
+so the only large lever left is the SKU.
 
 ### The VM size, verified
 
@@ -395,24 +410,35 @@ which is why the cost tracks changed bytes per run and not disk size.
 `host/bin/oc-snapshot` creates only. The retention rule is new work: delete
 snapshots older than 30 days in the same job, after the newest one is verified.
 
-That reverses a documented decision, so the runbook changes in the same PR. Today
-`docs/runbook.md:286-294` says "Retention is deliberately manual. Removing backups
-from a timer is a destructive action that deserves a human decision, so no
-automation does it." Leaving that in place while shipping a timer gives the repo
-two contradicting answers to the same question, and the runbook is the one an
-operator reads during a restore.
+That reverses a documented decision, so every file carrying the old rule changes in
+the same PR that adds the timer. Today `docs/runbook.md:286-294` says "Retention is
+deliberately manual. Removing backups from a timer is a destructive action that
+deserves a human decision, so no automation does it." Leaving that in place while
+shipping a timer gives the repo two contradicting answers to the same question, and
+the runbook is the one an operator reads during a restore.
 
 The reversal is justified because the premise changed. Retention was manual while
 snapshots were the backup, so deleting one destroyed the only copy. Under a
 git-backup model they are an undo for uncommitted work, and an undo that grows
 without limit is a bill with no matching risk reduction.
 
-**Required edit, same PR:** rewrite the "Prune snapshots" section to state that
-`oc-snapshot.timer` prunes while holding a 30 day window, keep the listing command
-as the way to inspect what survived, and keep "never remove the newest snapshot
-before a verified restore" as the manual rule for anything older than the window.
-Also correct `docs/runbook.md:227-230`, which says nightly with a 24 hour recovery
-point, to weekly with a 7 day recovery point.
+**Required edits, all in the PR that lands the timer.** An earlier version of this
+section named two runbook lines and missed three other files, which would have
+shipped a repo that disagrees with itself in five places. The full set:
+
+| File | What is wrong today | Edit |
+|---|---|---|
+| `docs/runbook.md:227-230` | "Nightly incremental snapshots give a 24 hour recovery point" | weekly, 7 day recovery point |
+| `docs/runbook.md:286-294` | "Retention is deliberately manual ... no automation does it" | `oc-snapshot.timer` prunes to a 30 day window. Keep the listing command. Keep "never remove the newest snapshot before a verified restore" for anything older than the window |
+| `README.md:28` | diagram node reads `oc-snapshot.timer<br/>nightly` | `weekly`, and `30 day retention` |
+| `README.md:42` | "nightly incremental snapshot" | weekly, 30 day retention |
+| `os/butane/ucore.bu:175-181` | `Description=Nightly data disk snapshot` and `OnCalendar=*-*-* 02:00:00 UTC` | weekly calendar, renamed description. Recompile `ucore.ign` afterwards |
+| `host/bin/oc-snapshot:5-6` | comment says "Creates only. Retention is a documented manual step" | comment describes the prune the script now performs |
+
+The ordering matters: change the script and the timer first, then the docs, in one
+commit, so there is no window where a document describes a prune that does not run
+or a timer that runs unpruned. Do not land the retention work as a docs-only
+change.
 
 ## The impedance points, worked out
 
@@ -593,7 +619,7 @@ reader is a rule that drifts.
 |---|---|---|
 | `network.bicep` | `terraform/main.tf:7-117` | No public IP on the NIC; inbound deny from Internet; `defaultOutboundAccess: true` set explicitly |
 | `disk.bicep` | `terraform/main.tf:192-204` | 128 GiB `StandardSSD_LRS`, must survive a VM rebuild |
-| `acr.bicep` | Phase 1 of the old plan | ABAC mode, Basic SKU |
+| `acr.bicep` | `terraform/main.tf` ACR and role assignment blocks | ABAC mode, Basic SKU |
 | `vm.bicep` | `terraform/main.tf:144-210` | ucore image, Ignition custom data, user-assigned identity only |
 | `roles.bicep` | `terraform/main.tf:241-292` | KV Secrets User, self power, disk snapshot, ACR pull |
 | `backup.bicep` | `host/bin/oc-snapshot` | weekly snapshot, keep 30 days |
@@ -645,7 +671,10 @@ filesystem, which `--bootc-default-fs ext4` at `os/build-os-image.sh:77,80` cove
    disk, ACR and the weekly snapshot job. No NAT gateway and no public IP. Capture
    the disk resource id from the deployment output.
 2. **Build Ignition** with the stage-one outputs plus the OS image id:
-   `./os/butane/build.sh` in this repo.
+   `./os/butane/build.sh` in this repo. Two `os/butane/ucore.bu` edits must land
+   first, both from this plan: the `/var/lib/oc-idle/pin` file (see "The constraint
+   that decides the cost model: idle") and the weekly `oc-snapshot.timer` calendar
+   (see "Snapshots are an undo, not a backup"). Recompile `ucore.ign` afterwards.
 3. **Stage two:** deploy the VM with `customData` from the generated parameters
    file. Pin `imageReference.id` to the Phase 3 image id as a required parameter.
 
@@ -723,8 +752,11 @@ cutover. Two gateways on one token duplicate replies.
 Only after Phase 6 step 5.
 
 1. Delete `modules/plane.bicep`, `modules/hermes.bicep`, `modules/jobs.bicep`,
-   `modules/aca-storage.bicep`, `modules/environment.bicep`, and their module
-   calls in `infra/main.bicep`.
+   `modules/environment.bicep`, and their module
+   calls in `infra/main.bicep`. `modules/storage.bicep` went in Phase 2, since
+   leaving it would recreate the deleted account. Do not look for a module called
+   `aca-storage.bicep`: an earlier version of this plan named it, and the real
+   file is `modules/storage.bicep`.
 2. Delete the now-unused parameters in `infra/params/dev.bicepparam`, including
    `planeCustomHostnames`, `customDomainCertificateId`, the Hermes recipe, and
    the worker recipe.
@@ -734,7 +766,7 @@ Only after Phase 6 step 5.
 5. Delete `csh-dev-plane-identity` and the environment by hand or with a
    deployment stack, since incremental mode will not remove them.
 6. **Keep the budget at 200** unless the measured actuals land above it. The new
-   shape prices at 183 to 193, so the existing 200 hard budget is correct and
+   shape prices at 183 to 192, so the existing 200 hard budget is correct and
    changing it would hide a regression.
 
 **Check:** `what-if` reports no changes after the removal, the resource group
@@ -751,7 +783,7 @@ was underestimated, and the table is the thing to correct, not the budget.
    `docs/runbook.md:232-285` against a throwaway disk. Confirm the retention rule
    deleted only snapshots older than 30 days.
 3. **Cost proof.** Read the next month's actuals against the new budget, and
-   confirm the shape lands at 183 to 193 rather than near 246.
+   confirm the shape lands at 183 to 192 rather than near 246.
 
 Then file these as work items:
 
