@@ -832,29 +832,27 @@ in the current context`. Every reader has to move in the same commit:
 `module acaStorage`, `module plane` and `module jobs` are the three modules that read
 both `storage` and `environment`. So the storage removal drags the ACA app modules
 with it, and Phase 2 cannot land as "port the VM modules and delete storage" with the
-ACA modules still declared. Do one of two things, explicitly:
+ACA modules still declared.
 
-- **Preferred: take the whole ACA surface out here.** Delete `storage.bicep`,
-  `aca-storage.bicep`, `environment.bicep`, `plane.bicep`, `jobs.bicep` and
-  `hermes.bicep` with their module calls, plus the `planeIdentity` and `workerIdentity`
-  module calls and the four outputs that read them (`planeFqdn`, `workerJobName`,
-  `storageAccountName`, `queueName`). Move `csh-dev-logs` into its own module, and
-  rewire the vault's identity parameters as Phase 7 describes so the surviving
-  `csh-dev-hermes-identity` is the VM identity. Measured on 2026-11-04 on a copy of
-  that shape, with the VM modules not yet composed: it builds with **zero errors**,
-  and its `what-if` returns `1 to modify, 4 no change, 1 unsupported` over five
-  resources: the budget, the vault, the vault role assignment,
-  `csh-dev-hermes-identity` and `csh-dev-logs`. The unsupported entry is the role
-  assignment's `principalType`, which `what-if` cannot resolve, not a sixth
-  resource. That proves the ACA removal compiles and produces no creates; it does
-  not preview the VM, disk, NIC, NSG or ACR, which are the rest of this phase. One
-  delta from that copy: it still declares the `workerIdentity` module, so delete
-  that call too and treat the build as the check for it.
-- **Otherwise: keep the ACA modules and keep `storage.bicep`.** Any shape that
-  deletes storage but keeps `plane`, `jobs` or `acaStorage` does not compile.
+**Phase 2 takes the whole ACA surface out in one change. That is the approved path,
+and there is no fallback.** Delete `storage.bicep`, `aca-storage.bicep`,
+`environment.bicep`, `plane.bicep`, `jobs.bicep` and `hermes.bicep` with their module
+calls, plus the `planeIdentity` and `workerIdentity` module calls and the four outputs
+that read them (`planeFqdn`, `workerJobName`, `storageAccountName`, `queueName`). Move
+`csh-dev-logs` into its own module, and rewire the vault's identity parameters as
+Phase 7 describes so the surviving `csh-dev-hermes-identity` is the VM identity.
+Keeping the ACA modules instead does not compile, and keeping them with the storage
+module recreates an account the operator deleted, so neither is offered.
 
-Prefer the first. The second leaves a template that recreates a storage account the
-operator deleted, which is the thing this phase exists to prevent.
+Measured on 2026-11-04 on a copy of that shape, with the VM modules not yet composed:
+it builds with **zero errors**, and its `what-if` returns
+`1 to modify, 4 no change, 1 unsupported` over five resources: the budget, the vault,
+the vault role assignment, `csh-dev-hermes-identity` and `csh-dev-logs`. The
+unsupported entry is the role assignment's `principalType`, which `what-if` cannot
+resolve, not a sixth resource. That proves the ACA removal compiles and produces no
+creates; it does not preview the VM, disk, NIC, NSG or ACR, which are the rest of this
+phase. One delta from that copy: it still declares the `workerIdentity` module, so
+delete that call too and treat the build as the check for it.
 
 **Check:** `az bicep build --file infra/main.bicep` exits 0, and
 `az deployment group what-if` returns creates for `nsg-csh-dev-vm`,
@@ -877,15 +875,11 @@ target:
   the budget alone is expected, and pinning `endDate` in `budget.bicep` is the fix
   if that noise is unwanted. Passing the start date as `'2026-10-01T00:00:00Z'`
   instead of `'2026-10-01'` does **not** remove it; that was tried.
-- **`deployHermes` and `deployWorker` must stay false on the alternative path.** If
-  the ACA modules are kept, `hermes.bicep` and `jobs.bicep` are declared but not
-  evaluated while those params are false, so they produce no creates. Flipping
-  either true reintroduces creates, and for Hermes it starts a second Discord
-  gateway. On the preferred path both ACA module calls are gone, so `deployHermes`
-  produces nothing. `deployWorker` still gates the `workerIdentity` module and its
-  `kv-secrets-user` grant, so delete that module call in Phase 2 as well, or flipping
-  the flag creates an identity nobody uses. The parameters themselves survive until
-  Phase 7 step 4 removes them.
+- **`deployHermes` and `deployWorker` lose their resources in this phase.** Both ACA
+  module calls are gone, so `deployHermes` produces nothing. `deployWorker` still
+  gates the `workerIdentity` module and its `kv-secrets-user` grant, so delete that
+  call here too; otherwise flipping the flag creates an identity nobody uses. Phase 7
+  step 4 removes the parameters themselves.
 
 **Stop if** `what-if` reports a create for the storage account, `csh-dev-env`, or
 `csh-dev-plane`, or reports modify or delete on the vault or either identity.
@@ -1004,20 +998,18 @@ rather than tolerated.
 
 ## Phase 7: retire the Container Apps declarations
 
-Only after Phase 6's check passes, **and only if Phase 2 took the second path.** If
-Phase 2 removed the whole ACA surface as recommended, steps 1 to 3 are already done
-and this phase begins at step 4. Steps 4 to 6 are not covered by Phase 2: the unused
-parameters, the two pipeline stages and the two scripts outlive the modules. The
-`csh-dev-logs` declarer is also done on that path, and the orphaned role assignment
-cleanup applies either way. The
-steps are kept because the alternative path leaves them outstanding, and because
-they are the record of what "retire the ACA deployment" means.
+Only after Phase 6's check passes. Phase 2 already removed the six modules and gave
+`csh-dev-logs` its own declarer, so this phase starts at step 4: the unused
+parameters, the two pipeline stages and the two scripts outlive the modules. It ends
+with the orphaned role assignment cleanup. Steps 1 to 3 are kept as the record of what
+the removal was and why it had to be atomic.
 
 This phase was written when `csh-dev-env` and `csh-dev-hermes` still existed. Both
 were deleted on 2026-11-03, so the steps below delete template code and nothing in
 Azure. Read it that way: it retires declarations that no longer describe reality.
 
-1. Delete `modules/plane.bicep`, `modules/hermes.bicep`, `modules/environment.bicep`,
+1. **Already applied in Phase 2.** Delete `modules/plane.bicep`,
+   `modules/hermes.bicep`, `modules/environment.bicep`,
    `modules/aca-storage.bicep` and `modules/jobs.bicep`, with their module calls in
    `infra/main.bicep`. `modules/storage.bicep` goes too, since leaving it recreates
    the deleted account.
@@ -1046,11 +1038,12 @@ Azure. Read it that way: it retires declarations that no longer describe reality
    documented shape prices at 183 to 196, so the existing 200 hard budget is
    correct and changing it would hide a regression.
 
-**Two things must be rewired, not just deleted, and this phase did not say so.**
-Removing the ACA modules leaves two survivors pointing at things that go away:
+**Two things Phase 2 must rewire, not just delete.** Removing the ACA modules leaves
+two survivors pointing at things that go away, and the Phase 2 bullet defers the
+detail here:
 
 - **`csh-dev-logs` needs a declarer.** It is declared only by
-  `modules/environment.bicep` (`:8`), which step 1 deletes. It billed 0.00 NZD in
+  `modules/environment.bicep` (`:8`), which Phase 2 deletes. It billed 0.00 NZD in
   October while receiving Hermes logs, because the workspace sits inside the free
   ingestion grant. Move it into its own small module in the same change, or the
   workspace becomes a live resource with no writer.

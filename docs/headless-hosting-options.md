@@ -195,8 +195,8 @@ Hermes belongs on the VM. That is settled by the constraint, not by preference.
 
 The plan's Phase 7 deletes all six ACA modules, `plane`, `hermes`, `environment`,
 `jobs`, `aca-storage` and `storage`, with their module calls
-(`docs/deployment-plan.md:1020-1023`), and deletes the worker recipe parameter
-(`:1039-1041`). The inventory no longer lists `csh-dev-env` as a resource to keep,
+(`docs/deployment-plan.md:1011-1014`), and deletes the worker recipe parameter
+(`:1031-1033`). The inventory no longer lists `csh-dev-env` as a resource to keep,
 because it is already gone, and `modules/environment.bicep` is named as drift that
 still declares it alongside `csh-dev-logs` (`:168-172`). The environment is what
 jobs run in, and the workspace is where their logs land.
@@ -215,11 +215,11 @@ for jobs when the plugin is built**, and the substrate cannot be rebuilt today.
 Three specific plan edits follow:
 
 1. Keep `csh-dev-logs` and give it a declarer. It is declared only by
-   `modules/environment.bicep` (`docs/deployment-plan.md:32`), which Phase 2's
-   preferred path and Phase 7 both delete along with the environment module. Move
-   the workspace into its own module, or into `infra/main.bicep`, in the same
-   change. Otherwise a kept workspace has no writer, which breaks the one-writer
-   rule at `docs/deployment-plan.md:198`.
+   `modules/environment.bicep` (`docs/deployment-plan.md:32`), which Phase 2
+   deletes along with the environment module. Move the workspace into its own
+   module, or into `infra/main.bicep`, in the same change. Otherwise a kept
+   workspace has no writer, which breaks the one-writer rule at
+   `docs/deployment-plan.md:198`.
 2. Strike the Hermes rollback window. It is spent: the app was deleted 2026-11-03,
    so Phase 6 is a fresh stand-up rather than a cutover.
 3. **Delete `modules/environment.bicep` and do not recreate the environment.** This

@@ -120,6 +120,12 @@ All notable changes to this project. One entry per landed change, newest first.
   it. The previous version omitted the NIC, NSG, subnet, Log Analytics and the
   network boundary.
 
+  Phase 2 now has one path. The operator approved retiring the whole ACA surface in
+  that phase, so the fallback that kept `modules/environment.bicep` and
+  `modules/storage.bicep` is deleted from the plan rather than left for a reader to
+  follow. Phase 7 therefore starts at its parameter, pipeline and script cleanup,
+  with the module-removal steps kept as the record of why the change was atomic.
+
   The cost section now carries a measured November instead of a projection alone.
   The same CostManagement query with daily granularity shows the storage account at
   15.21 and 15.35 NZD per day on 2026-11-01 and 11-02, 1.84 on the delete day, and
