@@ -116,9 +116,10 @@ All notable changes to this project. One entry per landed change, newest first.
   coverage.
 
   The shape diagram now shows Azure only, since that is what the plan changes, and
-  tags every resource **new** or **kept** so it matches the inventory table beside
-  it. The previous version omitted the NIC, NSG, subnet, Log Analytics and the
-  network boundary.
+  tags each Azure resource node **new** or **kept** so it matches the inventory table
+  beside it. Workloads inside the VM stay untagged because they are not separate
+  resources. The previous version omitted the vnet, subnet, NSG, NIC, managed image
+  and Log Analytics.
 
   Phase 2 now has one path. The operator approved retiring the whole ACA surface in
   that phase, so the fallback that kept `modules/environment.bicep` and

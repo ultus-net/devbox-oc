@@ -87,13 +87,16 @@ design behind a bigger number. The budget does not move.
 
 ## Shape after this plan
 
-Azure only, because that is what this plan changes. Tagged **new** for resources this
-plan creates and **kept** for the three that are already live.
+Azure only, because that is what this plan changes; the tailnet appears solely as
+the path in. Resource nodes are tagged **new** for what this plan creates and
+**kept** for the four that are already live. Workloads inside the VM carry no tag,
+because they are not separate Azure resources.
 
 ```mermaid
 flowchart TB
   subgraph RG["rg-csh-dev · newzealandnorth · Bicep-owned, one writer"]
     subgraph NET["network · new"]
+      VNET["vnet-csh-dev · new<br/>snet-vm, defaultOutboundAccess true"]
       NSG["nsg-csh-dev-vm · new<br/>deny inbound Internet"]
       NIC["nic-csh-dev · new<br/>no public IP, no NAT gateway"]
     end
@@ -108,8 +111,9 @@ flowchart TB
 
     OS["os disk P6 · new<br/>64 GiB Premium_LRS"]
     DD["disk-csh-dev-data E10 · new<br/>128 GiB, /srv, Detach"]
+    IMG["managed image · new<br/>OS VHD, hyperVGeneration V2"]
     ACR["ACR Basic · new<br/>ABAC permissions"]
-    KV["csh-devkvb6lmephspqf2u · kept<br/>11 secrets, purge protection"]
+    KV["csh-devkvb6lmephspqf2u · kept<br/>11 secrets, purge protection to enable"]
     LOG["csh-dev-logs · kept<br/>jobs log sink"]
     ID["csh-dev-hermes-identity · kept<br/>sole identity on the VM"]
   end
@@ -118,10 +122,12 @@ flowchart TB
   TS["tailnet clients<br/>outside Azure"]
 
   TS -.->|"HTTPS, tailnet serve<br/>no public ingress"| VMR
+  VNET --- NSG
   NSG --- NIC
   NIC --- VMR
   VMR --- OS
   VMR --- DD
+  VMR --- IMG
   SNPT -.->|"weekly, 30 day"| DD
   VMR -.->|"IMDS, no client_id"| KV
   ID -.->|"Secrets User"| KV
@@ -166,7 +172,7 @@ and the storage account with the three shares and the blob container. There is n
 ACR anywhere in the subscription matching `csh`, so the template creates one.
 
 `modules/environment.bicep` still declares `csh-dev-env` and `csh-dev-logs`. That is
-drift to clean up, not something to keep. Phase 7 deletes the module and gives
+drift to clean up, not something to keep. Phase 2 deletes the module and gives
 `csh-dev-logs` its own declarer, because the environment cannot be recreated (the
 subscription is over the five-environment limit) and leaving the module in place
 makes every deployment fail validation.
@@ -857,7 +863,9 @@ delete that call too and treat the build as the check for it.
 **Check:** `az bicep build --file infra/main.bicep` exits 0, and
 `az deployment group what-if` returns creates for `nsg-csh-dev-vm`,
 `nic-csh-dev`, `vm-csh-dev` and `disk-csh-dev-data` (the Terraform names at
-`terraform/main.tf:27,107,145,193`, which the port keeps), plus the ACR if it lands
+`terraform/main.tf:27,107,145,193`, which the port keeps; those names assume
+`name_prefix = "csh-dev"`, while the tracked default in
+`terraform/variables.tf:15` is `devbox-oc`), plus the ACR if it lands
 here, and **no create for `cshdevfilesb6lmephspqf2u`, `csh-dev-env`,
 `csh-dev-plane`, `csh-dev-plane-identity` or `csh-dev-hermes`.**
 
@@ -1000,9 +1008,10 @@ rather than tolerated.
 
 Only after Phase 6's check passes. Phase 2 already removed the six modules and gave
 `csh-dev-logs` its own declarer, so this phase starts at step 4: the unused
-parameters, the two pipeline stages and the two scripts outlive the modules. It ends
-with the orphaned role assignment cleanup. Steps 1 to 3 are kept as the record of what
-the removal was and why it had to be atomic.
+parameters, the two pipeline stages and the two scripts outlive the modules. Steps 4
+to 7 are the work, ending with the budget check and the orphaned role assignment
+cleanup. Steps 1 to 3 are kept as the record of what the removal was and why it had to
+be atomic.
 
 This phase was written when `csh-dev-env` and `csh-dev-hermes` still existed. Both
 were deleted on 2026-11-03, so the steps below delete template code and nothing in

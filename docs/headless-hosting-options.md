@@ -67,7 +67,7 @@ MiB, so quote that range rather than a single figure. Bind time spans 0.12 to
 round figure is needed.
 
 The October cost figures are not reproduced above. They come from the plan's own
-CostManagement query, documented at `docs/deployment-plan.md:263-274`, re-run here
+CostManagement query, documented at `docs/deployment-plan.md:269-280`, re-run here
 for October 2026 grouped by `ResourceId` and by `Meter`. Reuse that recipe rather
 than a second one.
 
@@ -102,7 +102,7 @@ block storage and a VM does. That is the whole difference.
 
 **One headless server is small, and starts instantly.** 134 to 147 MiB RSS idle, and
 under 0.2 s to bind. The 341 MiB figure in the current plan
-(`docs/deployment-plan.md:356-359`) is the average across 16 interactive instances
+(`docs/deployment-plan.md:364-367`) is the average across 16 interactive instances
 on a workstation, which is a different object.
 
 That reopens the sizing question. One server plus the Hermes gateway plus the host
@@ -193,12 +193,12 @@ Hermes belongs on the VM. That is settled by the constraint, not by preference.
 
 ## The finding that changes the current plan, and its live state
 
-The plan's Phase 7 deletes all six ACA modules, `plane`, `hermes`, `environment`,
+The plan's Phase 2 deletes all six ACA modules, `plane`, `hermes`, `environment`,
 `jobs`, `aca-storage` and `storage`, with their module calls
-(`docs/deployment-plan.md:1011-1014`), and deletes the worker recipe parameter
-(`:1031-1033`). The inventory no longer lists `csh-dev-env` as a resource to keep,
+(`docs/deployment-plan.md:1020-1023`), and Phase 7 deletes the worker recipe
+parameter (`:1040-1042`). The inventory no longer lists `csh-dev-env` as a resource to keep,
 because it is already gone, and `modules/environment.bicep` is named as drift that
-still declares it alongside `csh-dev-logs` (`:168-172`). The environment is what
+still declares it alongside `csh-dev-logs` (`:174-178`). The environment is what
 jobs run in, and the workspace is where their logs land.
 
 The live state has already moved past the plan. Read with `az` on 2026-11-04:
@@ -219,7 +219,7 @@ Three specific plan edits follow:
    deletes along with the environment module. Move the workspace into its own
    module, or into `infra/main.bicep`, in the same change. Otherwise a kept
    workspace has no writer, which breaks the one-writer rule at
-   `docs/deployment-plan.md:198`.
+   `docs/deployment-plan.md:204`.
 2. Strike the Hermes rollback window. It is spent: the app was deleted 2026-11-03,
    so Phase 6 is a fresh stand-up rather than a cutover.
 3. **Delete `modules/environment.bicep` and do not recreate the environment.** This
@@ -262,7 +262,7 @@ blocker worth acting on first: a substrate that cannot be created has no meter b
 | Azure DevOps auth | Not yet decided. A PAT in a job container is a new secret surface, and workload identity federation for Azure DevOps is the alternative. Named as unverified below rather than assumed |
 | Key Vault access | A separate user-assigned identity for jobs with `Key Vault Secrets User`. Not the VM identity, which must stay the only one on the VM so `host/bin/lib-imds.sh:5-11` sends no `client_id` |
 | Dispatch | The plugin calls the jobs start API on the VM's managed identity. Needs a custom role with `jobs/read`, `jobs/start/action` and `jobs/executions/read` only. The reason is blast radius: built-in Contributor has no `dataActions` so it cannot read a secret value, but it can rewrite vault access policy, which reaches secret values indirectly, and it can delete the job and its environment |
-| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:198`). No second tool writes `rg-csh-dev` |
+| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:204`). No second tool writes `rg-csh-dev` |
 | Results | The job pushes `oc-job/<execution>` back; the VM polls executions and merges |
 | Re-entrancy | A retry re-pushes the same branch name, so the result must be overwritten, not appended. Idempotence is a requirement of the plugin, not a natural property |
 
