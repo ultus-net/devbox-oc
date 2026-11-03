@@ -50,7 +50,7 @@ All notable changes to this project. One entry per landed change, newest first.
   against `rg-csh-dev`. The plan is written against the Bicep in Azure DevOps
   project `AzureAppDev`, repo `csh-dev`, which owns that resource group today, and
   replaces the Container Apps deployment with a Bicep-owned VM. It records the
-  six resources that remain, the six impedance points a naive port fails on, the
+  three resources that remain, the six impedance points a naive port fails on, the
   actual October cost of 455.64 NZD against a 200 NZD budget, and the decision to
   pin the VM awake so the Hermes Discord gateway stays reachable. It prices the
   new shape at 183 to 196 NZD/month with no NAT gateway, no static IP and no
@@ -77,6 +77,64 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
+  live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on
+  2026-11-03 in preparation for this deployment model. Phase 6 is now a fresh
+  stand-up of Hermes on the VM rather than a cutover, because there is no serving
+  gateway to overlap with and the bot is offline until the phase lands. The
+  inventory drops to the three resources that actually remain.
+
+  Four measurement findings changed the plan, and each replaced a claim it had made
+  confidently. A `what-if` of the committed template fails preflight validation with
+  `MaxNumberOfGlobalEnvironmentsInSubExceeded`: the subscription holds six Container
+  Apps environments against a limit of five, so `csh-dev-env` cannot be recreated and
+  the plan no longer keeps `modules/environment.bicep` to do it. Removing only
+  `modules/storage.bicep` produces 11 `BCP057` errors, because three other module calls
+  and two outputs read `storage.outputs`, so Phase 2 now names the whole ACA surface
+  as one atomic removal instead of a one-file edit. The ACA-removal template, before
+  the VM modules are composed, builds with zero errors and its `what-if` returns
+  `1 to modify, 4 no change, 1 unsupported`, so the checks no longer demand "no
+  changes": `module budget` never sets `endDate` and ARM recomputes it on every
+  preview. And the deleted `csh-dev-plane-identity` left a
+  `Key Vault Secrets User` grant on the vault whose service principal no longer
+  resolves, which Phase 7 now removes.
+
+  `modules/jobs.bicep` is the Shape-A worker, queue-driven over the storage account
+  this plan deletes, so it is deleted rather than reused as-is. The claim that a
+  Consumption environment has no standing charge survives only as a provisional
+  statement in `docs/headless-hosting-options.md`, labelled provisional and with the
+  contradicting meter named, and the meter's scope is what to re-check if the jobs
+  substrate is ever rebuilt.
+
+  The plan also stops claiming this repo's Terraform tests guard the deployed VM.
+  `terraform/tests/no_public_ip.sh` reads a `terraform show -json` plan, so it would
+  pass over a plan that no longer describes the box, while
+  `data_disk_protected.sh` scans `main.tf` and would fail the gate outright once the
+  disk block leaves it. Phase 2 now names the two replacement readers in `csh-dev`,
+  the retirement of `data_disk_protected.sh`, and the `AGENTS.md` and `README.md`
+  claims that need updating. All of it is outstanding work rather than existing
+  coverage.
+
+  The shape diagram now shows Azure only, since that is what the plan changes, and
+  tags each Azure resource node **new** or **kept** so it lines up with the inventory
+  table beside it, which covers the three resources in the group; the budget is
+  subscription-scoped and listed separately. Workloads inside the VM stay untagged
+  because they are not separate resources. The previous version omitted the vnet, subnet, NSG, NIC, managed image
+  and Log Analytics.
+
+  Phase 2 now has one path. The operator approved retiring the whole ACA surface in
+  that phase, so the fallback that kept `modules/environment.bicep` and
+  `modules/storage.bicep` is deleted from the plan rather than left for a reader to
+  follow. Phase 7 therefore starts at its parameter, pipeline and script cleanup,
+  with the module-removal steps kept as the record of why the change was atomic.
+
+  The cost section now carries a measured November instead of a projection alone.
+  The same CostManagement query with daily granularity shows the storage account at
+  15.21 and 15.35 NZD per day on 2026-11-01 and 11-02, 1.84 on the delete day, and
+  no row for either deleted resource after it. At that rate the account alone
+  crosses the 200 NZD budget on day 14. `rg-csh-dev` is 37.83 NZD month-to-date,
+  32.39 of it storage, so the delete is the largest single saving in the plan and
+  billing confirms it landed.
 - The OS image is built from the ucore-minimal bootc container instead of being
   plain Fedora CoreOS that rebased onto ucore at boot. Fedora publishes no ucore
   VHD, so the previous design applied ucore's bare-metal install recipe to a cloud

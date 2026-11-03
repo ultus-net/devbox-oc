@@ -67,7 +67,7 @@ MiB, so quote that range rather than a single figure. Bind time spans 0.12 to
 round figure is needed.
 
 The October cost figures are not reproduced above. They come from the plan's own
-CostManagement query, documented at `docs/deployment-plan.md:226-233`, re-run here
+CostManagement query, documented at `docs/deployment-plan.md:269-280`, re-run here
 for October 2026 grouped by `ResourceId` and by `Meter`. Reuse that recipe rather
 than a second one.
 
@@ -102,8 +102,8 @@ block storage and a VM does. That is the whole difference.
 
 **One headless server is small, and starts instantly.** 134 to 147 MiB RSS idle, and
 under 0.2 s to bind. The 341 MiB figure in the current plan
-(`docs/deployment-plan.md:296`) is the average across 16 interactive instances on a
-workstation, which is a different object.
+(`docs/deployment-plan.md:362-367`) is the average across 16 interactive instances
+on a workstation, which is a different object.
 
 That reopens the sizing question. One server plus the Hermes gateway plus the host
 is roughly **0.6 to 1.2 GiB**, which fits `B2als_v2` at 4 GiB without the 8 GiB the
@@ -178,7 +178,7 @@ It holds a Discord gateway websocket and must answer at any hour, so no shape ge
 to zero. On the VM it costs **zero marginal**, because the anchor is pinned anyway
 and Hermes is memory only. That memory is still an estimate of 200 to 500 MiB, and
 it can no longer be measured from the app, which has been deleted. Settle it with
-`podman stats` after the quadlet cutover.
+`podman stats` once the quadlet runs.
 
 In Container Apps it billed **97.66 NZD** in October. The month is measured; the
 cause is not. The October cost query returns the amount, and an attempt to split it
@@ -193,12 +193,13 @@ Hermes belongs on the VM. That is settled by the constraint, not by preference.
 
 ## The finding that changes the current plan, and its live state
 
-The plan's Phase 7 deletes `modules/plane.bicep`, `modules/hermes.bicep`,
-`modules/jobs.bicep` and `modules/environment.bicep` with their module calls
-(`docs/deployment-plan.md:786-788`), and deletes the "worker recipe" parameter
-(`:790-792`). The inventory flags `csh-dev-env` and `csh-dev-logs` for deletion at
-`:126` and `:131`, and the "Gone after this plan" list repeats it at `:115`. The
-environment is what jobs run in, and the workspace is where their logs land.
+The plan's Phase 2 deletes all six ACA modules, `plane`, `hermes`, `environment`,
+`jobs`, `aca-storage` and `storage`, with their module calls
+(`docs/deployment-plan.md:1020-1023`), and Phase 7 deletes the worker recipe
+parameter (`:1040-1042`). The inventory no longer lists `csh-dev-env` as a resource to keep,
+because it is already gone, and `modules/environment.bicep` is named as drift that
+still declares it alongside `csh-dev-logs` (`:174-178`). The environment is what
+jobs run in, and the workspace is where their logs land.
 
 The live state has already moved past the plan. Read with `az` on 2026-11-04:
 
@@ -210,37 +211,47 @@ The live state has already moved past the plan. Read with `az` on 2026-11-04:
   `csh-dev-hermes-identity`.
 
 So the amendment is not "do not delete these later". It is **rebuild the substrate
-for jobs when the plugin is built**. Three specific plan edits follow:
+for jobs when the plugin is built**, and the substrate cannot be rebuilt today.
+Three specific plan edits follow:
 
-1. Remove `csh-dev-logs` from the deletion lists at `docs/deployment-plan.md:115`
-   and `:131`. Phase 7's numbered steps never actually mention it, so the inventory
-   is the only place to change. Kept is not the same as owned: `csh-dev-logs` is
-   declared only by `modules/environment.bicep` (`:32`), which Phase 7 deletes
-   (`:786-788`). So the workspace must move to a surviving module, and the rebuilt
-   environment's log destination must point at it. Otherwise a kept workspace has no
-   writer, which breaks the one-writer rule this doc relies on at `:161`.
-2. Strike the Hermes rollback window. It is spent: Phase 6 step 5 tells the operator
-   not to delete the app, and step 6 schedules the deletion (`:767-770`), and the app
-   is already gone.
-3. Rewrite Phase 7 step 5 (`:796-798`), which deletes the environment "by hand",
-   because there is nothing left to delete.
+1. Keep `csh-dev-logs` and give it a declarer. It is declared only by
+   `modules/environment.bicep` (`docs/deployment-plan.md:32`), which Phase 2
+   deletes along with the environment module. Move the workspace into its own
+   module, or into `infra/main.bicep`, in the same change. Otherwise a kept
+   workspace has no writer, which breaks the one-writer rule at
+   `docs/deployment-plan.md:204`.
+2. Strike the Hermes rollback window. It is spent: the app was deleted 2026-11-03,
+   so Phase 6 is a fresh stand-up rather than a cutover.
+3. **Delete `modules/environment.bicep` and do not recreate the environment.** This
+   doc originally said keeping the module and letting an incremental deployment
+   recreate the environment was free and correct. A `what-if` measured on 2026-11-04
+   refutes it: the subscription already holds **six** Container Apps environments
+   against a limit of five, so creating a seventh fails preflight validation with
+   `MaxNumberOfGlobalEnvironmentsInSubExceeded`. Keeping the module would make every
+   deployment fail, not silently cost nothing.
+
+So the jobs design has a precondition this document did not previously name:
+**one of the six existing environments must be retired before the substrate can
+exist.** That is a decision for the owners of `rg-jhl-agent-prod`,
+`rg-jhl-agent-dev-aue`, `rg-jhl-agent-prod-aue`, `rg-vera`, `rg-jacobsen-content` and
+`rg-jcs-website-staging`, not something this repo can take.
 
 Cost to keep, and what October proved. `csh-dev-logs` billed **0.00 NZD** in October
 while receiving Hermes logs, which confirms the free ingestion grant rather than
 asserting it: the Azure Monitor pricing footnote reads "the first 5 GB/month per
-billing account in this tier are free". A Consumption environment costs nothing at
-rest, because the retail meter `Environment Management Hour` is scoped by the
-pricing page footnote to "the Dedicated plan, private endpoint, and planned
-maintenance". October corroborates that: the resource group's meter breakdown has 19
-meters and no `Environment Management Hour` row, and `csh-dev-env` existed for the
-whole month.
+billing account in this tier are free". A Consumption environment appears to cost
+nothing at rest, because the retail meter `Environment Management Hour` is scoped by
+the pricing page footnote to "the Dedicated plan, private endpoint, and planned
+maintenance", and October's breakdown has 19 meters and no such row while
+`csh-dev-env` existed for the whole month.
 
-Treat that last point as the one to re-check at first job deploy. The meter appeared
-in the retail API with an `effectiveStartDate` of 2026-11-01, after the October
-window closed. If it ever does apply to a Consumption environment it is 0.1 USD/hour,
-about 130 NZD/month, which would make shape B cost 248 to 261 NZD and lose to shape
-A. The plan's CostManagement query, scoped to the new environment's resource id after
-one job run, settles it.
+Treat that as provisional rather than settled. The meter appeared in the retail API
+with an `effectiveStartDate` of 2026-11-01, after the October window closed. If it
+ever does apply to a Consumption environment it is 0.1 USD/hour, about 130
+NZD/month, which would make shape B cost 248 to 261 NZD and lose to shape A. The
+plan's CostManagement query, scoped to the environment's resource id after one job
+run, settles it. This is also why the environment quota, not the meter, is the
+blocker worth acting on first: a substrate that cannot be created has no meter bill.
 
 ## How a job gets the work, and gives it back
 
@@ -249,9 +260,9 @@ one job run, settles it.
 | No local disk, nothing shared with the VM | Git is the transport, which matches the repo's own backup model. The job clones from Azure DevOps at a specific commit |
 | Uncommitted work cannot ride git | Dispatcher refuses a dirty tree, or pushes an `oc-job/<ts>` branch and points the job at it |
 | Azure DevOps auth | Not yet decided. A PAT in a job container is a new secret surface, and workload identity federation for Azure DevOps is the alternative. Named as unverified below rather than assumed |
-| Key Vault access | A separate user-assigned identity for jobs with `Key Vault Secrets User`. Not the VM identity, which must stay the only one on the VM so `host/bin/lib-imds.sh:9` resolves without a `client_id` |
+| Key Vault access | A separate user-assigned identity for jobs with `Key Vault Secrets User`. Not the VM identity, which must stay the only one on the VM so `host/bin/lib-imds.sh:5-11` sends no `client_id` |
 | Dispatch | The plugin calls the jobs start API on the VM's managed identity. Needs a custom role with `jobs/read`, `jobs/start/action` and `jobs/executions/read` only. The reason is blast radius: built-in Contributor has no `dataActions` so it cannot read a secret value, but it can rewrite vault access policy, which reaches secret values indirectly, and it can delete the job and its environment |
-| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:161`). No second tool writes `rg-csh-dev` |
+| Ownership of the new resources | The jobs module, its identity, its role definition and its job definitions all go in `csh-dev` Bicep in ADO. That keeps one writer per resource group (`docs/deployment-plan.md:204`). No second tool writes `rg-csh-dev` |
 | Results | The job pushes `oc-job/<execution>` back; the VM polls executions and merges |
 | Re-entrancy | A retry re-pushes the same branch name, so the result must be overwritten, not appended. Idempotence is a requirement of the plugin, not a natural property |
 
@@ -262,31 +273,40 @@ run.
 
 ## Recommendation
 
-1. **Ship the plan for the VM, with the three amendment edits above.** Keep
-   `csh-dev-logs`, drop the spent rollback window, and rewrite the environment
-   deletion step.
+1. **Ship the plan for the VM, with the amendment edits above.** Keep
+   `csh-dev-logs`, drop the spent rollback window, and delete the ACA modules rather
+   than leaving them declared.
 2. **Start on `B2as_v2`** as the plan says, because subagents are local until the
-   plugin exists. Availability is confirmed: `az vm list-skus --location
-   newzealandnorth --resource-type virtualMachines --size Standard_B2als_v2` returns
-   the SKU with no restrictions and zones 1, 2, 3.
-3. **Build the jobs plugin next**, not as an unscheduled phase 2. It is what makes a
-   4 GiB anchor sufficient, and it is worth up to 64.74 NZD/month.
+   plugin exists. Availability is confirmed for both SKUs: `az vm list-skus
+   --location newzealandnorth --resource-type virtualMachines --size Standard_B2as_v2`
+   returns it with no restrictions and zones 1, 2, 3, and the same check for
+   `Standard_B2als_v2` returns the same.
+3. **Free an ACA environment slot, then build the jobs plugin.** The plugin is what
+   makes a 4 GiB anchor sufficient, and it is worth up to 64.74 NZD/month, but it
+   cannot be scheduled until one of the six existing environments is retired. Treat
+   the slot as the first task and the plugin as the second. Until the slot exists,
+   `B2as_v2` is not a temporary choice, it is the only one.
 4. **Resize to `B2als_v2`** after the plugin is proven, against the three-gate
    measurement already in the plan. Keep `B2as_v2` as the resize-back target.
 
 That path lands at 118 to 131 NZD/month with no job hours, and 133 to 175 at the
-plausible 50 to 100 job-hours. Against October's actual of 455.64 that is a large
-cut, and against today's plan it is up to 65 NZD/month, without violating a
-constraint.
+plausible 50 to 100 job-hours. Until the slot is freed and the plugin lands, the
+honest figure is the plan's own: 183 to 196. Against October's actual of 455.64 that
+is still a large cut, and the further 65 NZD/month is contingent rather than
+scheduled.
 
 ## What is not verified
 
+- **Whether one of the six ACA environments can be retired to free a slot.** This
+  is not an unknown fact, it is an untaken decision owned by other resource groups,
+  and it now blocks the jobs design outright: the subscription is at the
+  five-environment limit. It is the first item on any jobs plan.
 - **Whether the `Environment Management Hour` meter can ever bill a Consumption
   environment.** October says no, but the meter only appeared 2026-11-01. Settle
-  with the plan's CostManagement query after the first job run. This is the only
-  unverified item that can move the recommendation.
+  with the plan's CostManagement query after the first job run. This can move the
+  recommendation once a slot exists.
 - **Hermes RSS**, estimated 200 to 500 MiB. The app is deleted, so this now needs
-  `podman stats` after the quadlet cutover.
+  `podman stats` once the quadlet runs.
 - **Job cold start.** Estimate the provisioning and pull portion only; the server
   portion is measured. Settle by timing one real run.
 - **How a job authenticates to Azure DevOps** to clone and to push results.
