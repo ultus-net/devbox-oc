@@ -102,7 +102,7 @@ block storage and a VM does. That is the whole difference.
 
 **One headless server is small, and starts instantly.** 134 to 147 MiB RSS idle, and
 under 0.2 s to bind. The 341 MiB figure in the current plan
-(`docs/deployment-plan.md:364-367`) is the average across 16 interactive instances
+(`docs/deployment-plan.md:362-367`) is the average across 16 interactive instances
 on a workstation, which is a different object.
 
 That reopens the sizing question. One server plus the Hermes gateway plus the host

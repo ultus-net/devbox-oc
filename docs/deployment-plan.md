@@ -127,7 +127,7 @@ flowchart TB
   NIC --- VMR
   VMR --- OS
   VMR --- DD
-  VMR --- IMG
+  VMR -.->|"boot source"| IMG
   SNPT -.->|"weekly, 30 day"| DD
   VMR -.->|"IMDS, no client_id"| KV
   ID -.->|"Secrets User"| KV
