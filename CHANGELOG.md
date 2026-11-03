@@ -50,9 +50,12 @@ All notable changes to this project. One entry per landed change, newest first.
   against `rg-csh-dev`. The plan is written against the Bicep in Azure DevOps
   project `AzureAppDev`, repo `csh-dev`, which owns that resource group today, and
   replaces the Container Apps deployment with a Bicep-owned VM. It records the
-  eight resources that exist, the six impedance points a naive port fails on, the
+  six resources that remain, the six impedance points a naive port fails on, the
   actual October cost of 455.64 NZD against a 200 NZD budget, and the decision to
-  pin the VM awake so the Hermes Discord gateway stays reachable.
+  pin the VM awake so the Hermes Discord gateway stays reachable. It prices the
+  new shape at 183 to 193 NZD/month with no NAT gateway, no static IP and no
+  storage account, and keeps the budget at 200 rather than raising it to cover the
+  cost.
 - Cockpit published over the tailnet on its own HTTPS port, default 8443. ucore
   ships Cockpit and switches firewalld to the server profile so it is reachable,
   so the box would otherwise have a second root-equivalent door from the VNet.
