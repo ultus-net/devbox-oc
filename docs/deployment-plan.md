@@ -74,7 +74,8 @@ the deployment target, so there is no resource to import and no state to drift.
 | 12 | Backup model | Git and Azure DevOps are the backup. Snapshots are an undo |
 | 13 | Snapshots | Weekly, 30 day retention |
 | 14 | Budget | Stay at 200. The new shape prices at 183 to 193 |
-| 15 | VM size | **Open.** `B2as_v2` is priced; `B2als_v2` is verified cheaper and viable once subagents move to jobs. Needs a measured decision |
+| 15 | VM size | **`B2as_v2`, 2 vCPU / 8 GiB** as the starting SKU. Container jobs are phase 2, so local subagents stay on the box |
+| 16 | Container jobs | Deferred. Phase 2, after the VM is proven |
 
 Decisions 1 and 12 are the two that change the code. Pinning makes the idle gate a
 no-op, and treating git as the backup is what makes weekly snapshots enough rather
@@ -256,9 +257,10 @@ Both are burstable, so the sustained figure is the one that matters for a long
 compile. The larger SKU also carries a higher baseline, which is a second reason
 not to read the choice as memory-only.
 
-**How to settle it without guessing.** Deploy `B2als_v2` first. A resize is a
-deallocate and a SKU change on the same disk, so the decision is reversible.
-Measure:
+**How to settle it without guessing.** Deploy `B2as_v2` first, and treat
+`B2als_v2` as the resize to try once the box is idle and measured. A resize is a
+deallocate and a SKU change on the same disk, so the decision is reversible either
+way. Measure after the first week of real work:
 
 ```
 ssh core@devbox "free -m"
@@ -266,18 +268,36 @@ ssh core@devbox "sudo podman stats --no-stream"
 ssh core@devbox "cat /sys/fs/cgroup/cpu.stat"
 ```
 
-Resize up if any of these hold: swap is in use at steady state, `podman stats`
-approaches the memory limit, or `cpu.stat` shows `nr_throttled` climbing during a
-build. The resize is one property in `vm.bicep` and a reboot.
+Downsize to `B2als_v2` when all three hold: no swap in use at steady state, peak
+`podman stats` under about 3 GiB including the host, and `cpu.stat` showing
+`nr_throttled` flat during a build. Anything else means the 24.36 NZD/month for
+the larger SKU is buying real headroom.
 
-### The subagent plan changes this sizing
+### Why 8 GiB, not 4
 
-The operator intends an OpenCode plugin that runs subagents as Azure Container
-Apps jobs rather than as local processes. That moves peak memory off the box: the
-box then hosts one OpenCode server and one Hermes gateway, and jobs bill per
-second only while they run.
+Container jobs are phase 2, so until they exist the box runs the subagents. That
+is the whole argument: OpenCode spawns subagents as local processes, and each one
+carries its own memory. At the measured 341 MiB average per process, an 8 GiB box
+holds the server, Hermes, and roughly a dozen concurrent subagent processes before
+it starts swapping. A 4 GiB box holds two or three.
 
-Container Apps job rates, `newzealandnorth`, per second:
+This workstation is the evidence for how quickly that adds up: 16 processes,
+5.33 GiB, from ordinary session use. Three subagents plus the server plus Hermes
+is five processes, which fits in 4 GiB, but a fan-out is how an agent turns into
+five more, and swapping during a build is the failure this repo must not ship.
+
+The 4 GiB SKU stays in the plan as the resize target rather than the starting
+point. Starting large and shrinking on evidence is a decision that cannot break
+work. Starting small and growing on evidence is one that can.
+
+### Container jobs are phase 2
+
+The operator's plan is an OpenCode plugin that runs subagents as Azure Container
+Apps jobs instead of local processes. Deferred, so it is not a reason to under-size
+the box today.
+
+Rates for `newzealandnorth`, per second, recorded now so phase 2 starts from
+measured numbers:
 
 | Meter | USD/second | Per hour |
 |---|---|---|
@@ -286,12 +306,13 @@ Container Apps job rates, `newzealandnorth`, per second:
 | `Standard vCPU Idle Usage` | 0.000005 | near zero when idle |
 
 A subagent at 1 vCPU and 2 GiB for ten minutes is about 0.0276 USD, or 0.05 NZD.
-Cheap enough to be uninteresting at low volume, and a reason to size the box for
-idle rather than peak. Do not size the VM for subagent concurrency that will not
-run on it.
 
-This is also why `B2als_v2` becomes the reasonable default once that plugin
-exists: the box stops being where the memory pressure lives.
+Two things phase 2 has to solve, neither in scope here: a job has no local disk,
+so it cannot read `/srv/repos` as it stands, and it needs its own identity to reach
+Key Vault. Both are impedance points on the order of the six above.
+
+When phase 2 lands, `B2als_v2` becomes the better default, because the memory
+pressure moves off the box. That is a phase 2 resizing decision, not a phase 1 one.
 
 Three conclusions, each measured:
 
