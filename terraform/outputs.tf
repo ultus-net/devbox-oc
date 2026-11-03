@@ -25,16 +25,16 @@ output "data_disk_id" {
 
 output "key_vault_name" {
   value       = azurerm_key_vault.this.name
-  description = "Vault holding the server password."
+  description = "Vault holding the server password and the tailnet auth key."
 }
 
 output "next_steps" {
-  value = <<-EOT
+  value       = <<-EOT
     1. Point DNS-independent clients at the tailnet name:
          opencode --server https://<host>.<tailnet>.ts.net
     2. Pair the desktop app:
          opencode pair --url https://<host>.<tailnet>.ts.net
-    3. Confirm the idle probe auth scheme (docs/decisions.md, open question 1).
+    3. Confirm the idle probe auth scheme (docs/superpowers/specs/2026-10-27-devbox-opencode-design.md, open question 6).
   EOT
   description = "Post-apply checklist."
 }

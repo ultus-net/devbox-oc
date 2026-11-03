@@ -1,0 +1,43 @@
+# host/quadlet/opencode.container
+#
+# Installed to /etc/containers/systemd/ so podman's generator reads it. A
+# .container file under /etc/systemd/system/ is parsed as a native unit, has no
+# ExecStart, and never starts anything.
+[Unit]
+Description=OpenCode dev container
+Wants=network-online.target
+After=network-online.target oc-secrets.service
+# After= only orders the units. Without Requires=, a failed Key Vault fetch or
+# ACR login still lets the container start with no password and no pull
+# credentials, so it serves nothing and the idle gate never sees a session to
+# protect. Fail closed instead: no secrets, no workload.
+Requires=oc-secrets.service
+
+[Container]
+Image=__ACR__.azurecr.io/devbox:prod
+ContainerName=opencode
+PublishPort=127.0.0.1:4096:4096
+EnvironmentFile=/etc/opencode/env
+Environment=HOME=/home/dev
+Volume=/srv/repos:/home/dev/repos:Z
+# Session DB and global tool state live on the data disk so a VM rebuild keeps
+# them. Never a named volume: that lands on the OS disk.
+Volume=/srv/opencode/share:/home/dev/.local/share/opencode:Z
+Volume=/srv/opencode/config:/home/dev/.config/opencode:Z
+Volume=/srv/opencode/state:/home/dev/.local/state/opencode:Z
+AutoUpdate=registry
+
+# `podman auto-update` only keeps a new image if the container reports healthy,
+# so this is what makes the update path safe rather than optimistic. The compose
+# file this replaced had one; dropping it would have removed that guarantee.
+HealthCmd=/usr/local/bin/opencode --version
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=3
+HealthStartPeriod=30s
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

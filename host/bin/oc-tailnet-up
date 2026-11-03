@@ -10,6 +10,23 @@ STATE_DIR="${STATE_DIR:-/var/lib/tailscale}"
 AUTH_KEY_FILE="${AUTH_KEY_FILE:-/etc/devbox/tailscale-authkey}"
 LOGIN_SERVER="${LOGIN_SERVER:-}"
 
+# The key may arrive from Key Vault at boot instead of Ignition, which keeps it
+# out of custom_data.
+if [ ! -r "$AUTH_KEY_FILE" ] && [ -n "${TS_AUTHKEY_SECRET:-}" ]; then
+  install -d -m 0700 "$(dirname "$AUTH_KEY_FILE")"
+  # shellcheck disable=SC1090,SC1091
+  . "$(dirname "$0")/lib-imds.sh"
+  key="$(kv_secret "${VAULT_NAME:?}" "$TS_AUTHKEY_SECRET")"
+  # An empty key file is readable, so every later boot would skip Key Vault and
+  # the join would fail with a misleading error instead.
+  if [ -z "$key" ] || [ "$key" = "null" ]; then
+    echo "oc-tailnet-up: empty auth key from Key Vault" >&2
+    exit 1
+  fi
+  (umask 077; printf '%s\n' "$key" > "$AUTH_KEY_FILE")
+  chmod 0600 "$AUTH_KEY_FILE"
+fi
+
 if [ -f "$STATE_DIR/tailscaled.state" ]; then
   echo "oc-tailnet-up: state present, leaving tailscale as configured"
   exit 0

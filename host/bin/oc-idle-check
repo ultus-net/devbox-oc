@@ -1,53 +1,142 @@
 #!/usr/bin/env bash
 # Stop the devbox only when OpenCode is genuinely idle.
 #
-# Fails closed: any error exits 0 without stopping anything, so a half-started
-# container can never trigger a deallocation.
+# Fails closed on anything it cannot read: an unreadable probe keeps the box up
+# while the container is running, because a half-started container may still hold
+# a session. The exception is a container that is not running at all, which
+# cannot hold one, so the box is allowed to stop rather than bill for nothing.
 #
 # Uses IMDS for a managed-identity token and calls ARM directly. No Azure CLI
 # on the host, so there is no CLI version to drift and nothing to upgrade.
 #
 # Auth note: the server password is sent as a bearer token. Confirm this once:
 #   curl -i -H "Authorization: Bearer $PW" http://127.0.0.1:4096/api/info
-# If it returns 401, switch to a paired session cookie. See docs/decisions.md.
+# If it returns 401, switch to a paired session cookie. See docs/superpowers/specs/2026-10-27-devbox-opencode-design.md.
 
 set -euo pipefail
 trap 'echo "oc-idle: probe failed, staying up" >&2; exit 0' ERR
 
 API="${API:-http://127.0.0.1:4096}"
-ENV_FILE="${ENV_FILE:-/etc/opencode/env}"
-VM_ID_FILE="${VM_ID_FILE:-/etc/devbox/vm-resource-id}"
+# The password file is OUT_FILE, and nothing else. /etc/devbox/oc-secrets.env defines
+# it, so there is one definition of where the password lives and oc-secrets reads the
+# same one. This used to be a second hardcoded path, which is how the idle gate kept
+# reading the old file after the writer moved.
+#
+# No ENV_FILE override either. An override is a second way to name the file, it would
+# take precedence over the definition the guards check, and nothing would notice: a
+# stale ENV_FILE in the env file leaves every guard green while the probe reads the
+# wrong password. Tests set OUT_FILE instead.
+#
+# An absent OUT_FILE is not fatal. It means the env file never arrived, which is first
+# boot with a failed Key Vault fetch: the container is down, nothing is being served,
+# and the box must still deallocate rather than bill all day. So the read below reports
+# it as "no env file", the same path a missing file already takes. Failing here would
+# turn a billing guard into a crash loop.
+ENV_FILE="${OUT_FILE:-}"
 STATE="${STATE:-/var/lib/oc-idle/last-busy}"
+PIN_FILE="${PIN_FILE:-/var/lib/oc-idle/pin}"
 IDLE_MIN="${IDLE_MIN:-45}"
 BOOT_GRACE="${BOOT_GRACE:-900}"
 DRY_RUN="${DRY_RUN:-0}"
+UPTIME_OVERRIDE="${UPTIME_OVERRIDE:-}"
 IMDS="http://169.254.169.254/metadata/identity/oauth2/token"
+INSTANCE="http://169.254.169.254/metadata/instance"
 
 mkdir -p "$(dirname "$STATE")"
-[ -r "$ENV_FILE" ] || { echo "oc-idle: no env file" >&2; exit 0; }
-[ -r "$VM_ID_FILE" ] || { echo "oc-idle: no vm id file" >&2; exit 0; }
 
-# shellcheck disable=SC1090
-. "$ENV_FILE"
-: "${OPENCODE_PASSWORD:?OPENCODE_PASSWORD missing from env file}"
-PW="$OPENCODE_PASSWORD"
-VM_ID="$(cat "$VM_ID_FILE")"
+# Operator escape hatch. Work the five API signals cannot see lives behind this.
+if [ -e "$PIN_FILE" ]; then
+  printf '%s\n' "$(date +%s)" > "$STATE"
+  exit 0
+fi
+
+# No env file means oc-secrets never succeeded, so the quadlet's
+# Requires=oc-secrets.service kept the container down and no session exists to
+# protect. Exiting here would leave the box billing all day on exactly the first
+# boot this gate is meant to cover, so fall through with no password instead and
+# let probe_busy treat the unreadable API as idle.
+PW=""
+if [ -r "$ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  PW="${OPENCODE_PASSWORD:-}"
+else
+  echo "oc-idle: no env file, the container cannot be serving" >&2
+fi
+
+# ask the instance about itself
+#
+# The VM resource id is read from IMDS rather than a provisioned file. An earlier
+# version expected /etc/devbox/vm-resource-id, which nothing ever wrote, so the
+# gate exited 0 forever and the box never deallocated. Resolving it here removes
+# the file and the Terraform wiring that had to keep it in sync.
+vm_resource_id() {
+  curl -fsS -m 10 -H Metadata:true \
+    "${INSTANCE}/compute?api-version=2020-09-01&format=text" \
+    | jq -r '.resourceId'
+}
+
+VM_ID="${VM_ID_OVERRIDE:-}"
+if [ -z "$VM_ID" ]; then
+  VM_ID="$(vm_resource_id)"
+fi
+case "$VM_ID" in
+  /subscriptions/*/resourceGroups/*/providers/Microsoft.Compute/virtualMachines/*) ;;
+  *) echo "oc-idle: unusable vm id: ${VM_ID}" >&2; exit 0 ;;
+esac
 
 q() { curl -fsS -m 10 -H "Authorization: Bearer $PW" "$API$1"; }
 
-# Five independent signals that each mean "do not stop".
+# Five independent signals that each mean "do not stop". A signal that cannot be
+# read aborts the count: jq prints nothing for empty input, and arithmetic on
+# that empty value silently counts zero, which reads as idle and stops the box.
 count_busy() {
-  local n=0
-  n=$(( n + $(q /api/session/active      | jq '.data | length') ))
-  n=$(( n + $(q /api/shell               | jq '[.data[] | select(.status == "running")] | length') ))
-  n=$(( n + $(q /api/pty                 | jq '[.data[] | select(.status == "running")] | length') ))
-  n=$(( n + $(q /api/permission/request  | jq '(.data // []) | length') ))
-  n=$(( n + $(q /api/form                | jq '(.data // []) | length') ))
+  local n=0 x
+  x="$(q /api/session/active      | jq '.data | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/shell               | jq '[.data[] | select(.status == "running")] | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/pty                 | jq '[.data[] | select(.status == "running")] | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/permission/request  | jq '(.data // []) | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
+  x="$(q /api/form                | jq '(.data // []) | length')" || return 1
+  [ -n "$x" ] || return 1
+  n=$(( n + x ))
   printf '%s' "$n"
 }
 
 now="$(date +%s)"
-uptime_s="$(cut -d. -f1 /proc/uptime)"
+uptime_s="${UPTIME_OVERRIDE:-$(cut -d. -f1 /proc/uptime)}"
+
+# Sessions live in the container. If it is not running there is nothing to
+# protect, and the probe below will fail merely because nothing is listening.
+#
+# This case needs handling: the quadlet carries Requires=oc-secrets.service, so a
+# failed Key Vault fetch or ACR login leaves the container down on purpose. Without
+# this check the unreadable API reads as "possibly busy", the busy stamp refreshes
+# every five minutes, and the box runs all day serving nothing.
+container_up() {
+  systemctl is-active --quiet opencode.service
+}
+
+# A failed probe with the container up is still treated as busy. A half-started
+# container must never trigger a deallocation.
+probe_busy() {
+  local n
+  if ! n="$(count_busy)"; then
+    if container_up; then
+      return 0
+    fi
+    echo "oc-idle: API unreadable and the container is not running" >&2
+    return 1
+  fi
+  [ "$n" -gt 0 ]
+}
 
 # Treat boot as busy. The container is still coming up and would look idle.
 if [ "$uptime_s" -lt "$BOOT_GRACE" ]; then
@@ -55,7 +144,7 @@ if [ "$uptime_s" -lt "$BOOT_GRACE" ]; then
   exit 0
 fi
 
-if [ "$(count_busy)" -gt 0 ]; then
+if probe_busy; then
   printf '%s\n' "$now" > "$STATE"
   exit 0
 fi
@@ -66,7 +155,7 @@ last="$(cat "$STATE" 2>/dev/null || printf '%s' "$now")"
 # Second look, to close the race where a session starts between the probe and
 # the deallocation call.
 sleep 60
-if [ "$(count_busy)" -gt 0 ]; then
+if probe_busy; then
   printf '%s\n' "$(date +%s)" > "$STATE"
   exit 0
 fi

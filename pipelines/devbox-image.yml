@@ -1,0 +1,64 @@
+# pipelines/devbox-image.yml
+trigger:
+  branches: [main]
+  paths:
+    - image/*
+pr: none
+
+variables:
+  acrName: devboxacr
+  repo: devbox
+
+jobs:
+  - job: build
+    pool: { vmImage: ubuntu-latest }
+    steps:
+      - task: AzureCLI@2
+        displayName: Build and push
+        inputs:
+          azureSubscription: devbox-image
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+            tag="sha-$(Build.SourceVersion)"
+            az acr login -n "$(acrName)"
+            docker build -t "$(acrName).azurecr.io/$(repo):$tag" image/
+            docker push "$(acrName).azurecr.io/$(repo):$tag"
+
+      # Blocking gate. Invokes the real smoke test, so there is one definition of
+      # "fit to serve" rather than an inline copy that drifts from image/smoke.sh.
+      - script: |
+          set -euo pipefail
+          ENGINE=docker bash image/smoke.sh \
+            "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)"
+        displayName: Smoke gate before promotion
+
+      - task: AzureCLI@2
+        displayName: Promote to prod and capture digest
+        inputs:
+          azureSubscription: devbox-image
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+            src="$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)"
+            digest="$(az acr manifest show-metadata -r "$(acrName)" \
+              -n "$(repo):sha-$(Build.SourceVersion)" --query digest -o tsv)"
+            az acr import -n "$(acrName)" --source "$src" --image "$(repo):prod" --force
+            echo "promoted $digest"
+            printf '# Written by pipelines/devbox-image.yml. Never hand-edit.\n%s\n' \
+              "$digest" > "$(Build.SourcesDirectory)/image/prod-digest.txt"
+
+      # Commit the digest record. `***NO_CI***` is the Azure Pipelines marker;
+      # `[skip ci]` is GitHub's and is ignored here, so using it would re-trigger
+      # this pipeline on its own commit and loop.
+      - script: |
+          set -euo pipefail
+          git config user.name "devbox-ci"
+          git config user.email "devbox-ci@users.noreply.github.com"
+          git add image/prod-digest.txt
+          git diff --staged --quiet && exit 0
+          git commit -m "chore(image): promote to prod ***NO_CI***"
+          git push
+        displayName: Record digest

@@ -1,0 +1,25 @@
+{
+  "format_version": "1.2",
+  "resource_changes": [
+    {
+      "address": "azurerm_network_security_group.vm",
+      "type": "azurerm_network_security_group",
+      "name": "vm",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "security_rule": [
+            {
+              "name": "allow-ssh-world",
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "destination_port_range": "22",
+              "source_address_prefix": "Internet"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

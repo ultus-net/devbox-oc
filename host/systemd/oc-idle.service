@@ -1,9 +1,0 @@
-[Unit]
-Description=Run the OpenCode idle gate
-After=devbox.service
-Requires=devbox.service
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/devbox/oc-idle.env
-ExecStart=/usr/local/sbin/oc-idle-check

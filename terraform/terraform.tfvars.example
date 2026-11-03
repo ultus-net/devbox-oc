@@ -1,0 +1,48 @@
+# Terraform variables for the devbox. Copy this file, then fill it in:
+#
+#   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+#
+# Every assignment sits inside one block comment on purpose. A half-filled tfvars
+# that silently keeps a placeholder is worse than an obvious missing file,
+# because plan then succeeds against the wrong value instead of failing on a gap.
+# Delete the /* and */ markers, then replace every <...> placeholder.
+#
+# Copied unchanged, this file sets nothing, so plan fails loudly with
+# "No value for required variable" for each required variable below.
+#
+# Variables not listed here have a default in variables.tf. Override one only
+# when you know why the default is wrong for your subscription.
+
+# --- Required: no default in variables.tf --------------------------------
+
+/*
+# Target subscription. Set it explicitly so a stale az context cannot apply to
+# the wrong subscription. If wrong: resources land in another subscription, or
+# plan fails with "subscription not found".
+subscription_id = "<subscription-id>"
+
+# Managed image ID of the published ucore image. Never a marketplace URN.
+# pipelines/devbox-os.yml prints it as its last output line, under the header
+# "Apply this as os_image_id:", so paste the value printed there.
+# It must match ^/subscriptions/.+/providers/Microsoft.Compute/images/.+$.
+# A marketplace reference such as "fedora-coreos:stable:latest" fails the
+# variable validation before anything is planned.
+os_image_id = "/subscriptions/<subscription-id>/resourceGroups/<image-resource-group>/providers/Microsoft.Compute/images/<image-name>"
+
+# Existing container registry that holds the devbox image.
+# Must match ^[a-z0-9]{5,50}$: 5 to 50 lowercase alphanumerics, no hyphens.
+# There is no default on purpose, because an empty value removes the only image
+# pull path: the ACR pull role assignment is still created against an empty
+# registry name, so the VM boots and then cannot pull the container image.
+acr_name = "<registryname>"
+
+# OpenCode server password. Stored in Key Vault. Marked sensitive = true, so
+# never commit it: export TF_VAR_opencode_password from a secret store, or fill
+# the value here only in an untracked terraform/terraform.tfvars.
+opencode_password = "<opencode-server-password>"
+
+# Reusable, tagged Tailscale auth key, scoped to this device. Marked
+# sensitive = true. Likewise from a secret store via TF_VAR_tailscale_authkey,
+# never committed.
+tailscale_authkey = "<tskey-auth-...>"
+*/

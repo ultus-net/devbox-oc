@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Run every test suite this repo owns, then lint every shell script.
+# This is the repo's verification gate; it is what a reviewer runs.
+set -uo pipefail
+
+rc=0
+
+run() {
+  printf '== %s\n' "$1"
+  shift
+  if "$@"; then
+    printf '   ok\n'
+  else
+    printf '   FAILED (exit %s)\n' "$?"
+    rc=1
+  fi
+}
+
+run "idle gate"           ./host/tests/test_oc-idle-check.sh
+run "secrets and ACR"     ./host/tests/test_oc-secrets.sh
+run "tailnet join"        ./host/tests/test_tailnet_up.sh
+run "cockpit loopback"    ./host/tests/test_cockpit_loopback.sh
+run "OS image publish"    ./os/tests/test_build_os_image.sh
+run "OS image single vhd" ./os/tests/test_build_os_image_one_vhd.sh
+run "container digest"    ./image/tests/test_digest_record.sh
+run "quadlet persistence" ./host/tests/test_quadlet_persistence.sh
+# The artifact check compiles the committed Ignition again, which needs Butane.
+# Look for a local binary so the reproducibility assertion is active here; the
+# suite reports a SKIP when none is available rather than failing.
+if [ -z "${BUTANE:-}" ]; then
+  for candidate in "$(command -v butane 2>/dev/null || true)" "$HOME/.tmp-task6-tool/butane"; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+      BUTANE="$candidate"
+      export BUTANE
+      break
+    fi
+  done
+fi
+
+run "ignition units"      ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.ign
+run "tailscale enabled"   ./os/butane/tests/test_tailscale_enabled.sh
+run "bootc image"         ./os/butane/tests/test_bootc_image.sh
+run "units load their env" ./os/butane/tests/test_units_load_their_env.sh
+
+# Terraform guards. These test the assertions themselves against fixtures, since
+# a real plan needs a subscription.
+run "no public ingress (violation detected)" \
+  bash -c './terraform/tests/no_public_ip.sh terraform/tests/fixtures/violation_public_ip.json && exit 1 || exit 0'
+run "no public ingress (clean passes)" \
+  ./terraform/tests/no_public_ip.sh terraform/tests/fixtures/clean.json
+run "no scheduled stop" \
+  ./terraform/tests/no_scheduled_stop.sh
+run "data disk protected" \
+  ./terraform/tests/data_disk_protected.sh
+run "vault name derivable without state" \
+  ./terraform/tests/key_vault_name_derived.sh
+run "auth key stored" \
+  ./terraform/tests/authkey_is_stored.sh
+run "auth key name matches build" \
+  ./terraform/tests/authkey_name_matches_build.sh
+run "password secret name matches" \
+  ./terraform/tests/password_secret_name_matches.sh
+run "variables documented" \
+  ./terraform/tests/variables_documented.sh
+
+run "docs complete"  ./tests/docs_complete.sh
+run "wake wrapper"   ./tools/tests/test_oc.sh
+run "pipeline shape" ./pipelines/tests/test_pipeline_shape.sh
+run "OS pipeline"    ./pipelines/tests/test_os_pipeline.sh
+
+# The integrity test needs a tarball. This suite skips without one, so a machine
+# with no container engine still runs the rest of the gate. The image pipeline
+# does not build this tarball yet, so in CI the suite is skipped too: the sha512
+# check itself is guarded only where someone has extracted the artifact.
+if [ -f /tmp/ocinspect/oc.tgz ]; then
+  run "image integrity" ./image/tests/test_integrity_logic.sh /tmp/ocinspect/oc.tgz
+else
+  printf '== image integrity\n   SKIPPED: no cached tarball at /tmp/ocinspect/oc.tgz\n'
+fi
+
+# Lint every shell script we own. Prefer a shellcheck on PATH so this works on a
+# company build agent, then a local download. A missing linter FAILS the gate
+# unless SKIP_LINT=1 is set explicitly: a lint gate that can quietly pass having
+# linted nothing is worse than no lint gate, because it buys false confidence.
+mapfile -t scripts < <(
+  find host os image tools tests terraform pipelines -name '*.sh' -type f 2>/dev/null
+  find host/bin -maxdepth 1 -type f 2>/dev/null
+)
+
+shellcheck_bin=""
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck_bin="$(command -v shellcheck)"
+elif [ -x /tmp/shellcheck-v0.10.0/shellcheck ]; then
+  shellcheck_bin=/tmp/shellcheck-v0.10.0/shellcheck
+fi
+
+if [ "${#scripts[@]}" -eq 0 ]; then
+  printf '== shellcheck\n   SKIPPED: no scripts found\n'
+elif [ -z "$shellcheck_bin" ]; then
+  if [ "${SKIP_LINT:-0}" = "1" ]; then
+    printf '== shellcheck\n   SKIPPED: SKIP_LINT=1 and no shellcheck available\n'
+  else
+    printf '== shellcheck\n   FAILED: no shellcheck on PATH or in /tmp\n'
+    printf '   install shellcheck, or set SKIP_LINT=1 to skip explicitly\n'
+    rc=1
+  fi
+else
+  printf '== shellcheck (%s files)\n' "${#scripts[@]}"
+  if "$shellcheck_bin" "${scripts[@]}"; then
+    printf '   ok\n'
+  else
+    printf '   FAILED\n'
+    rc=1
+  fi
+fi
+
+printf '\n'
+if [ "$rc" -eq 0 ]; then
+  echo "VERIFY: all suites pass"
+else
+  echo "VERIFY: failures above"
+fi
+exit "$rc"

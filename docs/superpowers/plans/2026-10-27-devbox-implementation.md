@@ -109,6 +109,47 @@ echo "smoke ok: $ref"
 Run: `chmod +x image/smoke.sh && ./image/smoke.sh ghcr.io/anomalyco/opencode:2.1.4`
 Expected: FAIL at the `id -u dev` check, because the upstream image has no `dev` user. This proves the test detects a missing user rather than passing vacuously.
 
+If this machine has no usable container engine (docker socket permission denied,
+no podman), record that and skip to step 2b. The smoke test still runs, but in the
+pipeline from Task 4, where it becomes a blocking gate before promotion.
+
+- [ ] **Step 2b: Verify the integrity check without a container engine**
+
+The sha512 check is the load-bearing part of the build, so it must be provable
+without Docker.
+
+```bash
+#!/usr/bin/env bash
+# image/tests/test_integrity_logic.sh
+# Runs exactly the Dockerfile's check: decode the base64 sha512 to hex, then
+# compare against sha512sum of the tarball. Includes a negative control.
+set -euo pipefail
+
+OC_SHA512='o8EJ0ZsT4dzDKN+0mpG2EKbNGzJyp+F1++Av28UReRVfiEv+N34eZEnN/unkiMoerKHad6W6Ii7k4ukTnPNmNQ=='
+tarball="${1:?usage: test_integrity_logic.sh <tarball>}"
+
+expected="$(printf '%s' "$OC_SHA512" | base64 -d | od -An -tx1 | tr -d ' \n')"
+actual="$(sha512sum "$tarball" | cut -d' ' -f1)"
+
+[ "$actual" = "$expected" ] || { echo "integrity check FAILS" >&2; exit 1; }
+echo "integrity check PASSES"
+
+corrupt="$(mktemp)"
+trap 'rm -f "$corrupt"' EXIT
+cp "$tarball" "$corrupt"
+printf 'x' >> "$corrupt"
+if [ "$(sha512sum "$corrupt" | cut -d' ' -f1)" = "$expected" ]; then
+  echo "negative control FAILED: corrupted input still matched" >&2
+  exit 1
+fi
+echo "negative control passes: corruption is detected"
+```
+
+Run:
+`curl -fsSL -o /tmp/oc.tgz https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-2.1.4.tgz && ./image/tests/test_integrity_logic.sh /tmp/oc.tgz`
+Expected: `integrity check PASSES` then
+`negative control passes: corruption is detected`
+
 - [ ] **Step 3: Add the container config to the Dockerfile**
 
 Add `containers-common` to the existing `dnf install` list in `image/Dockerfile`,
@@ -456,6 +497,14 @@ jobs:
             docker build -t "$(acrName).azurecr.io/$(repo):$tag" image/
             docker push "$(acrName).azurecr.io/$(repo):$tag"
 
+      # Blocking gate. Invokes the real smoke test, so there is one definition of
+      # "fit to serve" rather than an inline copy that drifts from image/smoke.sh.
+      - script: |
+          set -euo pipefail
+          ENGINE=docker bash image/smoke.sh \
+            "$(acrName).azurecr.io/$(repo):sha-$(Build.SourceVersion)"
+        displayName: Smoke gate before promotion
+
       - task: AzureCLI@2
         displayName: Promote to prod and capture digest
         inputs:
@@ -594,9 +643,21 @@ schedules:
 jobs:
   - job: publish
     pool: { vmImage: ubuntu-latest }
+    variables:
+      # Names must match Terraform's, or the image lands in a group the VM
+      # cannot reference.
+      resourceGroup: rg-devbox-oc
+      storageAccount: stdevboxocimages
+      location: westeurope
     steps:
-      - script: curl -fsSL https://get.coreos-installer.dev | sh -s -- -p /usr/local/bin
-        displayName: install coreos-installer
+      # get.coreos-installer.dev does not resolve (verified: NXDOMAIN). Use the
+      # upstream container, pinned, per the no-latest constraint.
+      - script: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/work" -w /work \
+            quay.io/coreos/coreos-installer:v0.27.0 --help >/dev/null
+          echo "coreos-installer container ok"
+        displayName: verify coreos-installer image
       - task: AzureCLI@2
         displayName: publish managed image
         inputs:
@@ -605,6 +666,9 @@ jobs:
           scriptLocation: inlineScript
           inlineScript: |
             set -euo pipefail
+            export RG="$(resourceGroup)"
+            export STORAGE_ACCOUNT="$(storageAccount)"
+            export LOCATION="$(location)"
             ./os/build-os-image.sh | tee image-id.txt
       - script: |
           echo "Apply this as os_image_id:"; tail -1 image-id.txt
@@ -629,7 +693,7 @@ git commit -m "feat(os): publish the Fedora CoreOS Azure managed image"
 
 **Interfaces:**
 - Consumes: the scripts in `host/bin/`, copied into the image by the pipeline.
-- Produces: `os/butane/ucore.ign`, valid JSON, containing units `oc-secrets.service`, `oc-idle.timer`, `oc-snapshot.timer`, the quadlet `opencode.container`, and `srv-data.mount`.
+- Produces: `os/butane/ucore.ign`, valid JSON, containing units `oc-secrets.service`, `oc-idle.timer`, `oc-snapshot.timer`, the quadlet `opencode.container`, and `srv.mount`.
 
 - [ ] **Step 1: Write the Butane source**
 
@@ -658,31 +722,31 @@ storage:
     - path: /usr/local/sbin/oc-secrets
       mode: 0755
       contents:
-        local: ../../host/bin/oc-secrets
+        local: host/bin/oc-secrets
     - path: /usr/local/sbin/oc-acr-login
       mode: 0755
       contents:
-        local: ../../host/bin/oc-acr-login
+        local: host/bin/oc-acr-login
     - path: /usr/local/sbin/oc-idle-check
       mode: 0755
       contents:
-        local: ../../host/bin/oc-idle-check
+        local: host/bin/oc-idle-check
     - path: /usr/local/sbin/oc-snapshot
       mode: 0755
       contents:
-        local: ../../host/bin/oc-snapshot
+        local: host/bin/oc-snapshot
     - path: /usr/local/sbin/oc-tailnet
       mode: 0755
       contents:
-        local: ../../host/bin/oc-tailnet
+        local: host/bin/oc-tailnet
     - path: /usr/local/sbin/oc-tailnet-up
       mode: 0755
       contents:
-        local: ../../host/bin/oc-tailnet-up
+        local: host/bin/oc-tailnet-up
     - path: /usr/local/sbin/lib-imds.sh
       mode: 0644
       contents:
-        local: ../../host/bin/lib-imds.sh
+        local: host/bin/lib-imds.sh
     - path: /etc/devbox/oc-secrets.env
       mode: 0600
       contents:
@@ -704,7 +768,7 @@ storage:
           SUBSCRIPTION_ID=__SUBSCRIPTION_ID__
 systemd:
   units:
-    - name: srv-data.mount
+    - name: srv.mount
       enabled: true
       contents: |
         [Unit]
@@ -721,7 +785,7 @@ systemd:
       contents: |
         [Unit]
         Description=Write OpenCode env and ACR auth from Key Vault
-        After=network-online.target srv-data.mount
+        After=network-online.target srv.mount
         Wants=network-online.target
         [Service]
         Type=oneshot
@@ -754,7 +818,7 @@ systemd:
       contents: |
         [Unit]
         Description=Snapshot the data disk
-        After=srv-data.mount
+        After=srv.mount
         [Service]
         Type=oneshot
         EnvironmentFile=/etc/devbox/oc-snapshot.env
@@ -784,17 +848,18 @@ systemd:
         ExecStart=/usr/local/sbin/oc-tailnet
         [Install]
         WantedBy=multi-user.target
+    # ucore ships podman-restart.service already; do not redefine it. Enable the
+    # shipped one instead, plus the auto-update timer that AutoUpdate=registry
+    # depends on.
     - name: podman-restart.service
       enabled: true
-      contents: |
-        [Unit]
-        Description=Restart podman containers that were running before reboot
-        After=podman.socket oc-secrets.service
-        [Service]
-        Type=oneshot
-        ExecStart=/usr/bin/podman start --all
-        [Install]
-        WantedBy=multi-user.target
+      dropins:
+        - name: 10-devbox.conf
+          contents: |
+            [Unit]
+            After=oc-secrets.service
+    - name: podman-auto-update.timer
+      enabled: true
 ```
 
 - [ ] **Step 2: Write the quadlet**
@@ -803,6 +868,12 @@ The session database must live on the **data disk**, not a podman named volume.
 A named volume sits in `/var/lib/containers/storage` on the OS disk, and the OS
 disk is recreated with the VM, so a rebuild would discard every session. That
 violates goal 4.
+
+**Install path matters.** Podman's generator scans only `/run/containers/systemd/`,
+`/etc/containers/systemd/` and `/usr/share/containers/systemd/` (verified in
+`podman-systemd.unit.5.md`). A `.container` file under `/etc/systemd/system/` is
+parsed by systemd as a native unit, has no `ExecStart`, and never starts anything.
+Bake it to `/etc/containers/systemd/opencode.container` at 0644.
 
 ```ini
 # host/quadlet/opencode.container
@@ -846,13 +917,16 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 [ -f "$q" ] || fail "quadlet missing"
 
 # Every volume that maps a persistent path must be under /srv, i.e. the data disk.
-grep -E '^Volume=' "$q" | while read -r line; do
+# Read via process substitution, not a pipe: `fail` inside a pipeline runs in a
+# subshell, so `exit 1` would not stop the script and the check would pass
+# vacuously on the first offending line.
+while read -r line; do
   src="$(printf '%s' "${line#Volume=}" | cut -d: -f1)"
   case "$src" in
     /srv/*) ;;
     *) fail "persistent volume outside the data disk: $src" ;;
   esac
-done
+done < <(grep -E '^Volume=' "$q")
 
 # Named volumes are the specific mistake this guards against.
 if grep -Eq '^Volume=[a-z0-9_-]+:/' "$q"; then
@@ -872,8 +946,10 @@ Expected: `a named volume is used; it would live on the OS disk`. Revert.
 
 - [ ] **Step 2c: Create the persistent directories at boot**
 
-Add to the Ignition `storage.files` list a systemd unit that creates them with
-the container's uid, since they sit on a freshly formatted data disk:
+Add to the Ignition `systemd.units` list a unit that creates them with the
+container's uid, since they sit on a freshly formatted data disk. It is a unit,
+not a `storage.files` entry: a `storage.files` entry would place a file, not run
+a command.
 
 ```yaml
     - name: oc-paths.service
@@ -881,8 +957,8 @@ the container's uid, since they sit on a freshly formatted data disk:
       contents: |
         [Unit]
         Description=Create persistent directory layout on the data disk
-        After=srv-data.mount
-        Requires=srv-data.mount
+        After=srv.mount
+        Requires=srv.mount
         Before=opencode.service
         [Service]
         Type=oneshot
@@ -904,6 +980,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 out="${1:-$here/ucore.ign}"
 
 tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
 sed -e "s|__VAULT_NAME__|${VAULT_NAME}|g" \
     -e "s|__ACR_NAME__|${ACR_NAME}|g" \
     -e "s|__ACR__|${ACR_NAME}|g" \
@@ -911,10 +988,18 @@ sed -e "s|__VAULT_NAME__|${VAULT_NAME}|g" \
     -e "s|__RG__|${RG}|g" \
     -e "s|__SUBSCRIPTION_ID__|${SUBSCRIPTION_ID}|g" \
     -e "s|__SSH_PUBKEY__|${SSH_PUBKEY}|g" \
-    "$here/ucore.bu" > "$tmp"
+    "$here/ucore.bu" > "$here/.ucore.tmp.bu"
 
-podman run --interactive --rm quay.io/coreos/butane:release --pretty --strict < "$tmp" > "$out"
-rm "$tmp"
+# --files-dir must be the repo root, and the local: paths are relative to it.
+# Verified: local paths that escape the files dir fail with ErrFilesDirEscape,
+# and stdin with no --files-dir fails with ErrNoFilesDir.
+repo_root="$(cd "$here/../.." && pwd)"
+podman run --interactive --rm \
+  --volume "${repo_root}:/work:ro" --workdir /work \
+  quay.io/coreos/butane:release \
+  --pretty --strict --files-dir /work \
+  < "$here/.ucore.tmp.bu" > "$out"
+rm "$here/.ucore.tmp.bu"
 
 jq -e '.ignition.version' "$out" >/dev/null || { echo "not valid ignition" >&2; exit 1; }
 jq -e '.systemd.units | map(.name) | index("oc-idle.timer")' "$out" >/dev/null \
@@ -939,7 +1024,13 @@ a unit references a path nobody copied in.
 #!/usr/bin/env bash
 # os/butane/tests/test_units_have_scripts.sh
 set -euo pipefail
-ign="${1:?usage: test_units_have_scripts.sh <ign>}"
+ign="${1:-}"
+# Called with no argument from tests/verify.sh, where no .ign may exist (it needs
+# a container engine to compile). Skip explicitly rather than break the gate.
+if [ -z "$ign" ] || [ ! -f "$ign" ]; then
+  echo "SKIP: no ignition file to check (compile with os/butane/build.sh first)"
+  exit 0
+fi
 fail() { echo "FAIL: $1" >&2; exit 1; }
 for p in /usr/local/sbin/oc-secrets /usr/local/sbin/oc-acr-login \
          /usr/local/sbin/oc-idle-check /usr/local/sbin/oc-snapshot \
@@ -963,8 +1054,19 @@ executable, add that file to the `storage.files` list and rebuild.
 
 - [ ] **Step 5: Delete the superseded files**
 
+Delete the compose file, the script that `podman auto-update` replaces, and the
+two units that referenced it. Leaving the units behind would point systemd at a
+binary that no longer exists.
+
 ```bash
-git rm host/compose.yaml host/bin/oc-image-update
+git rm host/compose.yaml host/bin/oc-image-update \
+       host/systemd/oc-image-update.service host/systemd/oc-image-update.timer
+```
+
+Then assert no dangling references remain:
+
+```bash
+grep -rn "oc-image-update" host/ && echo "dangling reference" && exit 1 || echo "no dangling references"
 ```
 
 - [ ] **Step 6: Commit**

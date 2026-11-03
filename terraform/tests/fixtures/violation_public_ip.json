@@ -1,0 +1,17 @@
+{
+  "format_version": "1.2",
+  "resource_changes": [
+    {
+      "address": "azurerm_network_interface.vm",
+      "type": "azurerm_network_interface",
+      "name": "vm",
+      "change": {
+        "actions": ["create"],
+        "after": {
+          "name": "nic-devbox-oc",
+          "public_ip_address_id": "/subscriptions/x/resourceGroups/rg/providers/Microsoft.Network/publicIPAddresses/pip"
+        }
+      }
+    }
+  ]
+}

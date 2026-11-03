@@ -1,5 +1,5 @@
 # Scheduled wake-up. Shutdown is NOT scheduled: the in-host idle gate owns
-# that decision so an active session is never killed. See docs/decisions.md.
+# that decision so an active session is never killed. See docs/superpowers/specs/2026-10-27-devbox-opencode-design.md.
 #
 # A Logic App Consumption workflow is used instead of an Azure Function
 # because it needs no code, no runtime and no deployment artifact. Built-in
@@ -38,7 +38,7 @@ resource "azurerm_logic_app_trigger_recurrence" "weekday_morning" {
   schedule {
     at_these_hours   = [tonumber(split(":", var.schedule_start_utc)[0])]
     at_these_minutes = [tonumber(split(":", var.schedule_start_utc)[1])]
-    week_days        = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    on_these_days    = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
   }
 }
 

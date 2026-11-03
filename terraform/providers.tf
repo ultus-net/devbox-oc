@@ -6,7 +6,6 @@ provider "azurerm" {
     virtual_machine {
       # Rebuilds are deliberate. Guards against a typo recreating the box.
       delete_os_disk_on_deletion     = true
-      graceful_shutdown              = false
       skip_shutdown_and_force_delete = false
     }
   }

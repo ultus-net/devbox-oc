@@ -1,0 +1,4 @@
+# Written by pipelines/devbox-image.yml on the first successful build.
+# Never hand-edit. PENDING means no image has ever been promoted, so there is
+# nothing to roll back to yet.
+sha256:PENDING-FIRST-BUILD

@@ -1,0 +1,80 @@
+# pipelines/devbox-verify.yml
+#
+# The verification gate on every pull request. tests/verify.sh needs no Azure
+# credentials and no container engine, so nothing here holds a service
+# connection and a fork can run it unchanged.
+#
+# `trigger: none` keeps this a PR gate. The two image pipelines own main.
+trigger: none
+pr:
+  paths:
+    # Every path tests/verify.sh reads, because a docs-only change can still
+    # break tests/docs_complete.sh.
+    include:
+      - 'host/**'
+      - 'os/**'
+      - 'image/**'
+      - 'terraform/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'pipelines/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'CHANGELOG.md'
+
+jobs:
+  - job: verify
+    pool: { vmImage: ubuntu-latest }
+    steps:
+      # tests/verify.sh fails, rather than skipping, when no shellcheck is on
+      # PATH. Installing it here keeps a lint failure meaning "lint failed" and
+      # not "the agent had no linter". apt carries one shellcheck per image, so
+      # the version is printed to record what actually ran.
+      #
+      # python3-yaml is installed for the same reason: two unit suites read the
+      # Butane source with a YAML parser, and they fail rather than skip when the
+      # module is absent.
+      - script: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck python3-yaml
+          shellcheck --version
+          python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
+        displayName: install shellcheck and PyYAML
+
+      # Butane compiles the committed Ignition artifact again, which is the only
+      # assertion that a hand-edited ucore.ign cannot pass. Without the binary
+      # test_units_have_scripts.sh prints SKIP and the check silently stops
+      # happening, so it is installed here rather than left to the runner.
+      #
+      # Pinned by version AND sha256, because this repo pins every downloaded
+      # binary by content: a tag can be moved, and the artifact must be compiled
+      # by the same compiler that produced it. Upgrade both together, and
+      # recompile ucore.ign in the same commit, or the parity check fails.
+      - script: |
+          set -euo pipefail
+          version=0.29.0
+          sha256=53a20d820fbaa7fda4f1afd1814974badc8e448db4c151d3f1ba005dc29bc4c9
+          bindir="$(Pipeline.Workspace)/bin"
+          mkdir -p "$bindir"
+          curl -fsSL --retry 3 --output "$bindir/butane" \
+            "https://github.com/coreos/butane/releases/download/v${version}/butane-x86_64-unknown-linux-gnu"
+          printf '%s  %s\n' "$sha256" "$bindir/butane" | sha256sum --check --strict -
+          chmod +x "$bindir/butane"
+          "$bindir/butane" --version
+          echo "##vso[task.prependpath]$bindir"
+        displayName: install pinned butane
+
+      - script: |
+          set -euo pipefail
+          # A missing compiler turns the artifact check into a SKIP, so assert the
+          # line is absent. Only this one matters: the image-integrity suite skips
+          # by design when no cached tarball is present.
+          ./tests/verify.sh 2>&1 | tee verify.log
+          if grep -q 'artifact reproducibility unchecked' verify.log; then
+            echo "##vso[task.logissue type=error]butane was not usable, so the committed Ignition was never recompiled"
+            exit 1
+          fi
+        displayName: verification gate
+        env:
+          BUTANE: $(Pipeline.Workspace)/bin/butane
