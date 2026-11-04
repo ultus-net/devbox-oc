@@ -48,7 +48,15 @@
         "path": "/usr/local/sbin/oc-backup",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/2RUYW/bNhD9zl/xJmtLE1S2nDhe6izZ0jQdDGzYkBjYgLZwKPJkEZZJgaScBE3++0AqSp3uk0Ty7h7v3nsc/DBqnR0VSo9Ib1FwV7EB3nOxRtvAVwTJPYdUbg1v4oYpy6ww97DkvBKw1BinvLEP0HxDEkrDkbDk3ZD0dsgGbIBFRSi4WLcNbKtdiOFolNYk+zrCaM+VJgvX4VTGeWgi6aDNcxQboOFizVcErmUM25J1ymgIrrXxkFaVHgX5OyIdwYYYObuFctiYVvuIyGVmdP0wYwPw/mKbNuJtyeLOKk99v3EAyocCwjQPSq+6nq7Jk/YBOpTmuuX1EItKOThhVdPXEryuHW5LY1fkb2Esbhvbarp9i4IEbx2xASTV5JVeRcA7a/QKTvPGVSbiKmsp9lnUXeOSHNktOXBU7YZrSBIqjGHIHHlk1Bo0qqGSq5qx66ubxfxyOf/z4versyT9urueZdKINdmhMqNuxs+f31zFD4+ns4koJ3w6pvLdzyfTciLp+IjeSToRJ+WxyCd5eXR0cpRTkfNxXpRHcjqeTMY50WEpiun4MH9K2M3V5fXV4mb5cf5HxN9dz7IReTGStC3M/WhHOE8J+3CxuFh+mF+HnP5/lgU2nxLGQm9v9vEVJCqDxIisI3KGdJzg/KfDU9C98hif4omxT8gsknQXOsEXPD4i1EHyLJ8gDbyOCqkSSdrf4FWaNr1BLIloAu7xLZSxAf7mziGorZMrt4oXNble91Hhw+iQ5+5RqkBz7QwqU0sX8/5qSF8aSdEBzt0ZK99GKbzo95uBKh4tU7ROaXIuNhXEpfyQkd4uQ/2zJH2zWXvaNPsJ85Y32LMbZCWStA9J9nD173zBRLUxEvk0z3cP2V0Vrjn/eHPWTS2zqJWmMJtPyDSSNCwTfDmFNAwQ3NHLptIMAJ6VePB48c/N8uDx/eHyYB+NVdqX2PvRfdZ7Lxnn57voOD1lADkumDSa8Mv33AbW3KuM16z1r44lGVzM6/gofVeDWXGWs8bIYDHbamSZ3eAzA7KM9DaLRO1idEdbU7ebcPCi2qfZKMhkZk0fE1638F4iSd/0//vdYZLuGjTp+Y0VkGWer9DZJTRkxVn6K2P/467jNOsYjD5IUisS9l8AAAD//9qICtjxBQAA"
+          "source": "data:;base64,H4sIAAAAAAAC/1SSQWvbQBCF7/srXmXTJhDZTY8JLaSEQq8ht1Lq1e7YnkaaEbMjxSHJfy+S45bexLynb+cNb/FuPRRbNyxrkhFNLPuwwNeYHjD08D0hR4/IXB7gOg90u60bPcCoOCcY9VrY1Z4gsaMMFhRKRl5WJOMqLMICmuo3uz5KmTFJxSMLGVhGTdFZ5WpWetPflPxDwTfKahHcxR1dzNqREhYgcXvqlcWPwpZbJ6OMZJRJnGNbLhAlv/0Wc63SPh3jdDqIr3C/54KSjHufdpzkKcJxvyamh6FH0q6Lko8x7sgntAq4oIsyxPY/CoRGMqTYtgWbrdqOfAM1bHobhDYXaCjFoVBYIFNLzrKbH3s0lR2KxL7s1Sc6m02swk1Lc4xMhWykgoj90EVBpsSFVVahkKOmQdFzT9vIbQi3N/c3v26/332uls+n76t6XWx8rUKYPGfneAalvaLSVB/TXmF5WeHL+0/XoAM7Lq/xGsIP1BnV8oSp8BMvL5gYqERPBTFKcwmi4581BDr0ao7TJNCBEqrlWWabbo1q+bE6X//tR3W6+3rG1rXHHTKNjR7CnwAAAP//xQRQV6wCAAA="
+        },
+        "mode": 493
+      },
+      {
+        "path": "/usr/local/sbin/oc-restic",
+        "contents": {
+          "compression": "gzip",
+          "source": "data:;base64,H4sIAAAAAAAC/6xUUY8aNxB+96/4ajYlh7LHJQ99gJKWJiRCapLqoGqlI0JmPdy6t9gr2wuH7vjvlb0LtyTXt76tPTPfN9/M5+380K+c7a+U7pPeYiVczjq4rjQsOa8yKA2fK4fSmn8o810Hs9P4QNJYAW9MsTL3UBtxS5eswzqY54SqdN6S2JwwQhjKYVyUStMrCC0x/jj5PJ9dbiTWxq6UdBDQRqcNdCH2ZFkHQu93OVm6jMhnhBCFJSH3cLkqXUP2Cs5A+cDmc4LR1CRXjiTrBDKsjM9jdGfsXWGEjA0p77AS2V1VulrKF13sY1ojI7MkSXslikAmshojM9oLpcnWHTrKLHmHtSpCg84gN4V0rBOTv5Sk3xlJKIVzO2NlPQvRED+BIRcO2mBVOaXJRUKp9C2Ur5u7nszm03fLT1/+/DyH2ZK1SlKtWdJaVIWPJakJIqTwAhtTaR/HI6IiYwmZ0NhZ5Sn0FwJe2FvykMpS5o3dDyIZzuhGfWe3aQMx6B8/7A4mS5tZHQkK4cl5pGkDfMxmjjxSqgxKVdJaqIKx6afxx8nyw/T3yYgnD0+nQdonn/UlbVfmvl9P6pL09sDZbPLuejKfnYra5/OyZi9N3Zkcnjy0z4M0eXg/no+X76fXgzRoPQz6YYIDaw6csdDsyws8gLLcgJ80D5C85nj745sh6F55vB7iwNgNUguePKnh+IrHRwQU8ExobepNoZ1zLGvr+e/CsyzGOvhDWEewwudk4XOh4UxlMxpEf9TvIRpUueiN2oUxJ3hsZ6pCgu4pq6IzdrnwtCUb3lXjUHfJIsyIc7bLA9T0w2xU95NaFEpTaPYGqQZPwpHj6xDSMCATjk6XSjM8+SuOYNS7QAOePISszln0wDEcMoCcyJgMD/zn8wGzhiBiNAwL3lvwFmz86Cz4gQ+/uXwRLmuGRbe36H5f1H2uqFsXxaYa1Q1/a2ttHWH2lQ7PQOnz3TPS22VYz4gnLzd3njblBWfeihJdu0G6Bk+OKbyLyd/TOcvyjZG4+unqqh38P1fTexz/NVv2Hn97s+xdoLRK+zW6L9xCd08Vb9+22Z9b07lVb5C6s4rWrLR57r8bZvWN3W02umKlkRuhYSuNNLUbLBiQpo6yyiq/T03pUYgVFSOpnFgV1CSQ9nZfGqX9kex4v03jA2k3V4e2pqg2IdD+ZxyDuXFeixh+efy+qIMnP/DkVx5k2myU/MLYdxutN53We41/Ep7YjLN/AwAA//+Z7ypFqwcAAA=="
         },
         "mode": 493
       },
@@ -64,7 +72,7 @@
         "path": "/usr/local/sbin/oc-tailnet-up",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/5RUYU/jRhD9vr/i1Y7ooeKE9kM/BFH1pEvbtJSTIFepQghNvON4y3rX2h07RFz+e7UOIRxUle5bHM978+bNG+ffTLoYJkvjJux6LCnWKsfv3jhIzRAy1rHAO1QmRMHSezlBF41bDQWx9C1rUCc17nmDKvgG85UzYrwbq1zlWNQ8vDJxQHhnN4hcBhZITQLuOUB8V9a8qzAuClmLhrWhMeaSoOtgRNipHOIxYSknmvulf5gkibEky0USkRqRoPGacfrj6SnIaQTu/T1rPA1FujEOpXfRW1Y5qJKkoGa4BKO2ZQpxjKsES4NqzxHOCwI3vufn0imMZidGNrCm5wiT9E16ChNrlgdlOx+KgtuaGw5k00CarVlyIGG7weXHBbrIenqQ8UzddMl3RhRaWkb0KseftDLlh8vrYbwEKa1hJ99GROpZI3JIrn66usA9c4u1D8MkVAYfIwJHoSBxrCILCu48WtNyRcYqdb14v5jdfZhfnWejx+eHafF2rm2m3n9a/Hb3x+zvu1/mF7ME+OKPafG/m9pm6uLjr/PLu+vZ1V+zod/L52mxzZTKcS0kjDZwZCdomFx8sS0bmPQG/3jjWKelDezJu5IkzezdELHNkF2VY+07q9EYJyA4Xu941jW7XRJTRq0eIrumuA/PCda1Keu0OX6gUuwG65oSX9jHxMhTlPYBNnFQKymy1Hujx8pUuEFRIRs9O3vwRY9jGjXD7VmS4RTAZe2R+bJ4usSia6eILw05gWXqh3vc84BiindlVl1gnSWaByM4VZVR6gZFQDb6Yk8ZbvH5Mx7/u53zh/smwWvoT0c/nO0afH+GbeKPX8d/+HgYy4PBTSubN8SKwiqevyuG/RapPkuA6etWRVH7KI4aRjZ6t/99nF5QWXIrRfCdcDyvyEY+ToIdstHL5CW9R0dIDb9LHa1fGVc8HdWr0mOlDsZ3LbLRY8Ld/Hy7zdS/AQAA//9iDinpXwUAAA=="
+          "source": "data:;base64,H4sIAAAAAAAC/4RUX2/cthN856eYn+7gX4Jad24f+nCBiwaI27pxHcB2ChRB4FDSymJNkQJ3dedD4O9eLO+PfW7Rvkkkd2d2Zncn/5uPnOaVC3MKS1SWOzPBr9EFxIREbSLuIB1BrPOB5Bgju3CXj7iOAzWwo3S4pzXaFHuc3wUnLoaZmZgJbjrKV45zRAx+DaY6kUA6K6AlJUgc6442L1xgsd6jp8bZGc5FQ1fJiVAwE0jEnKSeN7Ss4sNcSXFtPZVKQoGsoI8N4eT7kxPY0CDRMt5TAxdyftv0LqCOgaMnM4FtRRl0hKBhdhjIJp7hSsO00CYSI0RBoj4uaf90AddQECdreLckhlN+86VNc++qJ2YbHb7s/zEOX7Qm11A/RKEgM1yNISiWE8SQNVmjilGwctLBZgWHRExBzGTnCrGetZyrvCcaNgLSg2PRZLmeHcc3mntfSu+CwCLQykzyuxmu790wbDmsOgrZGAsWK4TW+W1iznaoc56sVm3RWd+WLDYJNdt0iG172DQc878W0lDtGuLjzEQPNftGpbKkoaOekvWK05B3FSUr5Ne4/HCDkalZPJm1N6AfWVCRsq08gaOZ4Dd75+p3l9dZHg2pvaMg/2ewXVIDpqQlfry6yOJhFVP229YpMiNRLolnhklQ0hgxuIFa67wx1zdvb85u351fnRbTr/ufRfl39x8L8/bjzS+378/+uP3p/OJMAw4OFuW/9vNjYS4+/Hx+eXt9dvX7WcZ7/r8oHwtjXItPKBOK6UHqAp9xdKRX/A9Xb1SUYACb7vj0VZkRSzWoUEMWLwPKsosswfaEYvpq9/1aL2xd0yBliqMQn7bWM702UOCAYvqc75aSQn6jmD7euVBurXjxVFM8nxoU068a+OnHz4+Fgfaj4MS0zmz3TBy0V2JCb7XLPAntm+7FmP8ZXeAZ3qvx+0PV4xjVqDO26f9EQ0wCHuuamHU2Lar4sFldnWUEctLlQVGQEA9HZrZ1pkUx3XfJk8fNLD997gXVXUQR63I7OOU4LBDifsVmerup2iI53u2GF6r8VzLdlYcu51kJ8RCgwA9H35mc91vzVwAAAP//5iRIgzAGAAA="
         },
         "mode": 493
       },
@@ -75,6 +83,14 @@
           "source": "data:;base64,H4sIAAAAAAAC/1yKsQ5DIQgAd76CpjPB/k8X+6RqYsAI7fe/wc3pLpd7PvjTlb2BSyDJD7p65DGQCpLhK6WEVDffgMi+/rxkmm+1KXpZEfaWlxztMv32eo6RQ+AOAAD//x7R0OZ5AAAA"
         },
         "mode": 493
+      },
+      {
+        "path": "/etc/devbox/backup.env",
+        "contents": {
+          "compression": "",
+          "source": "data:,RESTIC_IMAGE%3Dghcr.io%2FREPLACE_ME%2Fdevbox%3Aprod%0A"
+        },
+        "mode": 420
       },
       {
         "path": "/etc/containers/systemd/opencode.container",
@@ -91,6 +107,13 @@
           "source": "data:;base64,H4sIAAAAAAAC/4r2yU/PzIvl8kjMS8lJ9clMCS7PLEnOsM1Mz8svSkUXdq0oSS3KS8wJyC9PLcKhxiU/OTs1BSbpmZKT6phckpmfBxMBBAAA//8S5piocgAAAA=="
         },
         "mode": 420
+      }
+    ],
+    "links": [
+      {
+        "path": "/etc/systemd/system/multi-user.target.wants/tailscaled.service",
+        "hard": false,
+        "target": "/usr/lib/systemd/system/tailscaled.service"
       }
     ]
   },
@@ -117,17 +140,13 @@
         "name": "oc-env.service"
       },
       {
-        "contents": "[Unit]\nDescription=Back up the data disk with restic\nAfter=srv.mount network-online.target\nWants=network-online.target\nRequires=srv.mount\n[Service]\nType=oneshot\nNice=10\nIOSchedulingClass=idle\nExecStart=/usr/local/sbin/oc-backup\n",
+        "contents": "[Unit]\nDescription=Back up the data disk with restic\nAfter=srv.mount network-online.target\nWants=network-online.target\nRequires=srv.mount\n[Service]\nType=oneshot\nNice=10\nIOSchedulingClass=idle\nEnvironmentFile=/etc/devbox/backup.env\nExecStart=/usr/local/sbin/oc-backup\n",
         "name": "oc-backup.service"
       },
       {
         "contents": "[Unit]\nDescription=Nightly restic backup of the data disk\n[Timer]\nOnCalendar=*-*-* 02:00:00\nPersistent=true\nRandomizedDelaySec=30min\n[Install]\nWantedBy=timers.target\n",
         "enabled": true,
         "name": "oc-backup.timer"
-      },
-      {
-        "enabled": true,
-        "name": "tailscaled.service"
       },
       {
         "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\n# The first boot is Fedora CoreOS, which has no tailscale binary. Skip\n# there instead of failing loudly, then run on the ucore boot.\nConditionPathExists=/usr/bin/tailscale\nAfter=network-online.target tailscaled.service\nWants=network-online.target tailscaled.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",

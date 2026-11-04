@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Join the tailnet on first boot, using the scoped auth key from Ignition.
+# Join or refresh the tailnet, using the scoped auth key from Ignition.
 #
 # The key is the only secret that ever touches the install media. It is written
 # to /etc/devbox/tailscale-authkey at mode 0600 and revoked in the admin console
 # after the node appears. Revoking does not remove the node: identity lives in
 # /var/lib/tailscale.
+#
+# `tailscale up` is idempotent. Running it on every boot with a key present
+# refreshes prefs and keeps the existing node identity; it does not mint a new
+# node. Skipping it whenever a state file exists is what leaves a half-started
+# node off the tailnet, so the key decides, not the file.
 #
 # --ephemeral is deliberately NOT used: the node identity must be stable so
 # MagicDNS and the client's saved server URL keep working across restarts.
@@ -14,18 +19,19 @@ STATE_DIR="${STATE_DIR:-/var/lib/tailscale}"
 AUTH_KEY_FILE="${AUTH_KEY_FILE:-/etc/devbox/tailscale-authkey}"
 LOGIN_SERVER="${LOGIN_SERVER:-}"
 
-# State present means the node already joined. Re-authenticating on every boot
-# would mint a new node whenever the old key was revoked, which is exactly what
-# revoking it after install is meant to avoid.
-if [ -f "$STATE_DIR/tailscaled.state" ]; then
-  echo "oc-tailnet-up: state present, leaving tailscale as configured"
+if [ -r "$AUTH_KEY_FILE" ] && [ -s "$AUTH_KEY_FILE" ]; then
+  args=(--auth-key "file:$AUTH_KEY_FILE" --hostname "$(hostname)" --accept-routes=false)
+  [ -n "$LOGIN_SERVER" ] && args+=(--login-server "$LOGIN_SERVER")
+  tailscale up "${args[@]}"
   exit 0
 fi
 
-[ -r "$AUTH_KEY_FILE" ] || { echo "oc-tailnet-up: no auth key at $AUTH_KEY_FILE" >&2; exit 1; }
-[ -s "$AUTH_KEY_FILE" ] || { echo "oc-tailnet-up: auth key file is empty" >&2; exit 1; }
+# The operator may delete the key after the node joins. Keep the node then, but
+# never report success on a box that has neither a key nor a state file.
+if [ -f "$STATE_DIR/tailscaled.state" ]; then
+  echo "oc-tailnet-up: no auth key, but tailnet state is present"
+  exit 0
+fi
 
-args=(--auth-key "file:$AUTH_KEY_FILE" --hostname "$(hostname)" --accept-routes=false)
-[ -n "$LOGIN_SERVER" ] && args+=(--login-server "$LOGIN_SERVER")
-
-tailscale up "${args[@]}"
+echo "oc-tailnet-up: no auth key at $AUTH_KEY_FILE and no tailnet state" >&2
+exit 1

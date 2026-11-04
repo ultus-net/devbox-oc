@@ -40,7 +40,7 @@ required = [
     "ostree-unverified-registry:__UCORE_IMAGE__",
     "ConditionPathExists=!/etc/ucore-autorebase/done",
     "/usr/bin/touch /etc/ucore-autorebase/done",
-    "systemctl disable",
+    "/usr/bin/systemctl disable ucore-autorebase.service",
     "/usr/bin/systemctl reboot",
 ]
 missing = [line for line in required if line not in body]

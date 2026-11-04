@@ -99,7 +99,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | Suite | What it protects |
 |---|---|
 | `host/tests/test_oc-env.sh` | the environment file is 0600 and an empty password fails closed |
-| `host/tests/test_oc_backup.sh` | restic is pinned, the data mount is read-only, and no run prunes |
+| `host/tests/test_oc_backup.sh` | the backup runs the Fedora image, mounts data read-only, and never prunes |
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent, durable, and needs a real key |
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is not published |
 | `host/tests/test_nosleep.sh` | sleep targets are masked and a closed lid is ignored |

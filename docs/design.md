@@ -166,10 +166,13 @@ in `/var/lib/tailscale`, so revoking the key does not disconnect the box.
 
 ## Backup and recovery
 
-`oc-backup.timer` runs nightly and invokes restic in a pinned container against
-`RESTIC_REPOSITORY`. The repository is off the laptop. A local NAS, Backblaze B2,
-or any S3-compatible store is acceptable; the repository URL and credentials are
-the operator's choice and live in `secrets.env`.
+`oc-backup.timer` runs nightly and invokes restic in the project's Fedora image
+against `RESTIC_REPOSITORY`. Using the project image keeps the Fedora-family rule:
+the upstream restic image is Alpine. `oc-restic` passes only the `RESTIC_*`,
+`AWS_*` and `B2_*` variables, so the workload password never reaches the backup
+container. The repository is off the laptop. A local NAS, Backblaze B2, or any
+S3-compatible store is acceptable; the repository URL and credentials are the
+operator's choice and live in `secrets.env`.
 
 The restore path is `restic restore` into a new directory, verify, then replace
 `/srv`. The runbook contains the drill. A backup that has never been restored is

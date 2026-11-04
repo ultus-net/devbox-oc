@@ -45,4 +45,17 @@ printf 'OPENCODE_PASSWORD=first\nOPENCODE_PASSWORD="second"\n' > "$tmp/twice.env
 run_env "$tmp/twice.env" "$tmp/env3" >/dev/null || fail "T4 oc-env exited non-zero"
 [ "$(cat "$tmp/env3")" = "OPENCODE_PASSWORD=second" ] || fail "T4 wrong winning value"
 
+# T5: the writer default and the quadlet consumer must name the same path. Each
+# test above overrides OUT_FILE, so without this a change to the default leaves
+# both suites green while the container reads a file nothing writes.
+out_line="$(grep -m1 '^OUT_FILE=' "$script")"
+default_out="${out_line#*:-}"
+default_out="${default_out%%\"*}"
+default_out="${default_out%\}}"
+[ -n "$default_out" ] || fail "T5 cannot read the OUT_FILE default from oc-env"
+quadlet="$here/../quadlet/opencode.container"
+quadlet_env="$(sed -n 's/^EnvironmentFile=//p' "$quadlet" | head -1)"
+[ "$default_out" = "$quadlet_env" ] \
+  || fail "T5 oc-env writes $default_out but the quadlet loads $quadlet_env"
+
 echo "oc-env writes a 0600 environment file and fails closed"

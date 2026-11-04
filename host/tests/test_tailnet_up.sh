@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # host/tests/test_tailnet_up.sh
-# The tailnet is the only data path to the box, so the join must happen once on
-# first boot and never again once state exists. A fake tailscale records joins.
+# The tailnet is the only data path to the box. `tailscale up` is idempotent, so
+# a key present must always run it; a state file alone must never suppress a
+# join. A fake tailscale records joins.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/../bin/oc-tailnet-up"
@@ -51,23 +52,33 @@ if grep -q -- '--ephemeral' "$tmp/up-calls"; then
   fail "T1 join used --ephemeral, which breaks the saved server URL"
 fi
 
-# T2: a second boot with state present must not re-auth.
+# T2: a key present with a state file must still run up. It is idempotent, and
+# skipping here is what leaves a half-started node off the tailnet.
 : > "$tmp/state/tailscaled.state"
 joined T2
-[ "$(wc -l < "$tmp/up-calls")" -eq 1 ] || fail "T2 rejoined with existing state"
+[ "$(wc -l < "$tmp/up-calls")" -eq 2 ] \
+  || fail "T2 a state file suppressed the idempotent join"
 
-# T3: no key file is a labelled failure, not a silent skip.
+# T3: no key but existing state is the post-join state after the key is revoked.
+# Keep the node and exit cleanly.
+setup
+: > "$tmp/state/tailscaled.state"
+joined T3
+[ ! -s "$tmp/up-calls" ] || fail "T3 called tailscale with no auth key"
+[ -f "$tmp/state/tailscaled.state" ] || fail "T3 removed the tailnet state"
+
+# T4: no key and no state is unrecoverable; fail loudly.
 setup
 rc=0
 run_up >/dev/null 2>&1 || rc=$?
-[ "$rc" -ne 0 ] || fail "T3 joined with no auth key"
-[ ! -s "$tmp/up-calls" ] || fail "T3 called tailscale with no auth key"
+[ "$rc" -ne 0 ] || fail "T4 joined with no auth key and no state"
+[ ! -s "$tmp/up-calls" ] || fail "T4 called tailscale with no auth key"
 
-# T4: an empty key file is the same defect: readable, but useless.
+# T5: an empty key is the same defect: readable, but useless.
 setup
 : > "$tmp/devbox/tailscale-authkey"
 rc=0
 run_up >/dev/null 2>&1 || rc=$?
-[ "$rc" -ne 0 ] || fail "T4 joined with an empty auth key"
+[ "$rc" -ne 0 ] || fail "T5 joined with an empty auth key"
 
-echo "tailnet join is idempotent and needs a real key"
+echo "tailnet join is idempotent and key-driven"

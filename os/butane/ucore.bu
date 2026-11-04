@@ -18,6 +18,14 @@ storage:
   directories:
     - path: /etc/ucore-autorebase
       mode: 0755
+  # ucore ships the tailscale RPM but enables no service. The first boot is
+  # Fedora CoreOS, where `enabled: true` on a unit that does not exist yet does
+  # not stick, so write the wants symlink directly. It is dangling until the
+  # rebase installs tailscaled, then it takes effect.
+  links:
+    - path: /etc/systemd/system/multi-user.target.wants/tailscaled.service
+      target: /usr/lib/systemd/system/tailscaled.service
+      hard: false
   files:
     - path: /etc/hostname
       mode: 0644
@@ -38,6 +46,10 @@ storage:
       mode: 0755
       contents:
         local: host/bin/oc-backup
+    - path: /usr/local/sbin/oc-restic
+      mode: 0755
+      contents:
+        local: host/bin/oc-restic
     - path: /usr/local/sbin/oc-tailnet
       mode: 0755
       contents:
@@ -54,6 +66,13 @@ storage:
           set -eu
           install -d -o 1000 -g 1000 \
             /srv/repos /srv/opencode/share /srv/opencode/config /srv/opencode/state
+    # The image reference is rendered here as well, so the backup runs the same
+    # Fedora image as the workload and no Alpine restic image is needed.
+    - path: /etc/devbox/backup.env
+      mode: 0644
+      contents:
+        inline: |
+          RESTIC_IMAGE=__IMAGE__
     # Rendered from host/quadlet/opencode.container by build.sh, so the image
     # reference is substituted before the quadlet is baked into the install media.
     - path: /etc/containers/systemd/opencode.container
@@ -145,6 +164,7 @@ systemd:
         Type=oneshot
         Nice=10
         IOSchedulingClass=idle
+        EnvironmentFile=/etc/devbox/backup.env
         ExecStart=/usr/local/sbin/oc-backup
     - name: oc-backup.timer
       enabled: true
@@ -157,13 +177,6 @@ systemd:
         RandomizedDelaySec=30min
         [Install]
         WantedBy=timers.target
-    # ucore ships the tailscale RPM but enables no service, and it vendors the
-    # repo disabled. Without this the join below has no daemon to talk to.
-    #
-    # No contents: this enables the shipped unit. A contents block would shadow
-    # /usr/lib/systemd/system/tailscaled.service.
-    - name: tailscaled.service
-      enabled: true
     - name: oc-tailnet.service
       enabled: true
       contents: |

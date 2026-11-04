@@ -10,9 +10,10 @@ All notable changes to this project. One entry per landed change, newest first.
   enabled rebase to `ghcr.io/ublue-os/ucore-minimal:stable`, a separate data disk
   mounted at `/srv`, masked sleep targets, and a logind policy that ignores a
   closed lid. `docs/install.md` is the first-install procedure.
-- `oc-env`, `oc-backup`, `oc-tailnet` and `oc-tailnet-up` host scripts. The env
-  writer fails closed on an empty password, the backup uses a pinned restic image
-  read-only and never prunes, and the tailnet join is idempotent and durable.
+- `oc-env`, `oc-backup`, `oc-restic`, `oc-tailnet` and `oc-tailnet-up` host
+  scripts. The env writer fails closed on an empty password, the backup runs
+  restic in the Fedora image, mounts data read-only, and never prunes, and the
+  tailnet join is idempotent and durable.
 - GitHub Actions CI. `verify.yml` runs the repo gate with pinned Butane and
   shellcheck. `image.yml` builds the container, smoke-gates it before pushing,
   and publishes to GHCR.

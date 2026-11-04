@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # host/tests/test_oc_backup.sh
 #
-# Run oc-backup against a fake podman. The properties that matter are the pinned
-# image, the env file it reads, the read-only data mount, and the absence of any
-# snapshot deletion.
+# Run oc-backup against a fake podman. The properties that matter are the Fedora
+# image, the restic entrypoint, the read-only data mount, the SELinux label
+# handling, the filtered environment, and the absence of snapshot deletion.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/../bin/oc-backup"
@@ -25,9 +25,11 @@ EOF
 chmod +x "$tmp/bin/podman"
 printf 'OPENCODE_PASSWORD=server-secret\nRESTIC_REPOSITORY=sftp:backup@nas.example:/srv/restic/devbox\nRESTIC_PASSWORD=x\n' \
   > "$tmp/secrets.env"
+printf 'RESTIC_IMAGE=ghcr.io/ultus-net/devbox:prod\n' > "$tmp/backup.env"
 
 run_backup() (
   env PATH="$tmp/bin:$PATH" CALLS="$tmp/calls" ENVCOPY="$tmp/envcopy" \
+    IMAGE_FILE="$tmp/backup.env" \
     SECRETS_FILE="$tmp/secrets.env" DATA_DIR="$tmp/data" "$script"
 )
 
@@ -35,9 +37,31 @@ run_backup >/dev/null || fail "oc-backup exited non-zero"
 calls="$(cat "$tmp/calls")"
 
 case "$calls" in
-  *"docker.io/restic/restic@sha256:"*) ;;
-  *) fail "restic image is not pinned by digest: $calls" ;;
+  *--entrypoint\ restic*) ;;
+  *) fail "restic is not the container entrypoint: $calls" ;;
 esac
+case "$calls" in
+  *"ghcr.io/ultus-net/devbox:prod"*) ;;
+  *) fail "the backup did not use the project image: $calls" ;;
+esac
+case "$calls" in
+  *--security-opt\ label=disable*) ;;
+  *) fail "the read is not allowed past the workload SELinux label: $calls" ;;
+esac
+case "$calls" in
+  *"--volume $tmp/data:/data:ro"*) ;;
+  *) fail "the data directory is not mounted read-only: $calls" ;;
+esac
+case "$calls" in
+  *" backup /data --tag devbox") ;;
+  *) fail "the backup command is not the expected one: $calls" ;;
+esac
+case "$calls" in
+  *forget*|*prune*)
+    fail "a backup run deletes snapshots; retention must stay manual: $calls"
+    ;;
+esac
+
 case "$calls" in
   *"--env-file"*) ;;
   *) fail "restic is run without an env file: $calls" ;;
@@ -52,19 +76,6 @@ grep -qx 'RESTIC_REPOSITORY=sftp:backup@nas.example:/srv/restic/devbox' "$tmp/en
 if grep -q 'OPENCODE_PASSWORD' "$tmp/envcopy"; then
   fail "the OpenCode password is passed to the backup container"
 fi
-case "$calls" in
-  *"--volume $tmp/data:/data:ro"*) ;;
-  *) fail "the data directory is not mounted read-only: $calls" ;;
-esac
-case "$calls" in
-  *" backup /data --tag devbox") ;;
-  *) fail "the backup command is not the expected one: $calls" ;;
-esac
-case "$calls" in
-  *forget*|*prune*)
-    fail "a backup run deletes snapshots: retention must stay manual: $calls"
-    ;;
-esac
 
 # T2: a missing secrets file must stop before any container starts.
 rm -f "$tmp/secrets.env"
@@ -72,4 +83,12 @@ rc=0
 run_backup >/dev/null 2>&1 || rc=$?
 [ "$rc" -ne 0 ] || fail "oc-backup ran with no secrets file"
 
-echo "oc-backup is pinned, read-only and never prunes"
+# T3: an unset image is a configuration failure, not a silent fallback to an
+# Alpine image or a local binary.
+rc=0
+printf '\n' > "$tmp/empty-image.env"
+env IMAGE_FILE="$tmp/empty-image.env" SECRETS_FILE="$tmp/secrets.env" DATA_DIR="$tmp/data" \
+  "$script" >/dev/null 2>&1 || rc=$?
+[ "$rc" -ne 0 ] || fail "oc-backup ran with no image configured"
+
+echo "oc-backup uses the Fedora image, read-only and never prunes"

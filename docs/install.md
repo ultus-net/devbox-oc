@@ -5,7 +5,7 @@ two disks. Read `docs/design.md` first; the decisions there explain why the step
 are in this order.
 
 The short version: boot Fedora CoreOS installation media, install to the OS disk
-with an Ignition file that also joins the tailnet, let ucore rebase twice, then
+with an Ignition file that also joins the tailnet, let ucore rebase once, then
 provision the runtime secrets over Tailscale.
 
 ## 1. Prepare the hardware
@@ -47,7 +47,6 @@ before the USB is written.
 
 ```sh
 export SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)"
-export OS_DISK=/dev/nvme0n1
 export TS_AUTHKEY=tskey-auth-REPLACE_ME
 export OC_HOSTNAME=devbox
 export IMAGE=ghcr.io/ultus-net/devbox:prod
@@ -127,7 +126,9 @@ sudo journalctl -u ucore-autorebase.service --no-pager
 
 ## 6. Confirm the tailnet
 
-The box joins the tailnet on first boot with the key from Ignition.
+The box joins the tailnet on its first ucore boot, with the key from Ignition.
+The join unit is skipped on the Fedora CoreOS boot because no tailscale binary is
+installed yet.
 
 ```sh
 tailscale status
@@ -198,11 +199,11 @@ ssh core@devbox 'sudo systemctl is-active oc-env opencode'
 `oc-env` writes `/etc/opencode/env`. The quadlet loads it. If `oc-env` fails, the
 container will not start. That is the fail-closed path, not a bug.
 
-If the restic repository is new, initialize it once:
+If the restic repository is new, initialize it once. `oc-restic` runs restic in
+the project's Fedora image with only the restic credentials:
 
 ```sh
-ssh core@devbox 'sudo podman run --rm --env-file /etc/devbox/secrets.env \
-  docker.io/restic/restic@sha256:4cf4a61ef9786f4de53e9de8c8f5c040f33830eb0a10bf3d614410ee2fcb6120 init'
+ssh core@devbox 'sudo oc-restic init'
 ```
 
 Then run the backup and confirm a snapshot exists:
@@ -212,12 +213,11 @@ ssh core@devbox 'sudo systemctl start oc-backup.service'
 ssh core@devbox 'sudo journalctl -u oc-backup.service -n 30 --no-pager'
 ```
 
-The restic container reads every credential in `/etc/devbox/secrets.env`, so an
-S3-compatible store or Backblaze B2 works without editing the script: set the
-provider variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or the B2
-equivalents) alongside `RESTIC_REPOSITORY` and `RESTIC_PASSWORD`. An SFTP
-repository would need an SSH key mounted into the container, which this script
-does not do; use an S3-compatible endpoint or add the mount deliberately.
+`oc-backup` passes only `RESTIC_*`, `AWS_*` and `B2_*` variables to the container,
+so an S3-compatible store or Backblaze B2 works without editing the script. The
+OpenCode password stays on the host. An SFTP repository would need an SSH key
+mounted into the container, which this script does not do; use an S3-compatible
+endpoint or add the mount deliberately.
 
 ## 8. Connect a client
 
@@ -235,7 +235,8 @@ pairing link is single-use and expires in five minutes. The TUI uses
 - Confirm `rpm-ostree status` names ucore-minimal.
 - Confirm `systemctl is-enabled tailscaled` says `enabled`.
 - Confirm `systemctl list-timers oc-backup.timer` shows the next run.
-- Confirm `sudo systemctl status oc-nosleep.service` is active.
+- Confirm `systemctl is-enabled suspend.target` says `masked`.
+- Confirm `systemctl show -p HandleLidSwitch` says `HandleLidSwitch=ignore`.
 - Confirm the lid closes without suspending: close it for a minute and check that
   `tailscale ping devbox` still answers.
 - Run the restore drill in `docs/runbook.md` before trusting the backup.

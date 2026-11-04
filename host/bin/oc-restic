@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Run restic in this project's own Fedora toolbox image.
+#
+# The upstream restic image is Alpine, and AGENTS.md forbids a non-Fedora layer
+# anywhere. The toolbox image already ships restic, so it is the one image used
+# for both the workload and its backups.
+#
+# Only the restic credentials reach the container. The secrets file also holds
+# the OpenCode password, and a backup container has no business reading it.
+#
+# RESTIC_MOUNT overrides the default read-only data mount, so a restore can write
+# to a target directory:
+#
+#   RESTIC_MOUNT=/srv-restore:/restore:rw oc-restic restore latest --target /restore
+set -euo pipefail
+
+IMAGE_FILE="${IMAGE_FILE:-/etc/devbox/backup.env}"
+SECRETS_FILE="${SECRETS_FILE:-/etc/devbox/secrets.env}"
+RESTIC_MOUNT="${RESTIC_MOUNT:-${DATA_DIR:-/srv}:/data:ro}"
+
+fail() { echo "oc-restic: $1" >&2; exit 1; }
+
+[ -r "$IMAGE_FILE" ] || fail "cannot read $IMAGE_FILE"
+[ -r "$SECRETS_FILE" ] || fail "cannot read $SECRETS_FILE"
+
+# Parse rather than source: the image file is data, and sourcing would execute
+# whatever it contains.
+image=""
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    RESTIC_IMAGE=*) image="${line#RESTIC_IMAGE=}" ;;
+  esac
+done < "$IMAGE_FILE"
+case "$image" in
+  \"*\") image="${image#\"}"; image="${image%\"}" ;;
+  \'*\') image="${image#\'}"; image="${image%\'}" ;;
+esac
+[ -n "$image" ] || fail "RESTIC_IMAGE is unset in $IMAGE_FILE"
+
+env_file="$(mktemp)"
+trap 'rm -f "$env_file"' EXIT
+chmod 0600 "$env_file"
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    RESTIC_*|AWS_*|B2_*) printf '%s\n' "$line" >> "$env_file" ;;
+  esac
+done < "$SECRETS_FILE"
+[ -s "$env_file" ] || fail "no restic credentials in $SECRETS_FILE"
+
+rc=0
+podman run --rm \
+  --security-opt label=disable \
+  --entrypoint restic \
+  --env-file "$env_file" \
+  --volume "$RESTIC_MOUNT" \
+  --hostname "$(hostname)" \
+  "$image" "$@" || rc=$?
+
+rm -f "$env_file"
+trap - EXIT
+exit "$rc"

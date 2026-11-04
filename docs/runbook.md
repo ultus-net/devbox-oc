@@ -70,18 +70,15 @@ ssh core@devbox 'sudo systemctl stop opencode.service'
 2. List snapshots:
 
 ```sh
-ssh core@devbox 'sudo podman run --rm --env-file /etc/devbox/secrets.env \
-  docker.io/restic/restic@sha256:4cf4a61ef9786f4de53e9de8c8f5c040f33830eb0a10bf3d614410ee2fcb6120 \
-  snapshots'
+ssh core@devbox 'sudo oc-restic snapshots'
 ```
 
-3. Restore the chosen snapshot to `/srv-restore`:
+3. Restore the chosen snapshot to `/srv-restore`. The override mounts the target
+   writable; the default mount is read-only:
 
 ```sh
-ssh core@devbox 'sudo podman run --rm --env-file /etc/devbox/secrets.env \
-  -v /srv-restore:/restore \
-  docker.io/restic/restic@sha256:4cf4a61ef9786f4de53e9de8c8f5c040f33830eb0a10bf3d614410ee2fcb6120 \
-  restore latest --target /restore'
+ssh core@devbox 'sudo RESTIC_MOUNT=/srv-restore:/restore:rw \
+  oc-restic restore latest --target /restore'
 ```
 
 4. Inspect the restored tree. Confirm the OpenCode session database, the repos,
@@ -106,14 +103,18 @@ throwaway disk before trusting the nightly job.
 Retention is manual. Inspect first, then forget and prune:
 
 ```sh
-ssh core@devbox 'sudo podman run --rm --env-file /etc/devbox/secrets.env \
-  docker.io/restic/restic@sha256:4cf4a61ef9786f4de53e9de8c8f5c040f33830eb0a10bf3d614410ee2fcb6120 \
-  snapshots'
+ssh core@devbox 'sudo oc-restic snapshots'
 ```
 
 Then decide a policy, for example `--keep-daily 7 --keep-weekly 4
---keep-monthly 6`, and run `forget` with `--prune` once. Never remove the newest
-snapshot before a verified restore.
+--keep-monthly 6`, and run:
+
+```sh
+ssh core@devbox 'sudo oc-restic forget --keep-daily 7 --keep-weekly 4 \
+  --keep-monthly 6 --prune'
+```
+
+Never remove the newest snapshot before a verified restore.
 
 ## Roll back the container
 

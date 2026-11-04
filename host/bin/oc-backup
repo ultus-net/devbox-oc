@@ -1,42 +1,19 @@
 #!/usr/bin/env bash
 # Back up the data disk to the off-box restic repository named in secrets.env.
 #
-# The backup runs in a pinned restic container so the host needs no restic
-# package and the version cannot drift between runs. /srv is mounted read-only:
-# a backup must never write to the data it is copying.
+# oc-restic owns the container invocation: the project's Fedora image, the restic
+# entrypoint, the filtered credentials, and the read-only data mount. This script
+# only names the backup command.
 #
 # Retention is manual. This script never calls `forget` or `prune`, because
 # deleting the wrong snapshot is irreversible and deserves a human decision.
 set -euo pipefail
 
-RESTIC_IMAGE="${RESTIC_IMAGE:-docker.io/restic/restic@sha256:4cf4a61ef9786f4de53e9de8c8f5c040f33830eb0a10bf3d614410ee2fcb6120}"
-SECRETS_FILE="${SECRETS_FILE:-/etc/devbox/secrets.env}"
 DATA_DIR="${DATA_DIR:-/srv}"
 
 fail() { echo "oc-backup: $1" >&2; exit 1; }
 
-[ -r "$SECRETS_FILE" ] || fail "cannot read $SECRETS_FILE"
 [ -d "$DATA_DIR" ] || fail "no data directory at $DATA_DIR"
 
-# Pass only the variables restic needs. The secrets file also holds the OpenCode
-# password, and a backup container has no business reading it.
-env_file="$(mktemp)"
-trap 'rm -f "$env_file"' EXIT
-chmod 0600 "$env_file"
-while IFS= read -r line || [ -n "$line" ]; do
-  case "$line" in
-    RESTIC_*|AWS_*|B2_*) printf '%s\n' "$line" >> "$env_file" ;;
-  esac
-done < "$SECRETS_FILE"
-[ -s "$env_file" ] || fail "no restic credentials in $SECRETS_FILE"
-
-rc=0
-podman run --rm \
-  --env-file "$env_file" \
-  --volume "${DATA_DIR}:/data:ro" \
-  --hostname "$(hostname)" \
-  "$RESTIC_IMAGE" backup /data --tag devbox || rc=$?
-
-rm -f "$env_file"
-trap - EXIT
-exit "$rc"
+export DATA_DIR
+exec "$(dirname "$0")/oc-restic" backup /data --tag devbox
