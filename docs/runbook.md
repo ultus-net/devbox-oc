@@ -42,7 +42,8 @@ The two values easiest to get wrong:
 
 - `acr_name` must already exist and match `^[a-z0-9]{5,50}$`. Leaving it empty
   removes the only image pull path.
-- `os_image_id` is a managed image resource ID. Stage 2 prints it.
+- `os_image_id` is the Terraform record's managed image resource ID; the live
+  deploy passes the same ID as `vmImageId`. Stage 2 prints it.
 
 Set `opencode_password` and `tailscale_authkey` from your secret store, or as
 `TF_VAR_opencode_password` and `TF_VAR_tailscale_authkey` environment variables.
@@ -58,7 +59,7 @@ image already is ucore, so the box boots it directly with no rebase stage.
 az pipelines run --name devbox-os            # or: ./os/build-os-image.sh
 ```
 
-The last line of output is the image resource ID. Put it in `os_image_id`. The
+The last line of output is the image resource ID. Keep it for `vmImageId`. The
 script also prints the VHD sha256 and the staging disk name to stderr: record the
 hash, and delete `devbox-ucore-<yyyymmdd>-disk` from `rg-csh-dev` after
 `az image show --query hyperVGeneration` reports `V2`. The image holds its own
@@ -183,8 +184,8 @@ ssh core@devbox "sudo rpm-ostree status"
 
 The booted deployment must name `ghcr.io/ublue-os/ucore-minimal`. Every host unit
 below depends on ucore packages, so nothing else works until this is right. If it
-names `fedora-coreos`, the VM booted the wrong image: check that `os_image_id`
-points at the image `pipelines/devbox-os.yml` published, not an older one.
+names `fedora-coreos`, the VM booted the wrong image: check that `vmImageId`
+named the image `pipelines/devbox-os.yml` published, not an older one.
 
 Then confirm the devbox units and the daemon the tailnet path needs:
 

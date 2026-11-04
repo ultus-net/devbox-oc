@@ -99,7 +99,10 @@ All notable changes to this project. One entry per landed change, newest first.
   `terraform/tests/no_public_ip.sh`, `terraform/tests/data_disk_protected.sh` and
   their fixtures are deleted. The VM, NIC, NSG and data disk live in `csh-dev`
   Bicep now, so `scripts/check-template.py` reads the compiled template and
-  `scripts/check-deployed-network.sh` reads the live NIC and NSG.
+  `scripts/check-deployed-network.sh` reads the live NIC and NSG. The template
+  checker treats `*`, `0.0.0.0/0`, `::/0` and any `sourceAddressPrefixes` entry as
+  an Internet source, and `scripts/test-check-template.py` proves it rejects each
+  mutation.
   `terraform/tests/no_scheduled_stop.sh` stays, with a message pointing at the
   template check for the VM, and `tests/verify.sh` now runs its two fixtures so
   the negative controls are not orphaned. The port record's
