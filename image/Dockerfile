@@ -4,12 +4,13 @@
 #
 # Why not ghcr.io/anomalyco/opencode: that image is musl/Alpine on every
 # platform (verified in its layer history). A Fedora host needs the glibc
-# build, so OpenCode is installed from the npm platform artifact here and
-# pinned by sha512 integrity, not by tag.
+# build, so OpenCode is fetched from the npm registry as a platform tarball and
+# pinned by sha512 integrity, not by tag. No npm client is needed for that.
 #
 # The toolbox image is built for interactive dev use: it includes dnf,
 # bash, git and the usual tooling, and it is what `toolbox create` gives
-# you locally. That parity is the point: the same image runs on your laptop.
+# you locally. That parity is the point: the same image runs on your
+# workstation.
 #
 # Pin by DIGEST. The `46` tag currently resolves to content labelled
 # `org.opencontainers.image.version: rawhide`, so the tag is not a
@@ -49,9 +50,8 @@ RUN set -eux; \
     dnf clean all
 
 # Install OpenCode from the platform artifact, verifying integrity before use.
+# curl and tar are already present; nodejs and npm are not needed for the binary.
 RUN set -eux; \
-    dnf install -y --setopt=install_weak_deps=False nodejs npm; \
-    dnf clean all; \
     url="https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-${OC_VERSION}.tgz"; \
     curl -fsSL --retry 3 --output /tmp/oc.tgz "$url"; \
     printf '%s' "${OC_SHA512}" | base64 -d | od -An -tx1 | tr -d ' \n' > /tmp/oc.sha512.hex; \

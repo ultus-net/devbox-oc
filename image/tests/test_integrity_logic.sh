@@ -16,7 +16,11 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 oc_version="$(sed -n 's/^ARG OC_VERSION=//p' "$repo_root/image/Dockerfile" | head -1)"
 [ -n "$oc_version" ] || { echo "cannot read OC_VERSION from Dockerfile" >&2; exit 1; }
 
-OC_SHA512='o8EJ0ZsT4dzDKN+0mpG2EKbNGzJyp+F1++Av28UReRVfiEv+N34eZEnN/unkiMoerKHad6W6Ii7k4ukTnPNmNQ=='
+# Read the expected digest from the Dockerfile. A hardcoded copy here would keep
+# passing after the Dockerfile moved to a new artifact, which is the drift this
+# test exists to catch.
+OC_SHA512="$(sed -n 's/^ARG OC_SHA512=//p' "$repo_root/image/Dockerfile" | head -1)"
+[ -n "$OC_SHA512" ] || { echo "cannot read OC_SHA512 from Dockerfile" >&2; exit 1; }
 
 check() {
   local digest="$1" file="$2" expected actual

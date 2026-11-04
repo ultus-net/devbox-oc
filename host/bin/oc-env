@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Write the OpenCode environment file from the operator-managed secrets file.
+#
+# The password never lives in git, the image, or the Ignition config. It is
+# written to /etc/devbox/secrets.env by hand after first boot, and this unit is
+# the only path from there into the container.
+#
+# Fail closed: an absent or empty password stops the unit, and the quadlet
+# Requires= this unit, so the server never starts passwordless.
+set -euo pipefail
+
+SECRETS_FILE="${SECRETS_FILE:-/etc/devbox/secrets.env}"
+OUT_FILE="${OUT_FILE:-/etc/opencode/env}"
+
+fail() { echo "oc-env: $1" >&2; exit 1; }
+
+[ -r "$SECRETS_FILE" ] || fail "cannot read $SECRETS_FILE"
+
+# Parse rather than source: the secrets file is data, and sourcing would execute
+# whatever it contains. The last assignment wins, as systemd's EnvironmentFile
+# does.
+value=""
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    OPENCODE_PASSWORD=*) value="${line#OPENCODE_PASSWORD=}" ;;
+  esac
+done < "$SECRETS_FILE"
+
+# One surrounding pair of quotes is optional in an env file.
+case "$value" in
+  \"*\") value="${value#\"}"; value="${value%\"}" ;;
+  \'*\') value="${value#\'}"; value="${value%\'}" ;;
+esac
+
+[ -n "$value" ] || fail "OPENCODE_PASSWORD is unset or empty in $SECRETS_FILE"
+
+install -d -m 0755 "$(dirname "$OUT_FILE")"
+
+umask 077
+tmp="${OUT_FILE}.tmp.$$"
+trap 'rm -f "$tmp"' EXIT
+printf 'OPENCODE_PASSWORD=%s\n' "$value" > "$tmp"
+chmod 0600 "$tmp"
+# mv replaces the target atomically, so a reader never sees a half-written file.
+mv -f "$tmp" "$OUT_FILE"
+trap - EXIT
+
+echo "oc-env: wrote $OUT_FILE"

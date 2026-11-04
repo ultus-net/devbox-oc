@@ -1,40 +1,52 @@
 #!/usr/bin/env bash
-# Join the tailnet with a reusable, tagged auth key, then advertise the
-# OpenCode server. Runs on every boot so a rebuild rejoins without a human.
+# Join or refresh the tailnet, using the scoped auth key from Ignition.
+#
+# The key is the only secret that ever touches the install media. It is written
+# to /etc/devbox/tailscale-authkey at mode 0600. After a successful join this
+# script deletes it, so a revoked key cannot fail every later boot. Revoking the
+# key in the admin console is still worth doing, but the node does not depend on
+# it: identity lives in /var/lib/tailscale.
+#
+# `tailscale up` is idempotent. Running it on every boot with a key present
+# refreshes prefs and keeps the existing node identity; it does not mint a new
+# node. Skipping it whenever a state file exists is what leaves a half-started
+# node off the tailnet, so the key decides, not the file.
+#
+# A failed `up` with state present is not fatal. The node keeps its identity and
+# the service must still reach the serve step below, or a revoked key would latch
+# the box off the tailnet.
 #
 # --ephemeral is deliberately NOT used: the node identity must be stable so
-# MagicDNS and ACLs keep working across restarts.
+# MagicDNS and the client's saved server URL keep working across restarts.
 set -euo pipefail
 
 STATE_DIR="${STATE_DIR:-/var/lib/tailscale}"
 AUTH_KEY_FILE="${AUTH_KEY_FILE:-/etc/devbox/tailscale-authkey}"
 LOGIN_SERVER="${LOGIN_SERVER:-}"
 
-# The key may arrive from Key Vault at boot instead of Ignition, which keeps it
-# out of custom_data.
-if [ ! -r "$AUTH_KEY_FILE" ] && [ -n "${TS_AUTHKEY_SECRET:-}" ]; then
-  install -d -m 0700 "$(dirname "$AUTH_KEY_FILE")"
-  # shellcheck disable=SC1090,SC1091
-  . "$(dirname "$0")/lib-imds.sh"
-  key="$(kv_secret "${VAULT_NAME:?}" "$TS_AUTHKEY_SECRET")"
-  # An empty key file is readable, so every later boot would skip Key Vault and
-  # the join would fail with a misleading error instead.
-  if [ -z "$key" ] || [ "$key" = "null" ]; then
-    echo "oc-tailnet-up: empty auth key from Key Vault" >&2
-    exit 1
+if [ -r "$AUTH_KEY_FILE" ] && [ -s "$AUTH_KEY_FILE" ]; then
+  args=(--auth-key "file:$AUTH_KEY_FILE" --hostname "$(hostname)" --accept-routes=false)
+  [ -n "$LOGIN_SERVER" ] && args+=(--login-server "$LOGIN_SERVER")
+  rc=0
+  tailscale up "${args[@]}" || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    rm -f "$AUTH_KEY_FILE"
+    exit 0
   fi
-  (umask 077; printf '%s\n' "$key" > "$AUTH_KEY_FILE")
-  chmod 0600 "$AUTH_KEY_FILE"
+  if [ -f "$STATE_DIR/tailscaled.state" ]; then
+    echo "oc-tailnet-up: tailscale up failed; keeping the existing node state" >&2
+    exit 0
+  fi
+  echo "oc-tailnet-up: tailscale up failed and no node state exists" >&2
+  exit "$rc"
 fi
 
+# No key is the normal post-join state, because the join deletes it. Keep the
+# node then, but never report success on a box with neither a key nor state.
 if [ -f "$STATE_DIR/tailscaled.state" ]; then
-  echo "oc-tailnet-up: state present, leaving tailscale as configured"
+  echo "oc-tailnet-up: no auth key, but tailnet state is present"
   exit 0
 fi
 
-[ -r "$AUTH_KEY_FILE" ] || { echo "oc-tailnet-up: no auth key" >&2; exit 1; }
-
-args=(--auth-key "file:$AUTH_KEY_FILE" --hostname "$(hostname)" --accept-routes=false)
-[ -n "$LOGIN_SERVER" ] && args+=(--login-server "$LOGIN_SERVER")
-
-tailscale up "${args[@]}"
+echo "oc-tailnet-up: no auth key at $AUTH_KEY_FILE and no tailnet state" >&2
+exit 1

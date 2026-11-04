@@ -1,30 +1,22 @@
 #!/usr/bin/env bash
-# Publish the OpenCode server and Cockpit on the tailnet with real TLS certs.
+# Publish the OpenCode server on the tailnet with a real TLS certificate.
 #
-# tailscale serve proxies https://<host>.<tailnet>.ts.net to loopback, so neither
-# the container port nor Cockpit is exposed to the VNet or the internet. Cockpit
-# is bound to loopback by an Ignition drop-in on cockpit.socket; if that drop-in
-# is ever lost, this proxy keeps working but the socket itself is reachable again,
-# which is what host/tests/test_cockpit_loopback.sh exists to prevent.
+# tailscale serve proxies https://<host>.<tailnet>.ts.net to loopback, so the
+# container port is never bound to an interface. This is the only data path:
+# there is no inbound port forward and no public listener.
 #
-# The two HTTPS listeners need distinct ports: tailscale serve refuses a second
-# bind on a port already in use.
+# Cockpit ships with ucore but is rebound to loopback by an Ignition drop-in and
+# is deliberately not published here. Use Tailscale SSH for a shell.
 set -euo pipefail
 
 : "${OC_TCP_PORT:=4096}"
 : "${OC_HTTPS_PORT:=443}"
-: "${COCKPIT_TCP_PORT:=9090}"
-: "${COCKPIT_HTTPS_PORT:=8443}"
 
 # --bg makes the config survive reboots and tailscale restarts.
 tailscale serve --bg --https="${OC_HTTPS_PORT}" "http://127.0.0.1:${OC_TCP_PORT}"
 
-# Cockpit is a separate listener rather than a path on the OpenCode origin,
-# because its own assets are served from the root and would collide.
-tailscale serve --bg --https="${COCKPIT_HTTPS_PORT}" "http://127.0.0.1:${COCKPIT_TCP_PORT}"
-
-# Keep the SSH path usable too. Tailscale SSH authenticates by tailnet
-# identity, so there are no authorized_keys to distribute or audit.
+# Tailscale SSH authenticates by tailnet identity, so there are no
+# authorized_keys to distribute or audit.
 tailscale set --ssh=true
 
 tailscale serve status
