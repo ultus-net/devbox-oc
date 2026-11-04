@@ -19,8 +19,8 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 
 [ -d "$dir" ] || fail "no such directory: $dir"
 
-# Scan Terraform sources only. Excluding this file matters: its own pattern
-# text would otherwise match itself and the check could never pass.
+# Scan top-level Terraform sources only. This script is .sh, so it cannot match
+# its own pattern text.
 hits="$(
   find "$dir" -maxdepth 1 -name '*.tf' -type f -print0 \
     | xargs -0 grep -lE 'dev_test_global_vm_shutdown_schedule|daily_recurrence_time' 2>/dev/null || true

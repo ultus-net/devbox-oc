@@ -127,7 +127,7 @@ Individual suites:
 | `os/butane/tests/test_units_load_their_env.sh` | every unit loads the env file that defines the variables its script reads |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
-| `terraform/tests/no_scheduled_stop.sh` | no scheduled hard stop returns in the Terraform sources kept here; the VM stop guard is in `csh-dev` |
+| `terraform/tests/no_scheduled_stop.sh` | no DevTestLab shutdown schedule in the Terraform port record; the VM stop guard is the `csh-dev` template check |
 | `terraform/tests/key_vault_name_derived.sh` | the vault name is derivable from tfvars, without state |
 | `terraform/tests/authkey_is_stored.sh` | the Tailscale auth key reaches Key Vault |
 | `terraform/tests/authkey_name_matches_build.sh` | the auth key's secret name agrees with the Ignition build default |
@@ -138,9 +138,10 @@ Individual suites:
 | `tests/docs_complete.sh` | the recovery topics stay written down |
 | `tools/tests/test_oc.sh` | the wake-and-connect wrapper starts the box and waits for health |
 
-`./tests/verify.sh` makes 23 unconditional `run` calls plus one conditional
-`run` for the image-integrity suite, over 24 distinct suite files. The table
-above lists all 24 files.
+`./tests/verify.sh` makes 25 unconditional `run` calls plus one conditional
+`run` for the image-integrity suite, over 24 distinct suite files. The
+`no_scheduled_stop` suite runs three times: once against the repo and once
+against each negative-control fixture. The table above lists all 24 files.
 
 The deployed VM's network and disk invariants are guarded in the `csh-dev` repo,
 not here: `scripts/check-template.py` reads the compiled Bicep and

@@ -49,8 +49,8 @@ variable "vm_subnet_cidr" {
 
 variable "enable_nat_gateway" {
   type        = bool
-  description = "Explicit egress. Required on subnets created after March 2026, which default to private."
-  default     = true
+  description = "Port-record flag for the old egress design. The deployed subnet uses default outbound access, so leave this false: a true value declares a public IP."
+  default     = false
 }
 
 variable "data_disk_size_gb" {

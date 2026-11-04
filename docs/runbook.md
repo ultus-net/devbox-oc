@@ -1,11 +1,11 @@
 # Devbox runbook
 
-> **Superseded for the VM, network and disk.** The deployed VM, NIC, NSG, data
-> disk and ACR are declared in the `csh-dev` repo's Bicep. The Terraform sources
-> here are the port record, not a deployment path: **do not run
-> `terraform apply`**, and do not treat a `terraform` command below as current
-> except where a section says it still applies. `terraform/schedule.tf` stays
-> here and remains live.
+> **Superseded for the whole stack.** The deployed VM, NIC, NSG, data disk, ACR
+> and Key Vault are declared in the `csh-dev` repo's Bicep. The Terraform
+> sources here are the port record, not a deployment path: **do not run
+> `terraform apply`**. The recorded start schedule targets the old Terraform VM,
+> so it is dormant until `csh-dev` declares it. The live stages below read the
+> deployed names from Azure.
 
 Operating procedures for the devbox: first deployment, and the case where
 something has already gone wrong.
@@ -13,9 +13,9 @@ something has already gone wrong.
 Replace the placeholders with your own values:
 
 ```sh
-RG=rg-devbox-oc
-VM=vm-devbox-oc
-DISK=disk-devbox-oc-data
+RG=rg-csh-dev
+VM=vm-csh-dev
+DISK=disk-csh-dev-data
 ```
 
 ## First deploy, from clone to a connected client
@@ -24,6 +24,10 @@ The order below is not arbitrary. Each stage produces a value the next one
 consumes, and two of them fail loudly if run out of order.
 
 ### 1. Fill in the variables
+
+This step belongs to the superseded Terraform path. The live `csh-dev` deploy
+takes `vmImageId` and `ignitionCustomData` as pipeline variables instead, so use
+the image id from stage 2 as `vmImageId`.
 
 ```sh
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
@@ -96,50 +100,49 @@ artifact, and the failure appears at create time.
 
 ### 3. Generate Ignition with real values
 
-The repository ships `os/butane/ucore.ign` compiled from placeholders. Terraform
-refuses to plan against it, through a precondition that matches `placeholder`,
-`devbox-placeholder` and a zero subscription ID. That guard exists because a
-placeholder config would otherwise boot a VM whose SSH key is a well-known dummy.
+The repository ships `os/butane/ucore.ign` compiled from placeholders. The
+Terraform port record refuses to plan against it, and the `csh-dev` deploy boots
+it as `customData`, so the check matters either way: a placeholder config would
+boot a VM whose SSH key is a well-known dummy.
 
 ```sh
-# Terraform resolves the names below, so init first. Init downloads providers
-# only; it creates nothing in Azure.
-terraform -chdir=terraform init
-
 export SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-export RG=rg-devbox-oc
-export ACR_NAME=youracr
+export RG=rg-csh-dev
+export ACR_NAME="$(az acr list -g "$RG" --query '[0].name' -o tsv)"
 export SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)"
 
-# Both names are derived from tfvars, not read from state. `terraform output`
-# fails here, because nothing has been created yet.
-export VAULT_NAME="$(terraform -chdir=terraform console <<<'local.key_vault_name' | tr -d '"')"
-export DISK_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.Compute/disks/disk-devbox-oc-data"
+# Read the names the csh-dev deployment created. The vault and disk names come
+# from the template and are visible in Azure after stage one, so no state is
+# involved.
+export VAULT_NAME="$(az keyvault list -g "$RG" --query '[0].name' -o tsv)"
+export DISK_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.Compute/disks/disk-csh-dev-data"
 
 ./os/butane/build.sh
 ```
 
-`VAULT_NAME` is `kv-<name_prefix>-<hex of sha256(subscription_id)>`, where the
-hex run shrinks as the prefix grows so the whole name stays within 24 characters.
-`DISK_ID` follows from `name_prefix` plus the subscription. Neither needs state,
-which is the whole point: Ignition must exist before the apply that creates the
-resources Ignition refers to. A randomly suffixed vault name would make that
-circular, so the suffix is derived instead.
+`VAULT_NAME` is the vault the `csh-dev` stage-one deployment created, named
+`toLower('<appName>kv<uniqueString(resourceGroup().id)>')`. Nothing else in that
+resource group is a vault, and both `csh-dev` and the Ignition consumers read the
+name from the deployment output, so the suffix is transparent. `DISK_ID` follows
+from the disk name in the same template. Ignition is built after stage one, which
+is what breaks the circularity: the vault and disk exist before the VM that
+refers to them.
 
-Two consequences worth knowing before you pick a `name_prefix`:
+Two consequences worth knowing:
 
-- A vault name is a global DNS name. Two boxes in one subscription that share a
-  prefix collide, so give each box its own.
-- `purge_protection_enabled` keeps a removed vault's name reserved for seven
-  days. Removing the stack and immediately re-applying fails on the name until
-  that window passes. Use a different prefix if you need one now.
+- A vault name is a global DNS name. Two boxes in one subscription with the same
+  `appName` collide, so give each box its own.
+- `enableSoftDelete` keeps a removed vault's name reserved for seven days.
+  Rebuilding under the same `appName` fails on the name until that window passes.
 
-### 4. Apply
+### 4. Deploy the VM (superseded path)
 
 This stage is superseded: the VM, NIC, NSG and data disk are deployed from the
 `csh-dev` Bicep, not from this repo. The commands are kept as the record of the
 old path. Do not run them. The live deploy is `pipelines/azure-pipelines.yml` in
-`csh-dev`, and its post-deploy check reads the deployed NIC and NSG.
+`csh-dev`: run it with `deployVm=true`, `vmImageId` set to the Phase 2 image id
+and `ignitionCustomData` set to the base64 of `os/butane/ucore.ign`. Its
+post-deploy check reads the deployed NIC and NSG.
 
 ```sh
 terraform -chdir=terraform init

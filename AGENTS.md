@@ -34,9 +34,9 @@ preference.
   and enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in;
   `host/tests/test_cockpit_loopback.sh` guards that.
 - **No scheduled stop.** Start is scheduled, stop is idle-based. A timer that
-  deallocates on a clock is a data-loss path. The VM's stop guard is the `csh-dev`
-  compiled-template check; `terraform/tests/no_scheduled_stop.sh` still rejects a
-  shutdown schedule in the Terraform sources kept here.
+  deallocates on a clock is a data-loss path. The `csh-dev` compiled-template
+  check rejects a DevTestLab shutdown schedule, and
+  `terraform/tests/no_scheduled_stop.sh` rejects one in the Terraform port record.
 - **The data disk survives a VM rebuild.** The disk holds the session database and
   the repos. In `csh-dev` Bicep the data disk and NIC use `deleteOption: Detach`,
   which `scripts/check-template.py` asserts.
@@ -96,7 +96,7 @@ terraform -chdir=terraform validate
 | `os/butane/` | Ignition source (`ucore.bu`) and the compiled `ucore.ign` |
 | `os/` | the OS image publish script |
 | `image/` | toolbox container: Dockerfile, toolchains, smoke test, digest |
-| `terraform/` | port record for the VM, disk, network and ACR; live `schedule.tf` and Key Vault |
+| `terraform/` | port record for the VM, disk, network, ACR and Key Vault; never applied |
 | `pipelines/` | Azure Pipelines: verify, OS image, container image |
 | `docs/` | runbook, pipeline setup, design and plans |
 

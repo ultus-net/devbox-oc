@@ -46,9 +46,15 @@ run "units load their env" ./os/butane/tests/test_units_load_their_env.sh
 # The VM, NIC, NSG and data disk are declared in csh-dev Bicep now. Their
 # invariants are read from the compiled template in that repo, so the Terraform
 # plan and disk guards here no longer describe the deployed box and are retired.
-# The scheduled-start guard still applies: schedule.tf stays in this repo.
+# The scheduled-start guard still applies: schedule.tf stays in this repo, as
+# the port record. The two fixtures prove the guard is not vacuous: one adds a
+# shutdown schedule, the other removes the start.
 run "no scheduled stop" \
   ./terraform/tests/no_scheduled_stop.sh
+run "no scheduled stop (violation detected)" \
+  bash -c './terraform/tests/no_scheduled_stop.sh terraform/tests/fixtures/sched_violation && exit 1 || exit 0'
+run "no scheduled stop (missing start detected)" \
+  bash -c './terraform/tests/no_scheduled_stop.sh terraform/tests/fixtures/sched_no_start && exit 1 || exit 0'
 run "vault name derivable without state" \
   ./terraform/tests/key_vault_name_derived.sh
 run "auth key stored" \
