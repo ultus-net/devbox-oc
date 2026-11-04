@@ -81,7 +81,8 @@ treated as idle instead, so a box that refuses to serve does not also refuse to 
 
 ## Cost shape
 
-Approximate, westeurope, USD, at the time of writing:
+Approximate, historical westeurope USD projection, not the current
+`newzealandnorth` NZD budget:
 
 | Item | Monthly |
 |---|---|
@@ -116,6 +117,7 @@ Individual suites:
 | `host/tests/test_oc-secrets.sh` | the server password file is mode 0600 and never clobbered by an empty secret |
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent and uses a durable node |
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is published over the tailnet |
+| `host/tests/test_snapshot_region.sh` | a data-disk snapshot is created in the disk's region, matching the Terraform default |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk, never a named volume on the OS disk |
 | `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools, rejects a tag, publishes through a managed disk with no storage account, and builds a Gen2 image from the pinned bootc ref |
 | `os/tests/test_build_os_image_one_vhd.sh` | a build that yields more than one VHD aborts instead of uploading an arbitrary file |

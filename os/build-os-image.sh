@@ -111,9 +111,13 @@ sas="$(az disk grant-access -g "$RG" -n "$disk" --access-level Write \
 
 # Storage API upload to the disk's staging blob. The CLI defaults to a page blob
 # for a .vhd, and chunks the transfer, so a multi-GiB artifact stays well inside
-# the single-request limit.
-az storage blob upload --blob-url "$sas" --file "$vhd" --type page \
-  --overwrite --only-show-errors -o none
+# the single-request limit. A failed upload leaves the staging disk billing until
+# someone deletes it, so the failure path names it.
+if ! az storage blob upload --blob-url "$sas" --file "$vhd" --type page \
+  --overwrite --only-show-errors -o none; then
+  echo "upload failed; staging disk ${disk} in ${RG} remains until deleted" >&2
+  exit 1
+fi
 
 # Until access is revoked the disk cannot be used as an image source.
 az disk revoke-access -g "$RG" -n "$disk" --only-show-errors -o none

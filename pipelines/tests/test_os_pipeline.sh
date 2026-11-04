@@ -96,10 +96,13 @@ if variables.get("location") != "newzealandnorth":
         f"(got {variables.get('location')!r})"
     )
 
-# The publish step must verify the generation it promised. A Gen1 image cannot
-# boot this UEFI artifact, and the failure otherwise appears at VM create.
-if not any("hyperVGeneration" in body(s) for s in steps):
-    fail(f"{display} never checks the published image hyperVGeneration")
+# The publish step must compare the generation it promised. Naming the field is
+# not enough: a check for "V1" still mentions hyperVGeneration and would pass a
+# Gen1 image into the first boot.
+if not any(
+    re.search(r'\[\s*"\$generation"\s*=\s*"V2"\s*\]', body(s)) for s in steps
+):
+    fail(f"{display} never verifies the published image generation is V2")
 
 # The step that runs the build script is the one whose environment matters. Match
 # a command, not a substring: a comment, or an echo whose argument happens to be

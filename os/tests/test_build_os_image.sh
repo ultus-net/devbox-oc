@@ -245,6 +245,8 @@ PATH="$tmp/failaz:$tmp/bin:$PATH" RG=rg-x "$bash_bin" "$script" \
 [ "$rc" -ne 0 ] || fail "T8 continued after a failed upload"
 grep -q -- "storage blob upload" "$tmp/az-fail-calls" \
   || fail "T8 did not attempt the upload: $(cat "$tmp/az-fail-calls")"
+grep -q "staging disk .* remains until deleted" "$tmp/err8" \
+  || fail "T8 did not name the staging disk left behind: $(cat "$tmp/err8")"
 grep -q -- "image create" "$tmp/az-fail-calls" \
   && fail "T8 created an image after the upload failed: $(cat "$tmp/az-fail-calls")"
 grep -q -- "revoke-access" "$tmp/az-fail-calls" \

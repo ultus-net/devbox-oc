@@ -89,7 +89,11 @@ All notable changes to this project. One entry per landed change, newest first.
   `hyperVGeneration V2`; `pipelines/devbox-image.yml` targets
   `cshdevacrb6lmephspqf2u`. The image test now checks the Gen2 flag on the disk
   and the image separately, and fails if the upload names a storage account or if
-  a failed upload still reaches `az image create`.
+  a failed upload still reaches `az image create`. A failed upload also names the
+  staging disk left behind. `host/tests/test_snapshot_region.sh` runs
+  `oc-snapshot` against a fake IMDS and asserts the snapshot location matches the
+  Terraform default. The pipeline test requires the explicit `= "V2"` comparison,
+  not just the field name.
 
 - `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
   live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on
