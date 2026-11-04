@@ -77,6 +77,17 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- The OS image is published through a managed disk instead of a storage account.
+  `os/build-os-image.sh` creates an upload-ready disk sized from the artifact,
+  takes a write SAS with `az disk grant-access`, uploads the VHD to that SAS,
+  revokes access, and creates the image from the disk id. The storage account was
+  deleted on 2026-11-03 and is not recreated. The script now defaults `RG` and
+  `LOCATION` to `rg-csh-dev` and `newzealandnorth`, and the pipeline states the
+  same target. `pipelines/devbox-os.yml` verifies the published image reports
+  `hyperVGeneration V2`; `pipelines/devbox-image.yml` targets
+  `cshdevacrb6lmephspqf2u`. The image test now fails if the upload names a storage
+  account or if a failed upload still reaches `az image create`.
+
 - `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
   live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on
   2026-11-03 in preparation for this deployment model. Phase 6 is now a fresh
@@ -433,8 +444,9 @@ All notable changes to this project. One entry per landed change, newest first.
   so the bootc build path, the `vhd` output type, and a Gen2 boot are all
   unverified against a real Azure subscription.
 - All three pipeline files parse as YAML but have never executed.
-- `pipelines/devbox-image.yml` and `pipelines/devbox-os.yml` carry placeholder
-  registry and storage account names that must be set before first use.
+- `pipelines/devbox-image.yml` names the ACR `cshdevacrb6lmephspqf2u`, which the
+  `csh-dev` Bicep creates. A different resource group produces a different
+  `uniqueString` suffix, and the pipeline variable must change with it.
 - `podman-auto-update.timer` is not gated on idleness. It follows `:prod` on its
   own schedule and restarts the container when the tag moves, so an update can
   land during a running session. The health check decides whether the new image

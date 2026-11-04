@@ -74,9 +74,11 @@ because the digest record is what makes a rollback deterministic.
 
 ## Registry
 
-The pipelines default to an ACR named `devboxacr` in
-`pipelines/devbox-image.yml`. Confirm the real name before the first run; it is a
-placeholder.
+The image pipeline targets the ACR `cshdevacrb6lmephspqf2u`, created by the
+`acr` module in the `csh-dev` Bicep. The `uniqueString(resourceGroup().id)`
+suffix is stable for `rg-csh-dev`, so the name does not move on redeploy. A
+different resource group gets a different suffix, and the pipeline variable must
+be updated with it.
 
 Basic SKU is enough. Repository-scoped Entra roles work on all three SKUs, so
 least privilege is not a reason to pay for Standard or Premium. The Premium

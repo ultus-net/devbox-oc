@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pipelines/tests/test_os_pipeline.sh
 #
-# pipelines/devbox-os.yml runs on an Ubuntu runner and needs three things to be
+# pipelines/devbox-os.yml runs on an Ubuntu runner and needs four things to be
 # true at once, none of which the YAML parser alone can see:
 #
 #   1. podman is installed, because the script pulls the OS container with it and
@@ -12,6 +12,8 @@
 #      is the one that fails only on a real agent: sudo resets the environment, so
 #      az runs as root with no AZURE_CONFIG_DIR and reports that nobody is logged
 #      in. Nothing local catches it, and the failure arrives after a long build.
+#   4. the run targets rg-csh-dev in newzealandnorth and names no storage account,
+#      because the deleted account is not coming back for this pipeline.
 #
 # Usage: test_os_pipeline.sh [pipeline.yml]
 set -euo pipefail
@@ -81,6 +83,24 @@ if not re.fullmatch(r"\S+@sha256:[0-9a-f]{64}", builder):
         f"(got {builder!r}), so the build recipe can change under a fixed name"
     )
 
+# The target is part of the contract. A placeholder here publishes the image to
+# a resource group nobody deployed, and the failure looks like a permission bug.
+if variables.get("resourceGroup") != "rg-csh-dev":
+    fail(
+        f"{display} does not target rg-csh-dev "
+        f"(got {variables.get('resourceGroup')!r})"
+    )
+if variables.get("location") != "newzealandnorth":
+    fail(
+        f"{display} does not target newzealandnorth "
+        f"(got {variables.get('location')!r})"
+    )
+
+# The publish step must verify the generation it promised. A Gen1 image cannot
+# boot this UEFI artifact, and the failure otherwise appears at VM create.
+if not any("hyperVGeneration" in body(s) for s in steps):
+    fail(f"{display} never checks the published image hyperVGeneration")
+
 # The step that runs the build script is the one whose environment matters. Match
 # a command, not a substring: a comment, or an echo whose argument happens to be
 # the path, would otherwise satisfy the checks with prose. This is the repo's
@@ -148,8 +168,10 @@ if not kept & {"AZURE_CONFIG_DIR", "HOME"}:
 
 if "RG" not in kept:
     fail(f"{display} does not preserve RG through sudo, so the script refuses for a missing variable")
-if "STORAGE_ACCOUNT" not in kept:
-    fail(f"{display} does not preserve STORAGE_ACCOUNT through sudo, so the script refuses")
+if "LOCATION" not in kept:
+    fail(f"{display} does not preserve LOCATION through sudo, so the script uploads to the wrong region")
+if "STORAGE_ACCOUNT" in kept or "STORAGE_ACCOUNT" in build:
+    fail(f"{display} still names STORAGE_ACCOUNT, but that account is deleted")
 PY
 
-echo "OS pipeline installs podman, pins the builder, and keeps credentials across sudo"
+echo "OS pipeline targets rg-csh-dev, installs podman, pins the builder, and keeps credentials across sudo"

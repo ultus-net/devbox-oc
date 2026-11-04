@@ -117,7 +117,7 @@ Individual suites:
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent and uses a durable node |
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is published over the tailnet |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk, never a named volume on the OS disk |
-| `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools, rejects a tag, and builds a Gen2 image from the pinned bootc ref |
+| `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools, rejects a tag, publishes through a managed disk with no storage account, and builds a Gen2 image from the pinned bootc ref |
 | `os/tests/test_build_os_image_one_vhd.sh` | a build that yields more than one VHD aborts instead of uploading an arbitrary file |
 | `os/butane/tests/test_bootc_image.sh` | no rebase unit, marker path, or runtime rebase returns to the Ignition config, in the source and the compiled artifact |
 | `os/butane/tests/test_units_have_scripts.sh` | every unit runs a script that is baked into the image, and the artifact reproduces from its source |
@@ -133,7 +133,7 @@ Individual suites:
 | `terraform/tests/authkey_name_matches_build.sh` | the auth key's secret name agrees with the Ignition build default |
 | `terraform/tests/password_secret_name_matches.sh` | the password's secret name agrees across Terraform, the script, and Ignition |
 | `terraform/tests/variables_documented.sh` | every variable without a default is documented in the example |
-| `pipelines/tests/test_os_pipeline.sh` | the OS pipeline installs podman, pins its builder, and keeps the Azure credential across `sudo` |
+| `pipelines/tests/test_os_pipeline.sh` | the OS pipeline targets `rg-csh-dev`, installs podman, pins its builder, keeps the Azure credential across `sudo`, and names no storage account |
 | `pipelines/tests/test_pipeline_shape.sh` | the PR gate has a `pr:` trigger, no service connection, and installs its own tooling |
 | `tests/docs_complete.sh` | the recovery topics stay written down |
 | `tools/tests/test_oc.sh` | the wake-and-connect wrapper starts the box and waits for health |

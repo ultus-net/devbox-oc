@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build an Azure VHD from the ucore bootc container image, upload it, and create
-# a managed image.
+# Build an Azure VHD from the ucore bootc container image, upload it to a managed
+# disk, and create a managed image.
 #
 # Neither Fedora nor ucore publishes an Azure VHD. Building one from the bootc
 # container is what lets the VM boot ucore directly: one boot, no rebase, no
@@ -15,25 +15,23 @@ set -euo pipefail
 # Pinned from the design's verified facts. Change deliberately, not incidentally.
 UCORE_IMAGE="${UCORE_IMAGE:-ghcr.io/ublue-os/ucore-minimal@sha256:7906a70efe7482704fdb232c7e5d2a3068a0c5520ef46d3f7f6b9f8fc0e899b9}"
 DRY_RUN="${DRY_RUN:-0}"
-CONTAINER="${CONTAINER:-images}"
-LOCATION="${LOCATION:-westeurope}"
 # Fedora bootable containers do not declare a root filesystem, so image-builder
 # refuses to build one without this. ext4 is what Azure expects.
 BUILD_FS="${BUILD_FS:-ext4}"
 
 # The dry run exists so an operator can see the image id it would create before a
-# resource group or storage account exists. Checking those first would make the
+# resource group or managed disk exists. Checking those first would make the
 # documented command fail, so the dry run answers before any of them are required.
 if [ "$DRY_RUN" = "1" ]; then
   # No external command here on purpose. The dry run must work on a machine with
   # nothing installed yet, which is where the operator sees it first.
-  echo "dry run: would build a vhd from ${UCORE_IMAGE} with image-builder, then upload it to <storage-account>/${CONTAINER}"
+  echo "dry run: would build a vhd from ${UCORE_IMAGE} with image-builder, then upload it to a managed disk in ${RG:-rg-csh-dev}"
   echo "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/<rg>/providers/Microsoft.Compute/images/devbox-ucore-<yyyymmdd>"
   exit 0
 fi
 
-RG="${RG:?RG is required}"
-STORAGE_ACCOUNT="${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
+RG="${RG:-rg-csh-dev}"
+LOCATION="${LOCATION:-newzealandnorth}"
 
 # A tag is not a pin. Accepting one here would publish a different OS on a later
 # run while the pipeline reported success and the hash described another image.
@@ -96,13 +94,38 @@ vhd="${vhds[0]}"
 sha256sum "$vhd" >&2
 
 name="devbox-ucore-$(date -u +%Y%m%d)"
-blob="${name}.vhd"
+disk="${name}-disk"
+# The upload size is the artifact's exact byte count, including the VHD footer.
+# A hardcoded value would either pad the disk or truncate the upload.
+vhd_size="$(wc -c < "$vhd" | tr -d '[:space:]')"
 
-az storage blob upload --account-name "$STORAGE_ACCOUNT" -c "$CONTAINER" \
-  -f "$vhd" -n "$blob" --overwrite --only-show-errors
+# No storage account is created or named. The disk is the upload target, and the
+# SAS from grant-access carries the credential.
+az disk create -g "$RG" -n "$disk" -l "$LOCATION" --os-type Linux \
+  --hyper-v-generation V2 --upload-type Upload \
+  --upload-size-bytes "$vhd_size" --sku StandardSSD_LRS \
+  --only-show-errors -o none
+
+sas="$(az disk grant-access -g "$RG" -n "$disk" --access-level Write \
+  --duration-in-seconds 3600 --query accessSas -o tsv)"
+
+# Storage API upload to the disk's staging blob. The CLI defaults to a page blob
+# for a .vhd, and chunks the transfer, so a multi-GiB artifact stays well inside
+# the single-request limit.
+az storage blob upload --blob-url "$sas" --file "$vhd" --type page \
+  --overwrite --only-show-errors -o none
+
+# Until access is revoked the disk cannot be used as an image source.
+az disk revoke-access -g "$RG" -n "$disk" --only-show-errors -o none
+
 az image create -g "$RG" -n "$name" --location "$LOCATION" --os-type Linux \
   --hyper-v-generation V2 \
-  --source "https://${STORAGE_ACCOUNT}.blob.core.windows.net/${CONTAINER}/${blob}" \
+  --source "$(az disk show -g "$RG" -n "$disk" --query id -o tsv)" \
   --only-show-errors -o none
+
+# The image holds its own copy, so the staging disk is safe to delete once the
+# image exists. Print its name rather than deleting it here: cleanup stays an
+# explicit operator step.
+echo "staging disk ${disk} in ${RG} can be deleted after the image is verified" >&2
 
 az image show -g "$RG" -n "$name" --query id -o tsv

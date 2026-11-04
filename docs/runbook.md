@@ -47,19 +47,28 @@ image already is ucore, so the box boots it directly with no rebase stage.
 az pipelines run --name devbox-os            # or: ./os/build-os-image.sh
 ```
 
-The last line of output is the image resource ID. Put it in `os_image_id`.
+The last line of output is the image resource ID. Put it in `os_image_id`. The
+script also prints the VHD sha256 and the staging disk name to stderr: record the
+hash, and delete `devbox-ucore-<yyyymmdd>-disk` from `rg-csh-dev` after
+`az image show --query hyperVGeneration` reports `V2`. The image holds its own
+copy, so the disk is only a staging area.
 
-Before either path runs, set the pipeline's `resourceGroup` and `storageAccount`
-variables in `pipelines/devbox-os.yml`. Storage account names are globally
-unique, so the value there is a placeholder and is certainly wrong. Set the
-`imageBuilderContainer` digest there too if you change it; it is pinned for the
-same reason the OS is. The script path needs `podman` and `az` on PATH, with `RG`
-and `STORAGE_ACCOUNT` exported, and either a host `image-builder` or
-`IMAGE_BUILDER_CONTAINER` naming the pinned builder image. The pipeline installs
-podman and runs the builder container, so prefer the pipeline. Run
-`DRY_RUN=1 ./os/build-os-image.sh` to print the image id it would create without
-pulling or uploading anything. That works before a storage account exists,
-because the dry run answers before it requires one.
+The upload target is a managed disk, not a storage account. The script creates an
+upload-ready disk, takes a write SAS with `az disk grant-access`, uploads the VHD
+to that SAS, revokes access, and creates the image from the disk id. No storage
+account is created or named, and `cshdevfilesb6lmephspqf2u` stays deleted.
+
+`pipelines/devbox-os.yml` sets `resourceGroup` to `rg-csh-dev` and `location` to
+`newzealandnorth`. Set the `imageBuilderContainer` digest there too if you change
+it; it is pinned for the same reason the OS is. The script path needs `podman`
+and `az` on PATH, with either a host `image-builder` or
+`IMAGE_BUILDER_CONTAINER` naming the pinned builder image. `RG` and `LOCATION`
+default to `rg-csh-dev` and `newzealandnorth`, so override them only to publish
+somewhere else. The pipeline installs podman and runs the builder container, so
+prefer the pipeline. Run `DRY_RUN=1 ./os/build-os-image.sh` to print the image id
+it would create without pulling, uploading, or requiring a disk. That works
+before the resource group exists, because the dry run answers before it requires
+one.
 
 The OS comes from `UCORE_IMAGE`, a digest-pinned reference to
 `ghcr.io/ublue-os/ucore-minimal`. A tag is rejected rather than resolved, so the
@@ -70,13 +79,12 @@ one in the design's verified-facts table.
 not declare a root filesystem. `BUILD_FS` defaults to `ext4`, which is what Azure
 expects.
 
-The VM's generation is not set in Terraform: `azurerm_linux_virtual_machine` has
-no `hyper_v_generation` argument in the azurerm 4.x provider, and Azure takes the
-generation from the image. What matters is the image itself, so
-`os/build-os-image.sh` passes `--hyper-v-generation V2` to `az image create`.
-`os/tests/test_build_os_image.sh` guards that argument. Confirm the first apply
-produces a Gen2 VM; a Gen1 VM cannot boot this UEFI image, and the failure
-appears at create time.
+The VM's generation is not set by the deployment template: Azure takes it from
+the image. What matters is the image itself, so `os/build-os-image.sh` passes
+`--hyper-v-generation V2` to both `az disk create` and `az image create`.
+`os/tests/test_build_os_image.sh` guards both arguments. Confirm the published
+image reports `V2` before the first boot; a Gen1 image cannot boot this UEFI
+artifact, and the failure appears at create time.
 
 ### 3. Generate Ignition with real values
 

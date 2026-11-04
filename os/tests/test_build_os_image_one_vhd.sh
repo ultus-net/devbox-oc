@@ -40,7 +40,7 @@ chmod +x "$tmp/bin/image-builder" "$tmp/bin/podman" "$tmp/bin/az"
 : > "$tmp/az-calls"
 
 rc=0
-out="$(PATH="$tmp/bin:$PATH" RG=rg-x STORAGE_ACCOUNT=stx "$bash_bin" "$script" 2>&1)" || rc=$?
+out="$(PATH="$tmp/bin:$PATH" RG=rg-x "$bash_bin" "$script" 2>&1)" || rc=$?
 [ "$rc" -ne 0 ] || fail "two vhds did not abort the build"
 case "$out" in
   *"expected exactly one vhd"*) ;;
