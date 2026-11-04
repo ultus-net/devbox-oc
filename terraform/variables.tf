@@ -6,7 +6,7 @@ variable "subscription_id" {
 variable "location" {
   type        = string
   description = "Azure region for every resource."
-  default     = "westeurope"
+  default     = "newzealandnorth"
 }
 
 variable "name_prefix" {

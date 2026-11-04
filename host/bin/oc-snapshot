@@ -10,7 +10,7 @@ set -euo pipefail
 DISK_ID="${DISK_ID:?DISK_ID is required}"
 RG="${RG:?RG is required}"
 SUBSCRIPTION_ID="${SUBSCRIPTION_ID:?SUBSCRIPTION_ID is required}"
-LOCATION="${LOCATION:-westeurope}"
+LOCATION="${LOCATION:-newzealandnorth}"
 IMDS="http://169.254.169.254/metadata/identity/oauth2/token"
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"

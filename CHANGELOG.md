@@ -83,10 +83,13 @@ All notable changes to this project. One entry per landed change, newest first.
   revokes access, and creates the image from the disk id. The storage account was
   deleted on 2026-11-03 and is not recreated. The script now defaults `RG` and
   `LOCATION` to `rg-csh-dev` and `newzealandnorth`, and the pipeline states the
-  same target. `pipelines/devbox-os.yml` verifies the published image reports
+  same target. The Terraform `location` default and the `host/bin/oc-snapshot`
+  fallback move with it, so a snapshot is created in the disk's region.
+  `pipelines/devbox-os.yml` verifies the published image reports
   `hyperVGeneration V2`; `pipelines/devbox-image.yml` targets
-  `cshdevacrb6lmephspqf2u`. The image test now fails if the upload names a storage
-  account or if a failed upload still reaches `az image create`.
+  `cshdevacrb6lmephspqf2u`. The image test now checks the Gen2 flag on the disk
+  and the image separately, and fails if the upload names a storage account or if
+  a failed upload still reaches `az image create`.
 
 - `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
   live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on

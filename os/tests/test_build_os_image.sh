@@ -187,7 +187,11 @@ grep -q "$digest" "$tmp/podman-calls" \
   || fail "T6 did not pull the pinned ref: $(cat "$tmp/podman-calls")"
 grep -q "$digest" "$tmp/ref-used" 2>/dev/null \
   || fail "T6 did not pass the pinned ref to image-builder: $(cat "$tmp/ref-used" 2>/dev/null || echo none)"
-grep -q -- "--hyper-v-generation V2" "$tmp/az-calls" \
+# Both calls take the flag, so each is asserted on its own line. A bare grep
+# over the log would still match the other call with one flag removed.
+grep -Eq -- "^disk create .*--hyper-v-generation V2" "$tmp/az-calls" \
+  || fail "T6 did not create a Gen2 staging disk: $(cat "$tmp/az-calls")"
+grep -Eq -- "^image create .*--hyper-v-generation V2" "$tmp/az-calls" \
   || fail "T6 did not create a Gen2 image: $(cat "$tmp/az-calls")"
 
 # The upload target is a managed disk sized from the artifact, and the SAS is the
@@ -286,7 +290,9 @@ grep -q -- "image-builder-cli@pinned" "$tmp/podman-calls" \
   || fail "T7 did not run the requested builder container: $(cat "$tmp/podman-calls")"
 grep -q "$digest" "$tmp/ref-used" 2>/dev/null \
   || fail "T7 did not pass the pinned ref to the builder in container mode"
-grep -q -- "--hyper-v-generation V2" "$tmp/az-calls" \
+grep -Eq -- "^disk create .*--hyper-v-generation V2" "$tmp/az-calls" \
+  || fail "T7 did not create a Gen2 staging disk"
+grep -Eq -- "^image create .*--hyper-v-generation V2" "$tmp/az-calls" \
   || fail "T7 did not create a Gen2 image"
 grep -q -- "storage blob upload" "$tmp/az-calls" \
   || fail "T7 did not upload the vhd: $(cat "$tmp/az-calls")"
