@@ -1,5 +1,12 @@
 # Devbox runbook
 
+> **Superseded for the VM, network and disk.** The deployed VM, NIC, NSG, data
+> disk and ACR are declared in the `csh-dev` repo's Bicep. The Terraform sources
+> here are the port record, not a deployment path: **do not run
+> `terraform apply`**, and do not treat a `terraform` command below as current
+> except where a section says it still applies. `terraform/schedule.tf` stays
+> here and remains live.
+
 Operating procedures for the devbox: first deployment, and the case where
 something has already gone wrong.
 
@@ -129,6 +136,11 @@ Two consequences worth knowing before you pick a `name_prefix`:
 
 ### 4. Apply
 
+This stage is superseded: the VM, NIC, NSG and data disk are deployed from the
+`csh-dev` Bicep, not from this repo. The commands are kept as the record of the
+old path. Do not run them. The live deploy is `pipelines/azure-pipelines.yml` in
+`csh-dev`, and its post-deploy check reads the deployed NIC and NSG.
+
 ```sh
 terraform -chdir=terraform init
 terraform -chdir=terraform plan -out=tfplan     # confirm no public IP appears
@@ -229,7 +241,7 @@ Expect `idle for 45m, deallocating`. If the log is empty, the gate is not runnin
 |---|---|---|
 | OS image (ucore) | no, by design | rebuild from the published managed image |
 | Container image | no | pulled from ACR by digest |
-| Data disk (`/srv`) | **yes**, `prevent_destroy` | reattached, or restored from snapshot |
+| Data disk (`/srv`) | **yes**, `deleteOption: Detach` in `csh-dev` Bicep | reattached, or restored from snapshot |
 | Session database | yes, on the data disk | part of the data disk restore |
 | Repos | yes, on the data disk | part of the data disk restore, but push anyway |
 

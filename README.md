@@ -30,7 +30,7 @@ flowchart LR
     HOST --> CP
   end
   Q --> DD["/srv data disk<br/>repos, session DB"]
-  VM --> NAT["NAT Gateway<br/>explicit egress"]
+  VM --> EGR["subnet default outbound<br/>no public IP, no NAT gateway"]
 ```
 
 ## Three update cadences, deliberately independent
@@ -90,13 +90,13 @@ Approximate, historical westeurope USD projection, not the current
 | the same, on a weekday schedule with idle stop | ~12 |
 | OS disk, 64 GiB Premium SSD | 11 |
 | Data disk, 128 GiB Standard SSD | 10 |
-| NAT Gateway | 33 |
 | Snapshots | ~6 |
 | ACR Basic | 5 |
 | Bastion Developer (break-glass) | 0 |
 
-The disks and the NAT Gateway are fixed costs that sleeping does not remove, so
-they dominate once the VM is on a schedule.
+The disks are fixed costs that sleeping does not remove, so they dominate once
+the VM is on a schedule. Egress uses the subnet's default outbound access, which
+costs nothing and adds no public IP.
 
 ## Run the tests
 
@@ -138,8 +138,9 @@ Individual suites:
 | `tests/docs_complete.sh` | the recovery topics stay written down |
 | `tools/tests/test_oc.sh` | the wake-and-connect wrapper starts the box and waits for health |
 
-`./tests/verify.sh` makes 23 `run` calls over 23 distinct suite files. The table
-above lists all 23 files.
+`./tests/verify.sh` makes 23 unconditional `run` calls plus one conditional
+`run` for the image-integrity suite, over 24 distinct suite files. The table
+above lists all 24 files.
 
 The deployed VM's network and disk invariants are guarded in the `csh-dev` repo,
 not here: `scripts/check-template.py` reads the compiled Bicep and

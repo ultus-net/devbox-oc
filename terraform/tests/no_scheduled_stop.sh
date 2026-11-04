@@ -9,8 +9,8 @@
 # Usage: no_scheduled_stop.sh [dir]
 #
 # Two checks that must both hold:
-#   1. no shutdown-schedule machinery exists anywhere under terraform/
-#   2. the scheduled start still exists
+#   1. no shutdown schedule exists in the top-level Terraform sources
+#   2. `schedule.tf` still declares the scheduled start
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"

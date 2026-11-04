@@ -101,7 +101,10 @@ All notable changes to this project. One entry per landed change, newest first.
   Bicep now, so `scripts/check-template.py` reads the compiled template and
   `scripts/check-deployed-network.sh` reads the live NIC and NSG.
   `terraform/tests/no_scheduled_stop.sh` stays, with a message pointing at the
-  template check for the VM.
+  template check for the VM. `docs/runbook.md` opens with a do-not-apply banner:
+  the Terraform VM path is the port record, and only `schedule.tf` and the Key
+  Vault name derivation still apply. `README.md` drops the retired NAT gateway
+  from its diagram and cost table, and states the real suite count.
 
 - `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
   live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on

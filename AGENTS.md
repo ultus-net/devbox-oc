@@ -96,7 +96,7 @@ terraform -chdir=terraform validate
 | `os/butane/` | Ignition source (`ucore.bu`) and the compiled `ucore.ign` |
 | `os/` | the OS image publish script |
 | `image/` | toolbox container: Dockerfile, toolchains, smoke test, digest |
-| `terraform/` | VM, disk, network, Key Vault, ACR permissions |
+| `terraform/` | port record for the VM, disk, network and ACR; live `schedule.tf` and Key Vault |
 | `pipelines/` | Azure Pipelines: verify, OS image, container image |
 | `docs/` | runbook, pipeline setup, design and plans |
 
