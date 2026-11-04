@@ -55,8 +55,9 @@ copy, so the disk is only a staging area.
 
 The upload target is a managed disk, not a storage account. The script creates an
 upload-ready disk, takes a write SAS with `az disk grant-access`, uploads the VHD
-to that SAS, revokes access, and creates the image from the disk id. No storage
-account is created or named, and `cshdevfilesb6lmephspqf2u` stays deleted.
+to that SAS, revokes access, and creates the image from the disk id. The publish
+flow names no storage account, and the deleted `cshdevfilesb6lmephspqf2u` stays
+deleted.
 
 `pipelines/devbox-os.yml` sets `resourceGroup` to `rg-csh-dev` and `location` to
 `newzealandnorth`. Set the `imageBuilderContainer` digest there too if you change

@@ -25,7 +25,7 @@ BUILD_FS="${BUILD_FS:-ext4}"
 if [ "$DRY_RUN" = "1" ]; then
   # No external command here on purpose. The dry run must work on a machine with
   # nothing installed yet, which is where the operator sees it first.
-  echo "dry run: would build a vhd from ${UCORE_IMAGE} with image-builder, then upload it to a managed disk in ${RG:-rg-csh-dev}"
+  echo "dry run: would build a vhd from ${UCORE_IMAGE} with image-builder, then upload it to a managed disk in ${RG:-rg-csh-dev} (${LOCATION:-newzealandnorth})"
   echo "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/<rg>/providers/Microsoft.Compute/images/devbox-ucore-<yyyymmdd>"
   exit 0
 fi

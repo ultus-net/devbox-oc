@@ -92,8 +92,8 @@ All notable changes to this project. One entry per landed change, newest first.
   a failed upload still reaches `az image create`. A failed upload also names the
   staging disk left behind. `host/tests/test_snapshot_region.sh` runs
   `oc-snapshot` against a fake IMDS and asserts the snapshot location matches the
-  Terraform default. The pipeline test requires the explicit `= "V2"` comparison,
-  not just the field name.
+  Terraform default. The pipeline test requires both the `--query
+  hyperVGeneration` lookup and the explicit `= "V2"` comparison.
 
 - `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
   live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on
