@@ -34,8 +34,8 @@ preference.
   `host/tests/test_cockpit_loopback.sh` and `host/tests/test_no_lan_listener.sh`
   guard both. The OpenCode port is published as `127.0.0.1:4096:4096`.
 - **Always on. No scheduled stop and no idle deallocation.** Sleep targets are
-  masked and logind sets `IdleAction=ignore`. `host/tests/test_nosleep.sh` guards
-  this.
+  masked and logind sets `IdleAction=ignore`. A UPS and firmware power-on after
+  AC loss are required. `host/tests/test_nosleep.sh` guards the sleep policy.
 - **The data disk is a separate physical device.** Reinstalling the OS must never
   destroy `/srv`. It is prepared once from the live media and addressed by
   `/dev/disk/by-id` then mounted by its `data` label. Ignition never partitions

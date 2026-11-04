@@ -45,9 +45,21 @@ logind = [
 if not logind:
     raise SystemExit("FAIL: no logind drop-in, so an idle policy can suspend the box")
 
-body = "\n".join(logind)
-if "IdleAction=ignore" not in body:
-    raise SystemExit("FAIL: logind drop-in does not set IdleAction=ignore")
+def login_ignores_idle(text):
+    section = None
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            continue
+        if section == "Login" and line == "IdleAction=ignore":
+            return True
+    return False
+
+if not any(login_ignores_idle(text) for text in logind):
+    raise SystemExit("FAIL: logind drop-in does not set IdleAction=ignore under [Login]")
 PY
 
 echo "sleep is masked and idle suspend is ignored"

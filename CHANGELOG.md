@@ -67,6 +67,8 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- `host/tests/test_nosleep.sh` requires `IdleAction=ignore` under `[Login]`, so a
+  commented-out or mis-sectioned setting no longer passes the guard.
 - `os/butane/build.sh` stages Butane's output and moves it into place only after
   the assertions pass, so a failed compile cannot leave an empty Ignition file.
 - `os/butane/build.sh` refuses placeholder values unless the placeholder build

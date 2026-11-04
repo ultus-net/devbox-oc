@@ -31,7 +31,7 @@ ACA job-hours calculation, and no budget that makes a 4 GiB anchor necessary.
 ## Hardware
 
 The host is one HP EliteDesk G4 35W Desktop Mini with these properties. Confirm
-them before an install; the design fails loudly when one is missing.
+them manually before an install; nothing in the install verifies them.
 
 | Property | Requirement | Why |
 |---|---|---|

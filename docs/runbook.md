@@ -17,11 +17,12 @@ ssh core@devbox 'systemctl is-active oc-env opencode oc-tailnet'
 ssh core@devbox 'sudo podman ps --format "{{.Names}} {{.Status}}"'
 ssh core@devbox 'sudo systemctl list-timers oc-backup.timer'
 ssh core@devbox 'df -h /srv'
-ssh core@devbox 'sudo smartctl -H /dev/nvme1n1'
+ssh core@devbox 'findmnt -no SOURCE /srv'
 ```
 
 `oc-env` and `opencode` must both be active. A failed `oc-env` stops the
-container by design. `podman ps` must show the container as `healthy`.
+container by design. `podman ps` must show the container as `healthy`. `findmnt`
+must name the data device, not the OS disk.
 
 ## Rotate the OpenCode password
 

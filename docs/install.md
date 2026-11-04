@@ -98,10 +98,12 @@ balenaEtcher, or the writer you normally use. Confirm the USB device with
    before continuing:
 
 ```sh
-lsblk -f /dev/disk/by-id/ata-REPLACE_ME
+lsblk -f /dev/disk/by-id/REPLACE_ME
 ```
 
 The output must show one partition with `LABEL="data"` and `FSTYPE="ext4"`.
+Replace `REPLACE_ME` with the recorded id. The prefix is `ata-` for a 2.5 inch
+SATA disk and `nvme-` for an M.2 device.
 
 5. Install:
 
