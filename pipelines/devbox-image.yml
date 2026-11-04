@@ -6,7 +6,7 @@ trigger:
 pr: none
 
 variables:
-  acrName: devboxacr
+  acrName: cshdevacrb6lmephspqf2u
   repo: devbox
 
 jobs:

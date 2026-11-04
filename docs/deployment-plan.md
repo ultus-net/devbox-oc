@@ -581,14 +581,14 @@ escaping starts crowding the limit.
 
 ### 4. The OS image id is produced by this repo's pipeline
 
-`os/build-os-image.sh:108` prints the image id and
-`pipelines/devbox-os.yml:15-17` still names `rg-devbox-oc`,
-`stdevboxocimages` and `westeurope`. The image is built by `devbox-oc`, so the
-Bicep cannot compute the id. It becomes a required parameter with no default, so
-a deploy without it fails instead of booting a stale image.
+`os/build-os-image.sh` prints the image id and `pipelines/devbox-os.yml` now
+targets `rg-csh-dev` and `newzealandnorth`, publishing the VHD through a managed
+disk. The image is built by `devbox-oc`, so the Bicep cannot compute the id. It
+becomes a required parameter with no default, so a deploy without it fails
+instead of booting a stale image.
 
-Keep `os/build-os-image.sh:77,80` and the `--bootc-default-fs ext4` argument.
-Keep the `sha256sum` provenance line at `:96`.
+Keep `os/build-os-image.sh:75,78` and the `--bootc-default-fs ext4` argument.
+Keep the `sha256sum` provenance line at `:94`.
 
 ### 5. ACR role mode uses ARM enum names, not CLI names
 
@@ -901,10 +901,11 @@ this.
    `az disk create -n <name> --upload-type Upload --upload-size-bytes <n>`, then
    `az disk grant-access` and upload, then `az image create --source <disk id>`.
    `az image create --source` accepts a managed disk id, so no blob URL is needed.
-2. Drop `STORAGE_ACCOUNT` and the `az storage blob upload` call at
-   `os/build-os-image.sh:101`, and set the region variables in
+2. Drop `STORAGE_ACCOUNT`. Keep `az storage blob upload`, because the VHD reaches
+   the disk through the write SAS from `az disk grant-access`; the call takes
+   `--blob-url` and never an account name. Set the region variables in
    `pipelines/devbox-os.yml:15-17` to `rg-csh-dev` and `newzealandnorth`.
-3. Record the image id, the VHD sha256 from `os/build-os-image.sh:96`, and
+3. Record the image id, the VHD sha256 from `os/build-os-image.sh:94`, and
    `az image show -n <name> -g rg-csh-dev --query hyperVGeneration`.
 4. Set `acrName` in `pipelines/devbox-image.yml:9` to the new registry, and run
    it before the first boot, because `host/quadlet/opencode.container:17` points
@@ -916,7 +917,7 @@ lists `prod`.
 
 **Stop if** the builder fails. Likely causes, in order: podman storage not shared
 with the builder container, bootc ref not in local storage, missing declared root
-filesystem, which `--bootc-default-fs ext4` at `os/build-os-image.sh:77,80` covers.
+filesystem, which `--bootc-default-fs ext4` at `os/build-os-image.sh:75,78` covers.
 
 ## Phase 4: deploy the VM, two stages
 
