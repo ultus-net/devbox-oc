@@ -20,6 +20,7 @@ run "oc-env writes 0600"     ./host/tests/test_oc-env.sh
 run "restic backup"          ./host/tests/test_oc_backup.sh
 run "tailnet join"           ./host/tests/test_tailnet_up.sh
 run "cockpit loopback"       ./host/tests/test_cockpit_loopback.sh
+run "no LAN listener"        ./host/tests/test_no_lan_listener.sh
 run "no suspend"             ./host/tests/test_nosleep.sh
 run "quadlet persistence"    ./host/tests/test_quadlet_persistence.sh
 run "container digest"       ./image/tests/test_digest_record.sh
@@ -42,9 +43,9 @@ fi
 
 run "ignition units"         ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.bu os/butane/ucore.ign
 
-# The integrity test needs a tarball. This suite fails rather than silently
-# passing when it cannot obtain one, unless ALLOW_INTEGRITY_SKIP=1 says so
-# explicitly. CI sets that flag because the tarball is fetched in the image job.
+# The integrity test needs the pinned npm tarball. It fails rather than silently
+# passing when it cannot obtain one. ALLOW_INTEGRITY_SKIP=1 is a local opt-out for
+# an offline machine; CI sets it to "0" so a download failure is a real failure.
 run "image integrity"        ./image/tests/test_integrity_logic.sh
 
 run "docs complete"          ./tests/docs_complete.sh

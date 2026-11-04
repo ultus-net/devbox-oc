@@ -102,6 +102,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `host/tests/test_oc_backup.sh` | the backup runs the Fedora image, mounts data read-only, and never prunes |
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent, durable, and needs a real key |
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is not published |
+| `host/tests/test_no_lan_listener.sh` | sshd is masked and no unit declares a non-loopback listener |
 | `host/tests/test_nosleep.sh` | sleep targets are masked and a closed lid is ignored |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk and the workload fails closed |
 | `os/butane/tests/test_autorebase.sh` | one enabled rebase unit, pinned, marked, disabled, rebooted |
@@ -135,6 +136,7 @@ working until it runs against real hardware.
 
 ## Status
 
-The bare-metal pivot is implemented on a branch. The invariants named above each
-have a guard, and those guards were checked against mutations they are meant to
-catch. See `CHANGELOG.md` for the change list.
+The bare-metal pivot is implemented on `refactor/bare-metal-pivot` until it
+merges. The invariants named above each have a guard, and those guards were
+checked against mutations they are meant to catch. See `CHANGELOG.md` for the
+change list.

@@ -48,7 +48,7 @@
         "path": "/usr/local/sbin/oc-backup",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/1SSQWvbQBCF7/srXmXTJhDZTY8JLaSEQq8ht1Lq1e7YnkaaEbMjxSHJfy+S45bexLynb+cNb/FuPRRbNyxrkhFNLPuwwNeYHjD08D0hR4/IXB7gOg90u60bPcCoOCcY9VrY1Z4gsaMMFhRKRl5WJOMqLMICmuo3uz5KmTFJxSMLGVhGTdFZ5WpWetPflPxDwTfKahHcxR1dzNqREhYgcXvqlcWPwpZbJ6OMZJRJnGNbLhAlv/0Wc63SPh3jdDqIr3C/54KSjHufdpzkKcJxvyamh6FH0q6Lko8x7sgntAq4oIsyxPY/CoRGMqTYtgWbrdqOfAM1bHobhDYXaCjFoVBYIFNLzrKbH3s0lR2KxL7s1Sc6m02swk1Lc4xMhWykgoj90EVBpsSFVVahkKOmQdFzT9vIbQi3N/c3v26/332uls+n76t6XWx8rUKYPGfneAalvaLSVB/TXmF5WeHL+0/XoAM7Lq/xGsIP1BnV8oSp8BMvL5gYqERPBTFKcwmi4581BDr0ao7TJNCBEqrlWWabbo1q+bE6X//tR3W6+3rG1rXHHTKNjR7CnwAAAP//xQRQV6wCAAA="
+          "source": "data:;base64,H4sIAAAAAAAC/1RT0W7bRhB8v6+YnoQ2AUyp7qONFEiRFPBDG9R1ntIgXt6tpKvJXfZuKUtI/O/FkVFivRG3u7Mzs8PFD+ux5HWbZM2yR0tl5xb4jcIDxgG2Y0QyQkzlAabTg242TasHZC6WAjIPWpJpPkKo54gkKBwyW1mx7Fdu4RbQ0Hxt10cpE0xQMUrCGUn2GsiSytVUGbL+y8F+Kvido2ZC6mnLF1NtRnELsFg+DprE5sImdcaZI0LmyGKJunIBkvh1jGKj0h1nOb2OYivc7VJBCTkNVjnWcpUw82spPIwDgvY9SZxlrEveox+LoWWQgIKN1J3gbgx8SMUKqIAwdJQEMWUOkzsqE+67v2c3H3csboGS96tpHhtKJ8p1d5ItbEdW7/CoYxdRUsdi3RHFNE/7uR/sCMvMM79btipdBamgJxmpO1MJ4T1nBOq6gvuN5i3bPTTjfsij8P0FWg40FnYLRO7YZhKMx6yyRREayk6toqecK1ZJbccT58iF856r8t3YkyBySCWprFxhQ8OjYkgDV5nOvXl99/rTm5vbV375+fR91VR/n7y7ffvX+5vbt5/+ePf+z7vacfZw1Vw+eecqzouX+AwOO4XX0MwXu8Ly0uPXH3+5rtcwXF7jybkPaCL88rTK4yO+fJkshxc9hfx0KjJ8b3Vpgw/wyzMSHq/gLz0+Xld/xGEOwRRINP+drfrHAfi+7lul2ihqoGez188CMWRtqe2O0xxH7zbJOT4Mmg0nDMcHDvDLFzHlml345c/+5frb/+ZPOV5PEpvGaIvI+1YP7v8AAAD//8rORG78AwAA"
         },
         "mode": 493
       },
@@ -56,7 +56,7 @@
         "path": "/usr/local/sbin/oc-restic",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/6xUUY8aNxB+96/4ajYlh7LHJQ99gJKWJiRCapLqoGqlI0JmPdy6t9gr2wuH7vjvlb0LtyTXt76tPTPfN9/M5+380K+c7a+U7pPeYiVczjq4rjQsOa8yKA2fK4fSmn8o810Hs9P4QNJYAW9MsTL3UBtxS5eswzqY54SqdN6S2JwwQhjKYVyUStMrCC0x/jj5PJ9dbiTWxq6UdBDQRqcNdCH2ZFkHQu93OVm6jMhnhBCFJSH3cLkqXUP2Cs5A+cDmc4LR1CRXjiTrBDKsjM9jdGfsXWGEjA0p77AS2V1VulrKF13sY1ojI7MkSXslikAmshojM9oLpcnWHTrKLHmHtSpCg84gN4V0rBOTv5Sk3xlJKIVzO2NlPQvRED+BIRcO2mBVOaXJRUKp9C2Ur5u7nszm03fLT1/+/DyH2ZK1SlKtWdJaVIWPJakJIqTwAhtTaR/HI6IiYwmZ0NhZ5Sn0FwJe2FvykMpS5o3dDyIZzuhGfWe3aQMx6B8/7A4mS5tZHQkK4cl5pGkDfMxmjjxSqgxKVdJaqIKx6afxx8nyw/T3yYgnD0+nQdonn/UlbVfmvl9P6pL09sDZbPLuejKfnYra5/OyZi9N3Zkcnjy0z4M0eXg/no+X76fXgzRoPQz6YYIDaw6csdDsyws8gLLcgJ80D5C85nj745sh6F55vB7iwNgNUguePKnh+IrHRwQU8ExobepNoZ1zLGvr+e/CsyzGOvhDWEewwudk4XOh4UxlMxpEf9TvIRpUueiN2oUxJ3hsZ6pCgu4pq6IzdrnwtCUb3lXjUHfJIsyIc7bLA9T0w2xU95NaFEpTaPYGqQZPwpHj6xDSMCATjk6XSjM8+SuOYNS7QAOePISszln0wDEcMoCcyJgMD/zn8wGzhiBiNAwL3lvwFmz86Cz4gQ+/uXwRLmuGRbe36H5f1H2uqFsXxaYa1Q1/a2ttHWH2lQ7PQOnz3TPS22VYz4gnLzd3njblBWfeihJdu0G6Bk+OKbyLyd/TOcvyjZG4+unqqh38P1fTexz/NVv2Hn97s+xdoLRK+zW6L9xCd08Vb9+22Z9b07lVb5C6s4rWrLR57r8bZvWN3W02umKlkRuhYSuNNLUbLBiQpo6yyiq/T03pUYgVFSOpnFgV1CSQ9nZfGqX9kex4v03jA2k3V4e2pqg2IdD+ZxyDuXFeixh+efy+qIMnP/DkVx5k2myU/MLYdxutN53We41/Ep7YjLN/AwAA//+Z7ypFqwcAAA=="
+          "source": "data:;base64,H4sIAAAAAAAC/6xVX2/bthd956c4P1r9uQlKO+3DHpy5W9a6RYC1HWIXG1AXAS1eV1wkUiApO0aS7z6Qkh25zd72JvLee879c3g1+N+48W680mZMZoOV9AUb4KoxcOSDzqENQqE9amf/pjwMPezW4B0p6ySCteXK3kJX8huN2IANsCgITe2DI1kdMKIZ2uOirLWhF5BG4eL97ONiPqoU1tattPKQMNaIDrqUO3JsAGl224IcjRLyESFk6UiqHXyha9+RvYC30CGyhYJgDXXOjSfFBpEMKxuKZN1ad1NaqVJCOnisZH7T1L4t5ZMpd8mtKyN3pMgELctIJvMWI7cmSG3ItRl6yh0Fj7UuY4LeorCl8myQnD/VZN5YRail91vrVNsL2RE/gqGQHsZi1XhtyCdCpc036NAmdzWbLy7fXH/49PnjAnZDzmlFbc2K1rIpQwoRNhahZJCobGNCao9MFVlHyKXB1ulAMb9oCNJ9owClHeXBut0kkeGIbjr2biM6iMl4/+G2sLnoerUnKGUgHyBEB7z3Zp4CBDUWta5pLXXJ2OWHi/ez63eXv8+mPLt7PE3EmEI+VrRZ2dtx26kRmc0DZ/PZm6vZYn4I6p+Pw7q5dHFH5fDsrn+eiOzu7cXi4vrt5dVExFofJuPYwYmzD5yxmOzzE9yB8sKCH2qeIHvJ8fr/r85Btzrg5TkeGPsC4cCzx2o4vuL+HhEFPJfG2HZS6Pvsw/r1/HvgkRdjA/whnSc4GQpyCIU08LZxOU2SPtr3kASqfdJGq8LkEzW2tU2pQLeUN0kZ20IG2pCL76pTqB+xBDPlnG2LCHX5bj5t8xEOpTYUk/0CYcCzeOT4eg5lGZBLT4dLbRge9ZVaMD09QQee3UWvwZH1geP8nAHkZc5UfOA/HzeYdQQJo2NY8tMl78Gmj8GSP/Dz7y6fxcuWYTk8XQ5/DBo+FTRsg1JSXdUdf29q/Tpi7xsTn4E2x7NnZDbXcTxTnj2vbgJV9QlnwckaQ1dBrMGzvQsfYvbX5YLlRWUVzn46O+sb/8vRnN5f/Dm/Pr3/7dX16Qlqp01YY/jML83wEPH6dZ/9qTEdS/ULhD+K6PXK2Kf2buzVd3J3+fSMDSBEYX0wskqqrq2qpBl6fF7MsTeMcNhOuXXKRz3Ldmd6I2tf2JB845JkA3gKoV25cTe2mzXuEiSSG6LaH+I8ZAhOr5ogV/FdGR9iv+06OkcQmf4Azm7lVu56e16rEWuThWsMhHAVlgwQwlPeOB12wtYBpVxROVXaJ/jWgUxwu9pqE/Z17e83Ir3ufmdb08aWTRUN/YW3Nx76x7Pn+++T1ngQM89+5XFGLp9mvzD2gxxbmYpWlGkN8szlnP0TAAD//+XAsKtoCAAA"
         },
         "mode": 493
       },
@@ -72,7 +72,7 @@
         "path": "/usr/local/sbin/oc-tailnet-up",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/4RUX2/cthN856eYn+7gX4Jad24f+nCBiwaI27pxHcB2ChRB4FDSymJNkQJ3dedD4O9eLO+PfW7Rvkkkd2d2Zncn/5uPnOaVC3MKS1SWOzPBr9EFxIREbSLuIB1BrPOB5Bgju3CXj7iOAzWwo3S4pzXaFHuc3wUnLoaZmZgJbjrKV45zRAx+DaY6kUA6K6AlJUgc6442L1xgsd6jp8bZGc5FQ1fJiVAwE0jEnKSeN7Ss4sNcSXFtPZVKQoGsoI8N4eT7kxPY0CDRMt5TAxdyftv0LqCOgaMnM4FtRRl0hKBhdhjIJp7hSsO00CYSI0RBoj4uaf90AddQECdreLckhlN+86VNc++qJ2YbHb7s/zEOX7Qm11A/RKEgM1yNISiWE8SQNVmjilGwctLBZgWHRExBzGTnCrGetZyrvCcaNgLSg2PRZLmeHcc3mntfSu+CwCLQykzyuxmu790wbDmsOgrZGAsWK4TW+W1iznaoc56sVm3RWd+WLDYJNdt0iG172DQc878W0lDtGuLjzEQPNftGpbKkoaOekvWK05B3FSUr5Ne4/HCDkalZPJm1N6AfWVCRsq08gaOZ4Dd75+p3l9dZHg2pvaMg/2ewXVIDpqQlfry6yOJhFVP229YpMiNRLolnhklQ0hgxuIFa67wx1zdvb85u351fnRbTr/ufRfl39x8L8/bjzS+378/+uP3p/OJMAw4OFuW/9vNjYS4+/Hx+eXt9dvX7WcZ7/r8oHwtjXItPKBOK6UHqAp9xdKRX/A9Xb1SUYACb7vj0VZkRSzWoUEMWLwPKsosswfaEYvpq9/1aL2xd0yBliqMQn7bWM702UOCAYvqc75aSQn6jmD7euVBurXjxVFM8nxoU068a+OnHz4+Fgfaj4MS0zmz3TBy0V2JCb7XLPAntm+7FmP8ZXeAZ3qvx+0PV4xjVqDO26f9EQ0wCHuuamHU2Lar4sFldnWUEctLlQVGQEA9HZrZ1pkUx3XfJk8fNLD997gXVXUQR63I7OOU4LBDifsVmerup2iI53u2GF6r8VzLdlYcu51kJ8RCgwA9H35mc91vzVwAAAP//5iRIgzAGAAA="
+          "source": "data:;base64,H4sIAAAAAAAC/5RV3W7bRhO936c4HyXkS1BTcnvRCwVuayBu6yZ1ANspUASBs1wOxW1Wu+zuULKR+N2LWVKylBj9uSP358w5Z2ZnJv+b9ynOK+vn5NeodGrVBL8E6xEiIjWRUgtuCayt88RH6JP1y7yUTOiohu65xQe6QxPDCudLb9kGP1MTNcF1S3nLpnwjeHeHRCYSg1vNoDVFcOhNS8MJ6xNr57Ci2uoZzlmubqJlJq8m4IA5sZnXtK7C7VxIJaMdlUJCAmnGKtSE42+Pj2c4bZgiNFJvDKXU9A5/iDZubVITJBNtx6jJEVOC5SOkAI1I6/CB6szcaO8Do9HWZbZ3cFpAqxB4hks5OfqhJoNUn4XoemU9TPApOBIRia1z2ITILepg/fIIVc/5rBfGdaAECVVTR75GEL2WF7A1ebZ8B2fXwtJjvtZx7mz1oH9w+/3uH333XoLamlZdYPLCtfdeqFpG8KMWUYGN5RY6k+8iJfKsJtvcU5K1JkF78YO6IU10axMLWKa+ZfhcsHc6VtYzNDxt1CSfm+Hqg+26kcOmJZ/Tr5FYM6GxbgROOelSH460aNZotWvKxDoy1SMcQtMclmYK+V+E1GRsTekoM5FFQR9cOs3JpBrvxaQsfiAwipfgQ8pZu1ku4RxuUG85PWREeyGT3wLFtTWEVZ94THUkbdrdJiExdajIhc2RPK7DMtuE3tVSWqYdEatw+7nCgX9ZUtfSiqJ2QrUmZyuKmsnd4eL1NfpE9eKhrnZkM7VKeOjKEVJQE/yql9a8uLjK6ZUrxlny/P+EpNdUD8wj3ly+yvKlfHO5axNDSoiUU5JmKhGjpD6gsx2Jv0pdXZ9en928OL88KaYfdz+L8svqvS/U6Zvrn29env1+8+P5qzO5cLCwKP/21d8X6tXrn84vbq7OLn87y/H2/xflfaGUbfAWZUQxPYAu8A5PnshWemTruZjiFaDjMp08LXPEUhJWSEEtPr9Qlm1I7PWKUEyfbr+fyYY2hjouY+iZ0kmjXaJnChLYo5ju8x0pScivJKYLS+vLMRWfHRWIaE6OFbD/+FFMP8r9tz+8uy/w6ZOcmX6vgOxCMY2mQEl/4nhPIhBXKJsvXMhbdGsZEqWxW5R8dJfXh6zUs/ycigNoMm1AEUw5lnLZd4tDxsOjfJ7rbDthDtvMCPvdk28eofRvA+RK92EPcew5W+AMmx1SjVVqgouwP8J8iCvt0IXEZZ4lGeMIFRndJ8pn8vrDVJnhpbydYUTkuGLL0P6HFhipC5G3Y0ras87vPzcnT5bb3CeFhg9xCDlT/zULj1rkw26AjwNp2By9sWnbFgu1s1x8+ScwmcSHhbR1/iDA4HrG/Vr9FQAA//8wXwNwjggAAA=="
         },
         "mode": 493
       },
@@ -125,7 +125,7 @@
         "name": "ucore-autorebase.service"
       },
       {
-        "contents": "[Unit]\nDescription=Devbox data disk\n[Mount]\nWhat=/dev/disk/by-label/data\nWhere=/srv\nType=ext4\nOptions=defaults,noatime,nofail,x-systemd.device-timeout=30s\n[Install]\nWantedBy=local-fs.target\n",
+        "contents": "[Unit]\nDescription=Devbox data disk\n[Mount]\nWhat=/dev/disk/by-label/data\nWhere=/srv\nType=ext4\nOptions=defaults,noatime,nofail\nTimeoutSec=30\n[Install]\nWantedBy=local-fs.target\n",
         "enabled": true,
         "name": "srv.mount"
       },
@@ -140,7 +140,7 @@
         "name": "oc-env.service"
       },
       {
-        "contents": "[Unit]\nDescription=Back up the data disk with restic\nAfter=srv.mount network-online.target\nWants=network-online.target\nRequires=srv.mount\n[Service]\nType=oneshot\nNice=10\nIOSchedulingClass=idle\nEnvironmentFile=/etc/devbox/backup.env\nExecStart=/usr/local/sbin/oc-backup\n",
+        "contents": "[Unit]\nDescription=Back up the data disk with restic\nAfter=srv.mount network-online.target\nWants=network-online.target\nRequires=srv.mount\n[Service]\nType=oneshot\nNice=10\nIOSchedulingClass=idle\n# Stop the workload so the session database is not captured mid-write.\n# The leading - keeps the backup running if the stop already happened.\nExecStartPre=-/usr/bin/systemctl stop opencode.service\nExecStart=/usr/local/sbin/oc-backup\n# Run after success or failure, so a failed backup never leaves the server\n# down.\nExecStopPost=-/usr/bin/systemctl start opencode.service\n",
         "name": "oc-backup.service"
       },
       {
@@ -161,6 +161,14 @@
           }
         ],
         "name": "cockpit.socket"
+      },
+      {
+        "mask": true,
+        "name": "sshd.service"
+      },
+      {
+        "mask": true,
+        "name": "sshd.socket"
       },
       {
         "mask": true,

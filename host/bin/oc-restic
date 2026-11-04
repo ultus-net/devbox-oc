@@ -48,6 +48,9 @@ done < "$SECRETS_FILE"
 [ -s "$env_file" ] || fail "no restic credentials in $SECRETS_FILE"
 
 rc=0
+# --hostname is podman's UTS hostname. restic records it as the snapshot host, so
+# setting it to the devbox name keeps snapshots attributable instead of naming a
+# throwaway container id.
 podman run --rm \
   --security-opt label=disable \
   --entrypoint restic \

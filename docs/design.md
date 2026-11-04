@@ -170,13 +170,19 @@ in `/var/lib/tailscale`, so revoking the key does not disconnect the box.
 against `RESTIC_REPOSITORY`. Using the project image keeps the Fedora-family rule:
 the upstream restic image is Alpine. `oc-restic` passes only the `RESTIC_*`,
 `AWS_*` and `B2_*` variables, so the workload password never reaches the backup
-container. The repository is off the laptop. A local NAS, Backblaze B2, or any
-S3-compatible store is acceptable; the repository URL and credentials are the
-operator's choice and live in `secrets.env`.
+container. The repository is off the laptop. Backblaze B2 or any S3-compatible
+endpoint is acceptable, including a NAS that exposes S3; the repository URL and
+credentials are the operator's choice and live in `secrets.env`. An SFTP
+repository needs an SSH key mounted into the container, which the script does not
+do.
 
-The restore path is `restic restore` into a new directory, verify, then replace
-`/srv`. The runbook contains the drill. A backup that has never been restored is
-an assumption, not a backup.
+The backup stops the workload before the snapshot and starts it again after, so
+the SQLite session store is not captured mid-write. The cost is a brief nightly
+outage of the server, which the always-on host survives.
+
+The restore path is `restic restore` onto a scratch device, verify, then copy the
+`/data` tree into `/srv`. The runbook contains the drill. A backup that has never
+been restored is an assumption, not a backup.
 
 Retention is manual. The timer backs up and never calls `restic forget` or
 `restic prune`. Pruning is a human step because deleting the wrong snapshot is
@@ -192,8 +198,10 @@ TCP 443; test the path before relying on it.
 
 There is no inbound port forward. The host firewall rejects inbound traffic
 except established flows. The only listeners are loopback: OpenCode on 4096,
-`tailscaled` for the tailnet, and SSH through Tailscale. `tailscale serve`
-terminates TLS and proxies to loopback.
+Cockpit on 9090, and `tailscaled` for the tailnet. `tailscale serve` terminates
+TLS and proxies to loopback. `sshd` is masked because Fedora CoreOS enables it
+and the server firewall profile would expose it on the LAN. Shell access is
+Tailscale SSH, which runs inside `tailscaled`.
 
 ## Risks the cloud hid
 

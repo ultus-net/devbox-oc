@@ -32,7 +32,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -64,7 +64,9 @@ jobs:
         run: ./image/smoke.sh "$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -1)"
 
       - name: Push
-        if: github.event_name != 'pull_request'
+        # A manual run on a feature branch builds and smoke-tests but never
+        # publishes, so an unreviewed commit cannot land in the registry.
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: docker image push --all-tags "${IMAGE_NAME}"
 
       - name: Record the digest

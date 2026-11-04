@@ -2,14 +2,19 @@
 # Join or refresh the tailnet, using the scoped auth key from Ignition.
 #
 # The key is the only secret that ever touches the install media. It is written
-# to /etc/devbox/tailscale-authkey at mode 0600 and revoked in the admin console
-# after the node appears. Revoking does not remove the node: identity lives in
-# /var/lib/tailscale.
+# to /etc/devbox/tailscale-authkey at mode 0600. After a successful join this
+# script deletes it, so a revoked key cannot fail every later boot. Revoking the
+# key in the admin console is still worth doing, but the node does not depend on
+# it: identity lives in /var/lib/tailscale.
 #
 # `tailscale up` is idempotent. Running it on every boot with a key present
 # refreshes prefs and keeps the existing node identity; it does not mint a new
 # node. Skipping it whenever a state file exists is what leaves a half-started
 # node off the tailnet, so the key decides, not the file.
+#
+# A failed `up` with state present is not fatal. The node keeps its identity and
+# the service must still reach the serve step below, or a revoked key would latch
+# the box off the tailnet.
 #
 # --ephemeral is deliberately NOT used: the node identity must be stable so
 # MagicDNS and the client's saved server URL keep working across restarts.
@@ -22,12 +27,22 @@ LOGIN_SERVER="${LOGIN_SERVER:-}"
 if [ -r "$AUTH_KEY_FILE" ] && [ -s "$AUTH_KEY_FILE" ]; then
   args=(--auth-key "file:$AUTH_KEY_FILE" --hostname "$(hostname)" --accept-routes=false)
   [ -n "$LOGIN_SERVER" ] && args+=(--login-server "$LOGIN_SERVER")
-  tailscale up "${args[@]}"
-  exit 0
+  rc=0
+  tailscale up "${args[@]}" || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    rm -f "$AUTH_KEY_FILE"
+    exit 0
+  fi
+  if [ -f "$STATE_DIR/tailscaled.state" ]; then
+    echo "oc-tailnet-up: tailscale up failed; keeping the existing node state" >&2
+    exit 0
+  fi
+  echo "oc-tailnet-up: tailscale up failed and no node state exists" >&2
+  exit "$rc"
 fi
 
-# The operator may delete the key after the node joins. Keep the node then, but
-# never report success on a box that has neither a key nor a state file.
+# No key is the normal post-join state, because the join deletes it. Keep the
+# node then, but never report success on a box with neither a key nor state.
 if [ -f "$STATE_DIR/tailscaled.state" ]; then
   echo "oc-tailnet-up: no auth key, but tailnet state is present"
   exit 0

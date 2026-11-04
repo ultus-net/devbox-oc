@@ -23,13 +23,13 @@ while [ $# -gt 0 ]; do
 done
 EOF
 chmod +x "$tmp/bin/podman"
-printf 'OPENCODE_PASSWORD=server-secret\nRESTIC_REPOSITORY=sftp:backup@nas.example:/srv/restic/devbox\nRESTIC_PASSWORD=x\n' \
+printf 'OPENCODE_PASSWORD=server-secret\nRESTIC_REPOSITORY=s3:https://s3.example.invalid/devbox-restic\nRESTIC_PASSWORD=x\n' \
   > "$tmp/secrets.env"
 printf 'RESTIC_IMAGE=ghcr.io/ultus-net/devbox:prod\n' > "$tmp/backup.env"
 
 run_backup() (
   env PATH="$tmp/bin:$PATH" CALLS="$tmp/calls" ENVCOPY="$tmp/envcopy" \
-    IMAGE_FILE="$tmp/backup.env" \
+    IMAGE_FILE="$tmp/backup.env" REQUIRE_MOUNT=0 \
     SECRETS_FILE="$tmp/secrets.env" DATA_DIR="$tmp/data" "$script"
 )
 
@@ -71,11 +71,19 @@ case "$calls" in
     fail "restic reads the whole secrets file, including the OpenCode password: $calls"
     ;;
 esac
-grep -qx 'RESTIC_REPOSITORY=sftp:backup@nas.example:/srv/restic/devbox' "$tmp/envcopy" \
+grep -qx 'RESTIC_REPOSITORY=s3:https://s3.example.invalid/devbox-restic' "$tmp/envcopy" \
   || fail "the restic environment is missing its repository"
 if grep -q 'OPENCODE_PASSWORD' "$tmp/envcopy"; then
   fail "the OpenCode password is passed to the backup container"
 fi
+
+# T0: /srv must be an actual mountpoint. The directory exists on the OS disk when
+# srv.mount fails, so a backup of it would look successful and store nothing.
+rc=0
+env PATH="$tmp/bin:$PATH" CALLS="$tmp/calls" IMAGE_FILE="$tmp/backup.env" \
+  SECRETS_FILE="$tmp/secrets.env" DATA_DIR="$tmp/data" "$script" \
+  >/dev/null 2>&1 || rc=$?
+[ "$rc" -ne 0 ] || fail "oc-backup accepted an unmounted data directory"
 
 # T2: a missing secrets file must stop before any container starts.
 rm -f "$tmp/secrets.env"
@@ -84,10 +92,14 @@ run_backup >/dev/null 2>&1 || rc=$?
 [ "$rc" -ne 0 ] || fail "oc-backup ran with no secrets file"
 
 # T3: an unset image is a configuration failure, not a silent fallback to an
-# Alpine image or a local binary.
+# Alpine image or a local binary. Restore the secrets so the image check is what
+# fails, not the earlier credential check.
+printf 'RESTIC_REPOSITORY=s3:https://s3.example.invalid/devbox-restic\nRESTIC_PASSWORD=x\n' \
+  > "$tmp/secrets.env"
 rc=0
 printf '\n' > "$tmp/empty-image.env"
-env IMAGE_FILE="$tmp/empty-image.env" SECRETS_FILE="$tmp/secrets.env" DATA_DIR="$tmp/data" \
+env PATH="$tmp/bin:$PATH" IMAGE_FILE="$tmp/empty-image.env" REQUIRE_MOUNT=0 \
+  SECRETS_FILE="$tmp/secrets.env" DATA_DIR="$tmp/data" \
   "$script" >/dev/null 2>&1 || rc=$?
 [ "$rc" -ne 0 ] || fail "oc-backup ran with no image configured"
 

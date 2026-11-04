@@ -34,6 +34,19 @@ for topic in "battery" "lid" "power loss" "thermal"; do
     || fail "design doc does not record the hardware risk: $topic"
 done
 
+# The reinstall path must say that install step 4.4 formats the data disk. A
+# runbook that tells the operator to re-run it wipes /srv, which is the one
+# failure the data-disk invariant exists to prevent.
+grep -q "Do not run install step 4.4" "$root/docs/runbook.md" \
+  || fail "runbook does not warn against formatting the data disk on an OS reinstall"
+grep -q "First install only" "$root/docs/install.md" \
+  || fail "install doc does not mark data-disk preparation as first-install only"
+
+# The only shell path is Tailscale SSH. The docs must say sshd is masked, or an
+# operator will look for it and think the box is broken.
+grep -riq "sshd is masked\|masked" "$root/docs/design.md" \
+  || fail "design doc does not say sshd is masked"
+
 # The unverified list is load-bearing: nothing here has run on the target laptop.
 grep -riq "not verified" "$root/README.md" \
   || fail "README does not state what is unverified"

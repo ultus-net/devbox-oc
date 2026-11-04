@@ -5,15 +5,23 @@
 # entrypoint, the filtered credentials, and the read-only data mount. This script
 # only names the backup command.
 #
+# /srv must be an actual mount. It exists as a plain directory on the OS disk when
+# srv.mount fails, and backing that up would silently store an empty tree.
+#
 # Retention is manual. This script never calls `forget` or `prune`, because
 # deleting the wrong snapshot is irreversible and deserves a human decision.
 set -euo pipefail
 
 DATA_DIR="${DATA_DIR:-/srv}"
+REQUIRE_MOUNT="${REQUIRE_MOUNT:-1}"
 
 fail() { echo "oc-backup: $1" >&2; exit 1; }
 
 [ -d "$DATA_DIR" ] || fail "no data directory at $DATA_DIR"
+if [ "$REQUIRE_MOUNT" = "1" ]; then
+  mountpoint -q "$DATA_DIR" \
+    || fail "$DATA_DIR is not a mountpoint; srv.mount probably failed"
+fi
 
 export DATA_DIR
 exec "$(dirname "$0")/oc-restic" backup /data --tag devbox

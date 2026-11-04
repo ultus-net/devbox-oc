@@ -28,9 +28,10 @@ preference.
   `tailscale serve` publishes loopback with real TLS.
   `os/butane/tests/test_no_azure.sh` keeps the Azure network path deleted.
 - **Everything that listens, listens on loopback.** ucore ships Cockpit and
-  enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in;
-  `host/tests/test_cockpit_loopback.sh` guards that. The OpenCode port is
-  published as `127.0.0.1:4096:4096`.
+  enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in, and
+  `sshd` is masked because the server firewall profile would expose it on the LAN.
+  `host/tests/test_cockpit_loopback.sh` and `host/tests/test_no_lan_listener.sh`
+  guard both. The OpenCode port is published as `127.0.0.1:4096:4096`.
 - **Always on. No scheduled stop and no idle deallocation.** Sleep targets are
   masked and logind ignores the lid. `host/tests/test_nosleep.sh` guards this.
 - **The data disk is a separate physical device.** Reinstalling the OS must never
@@ -104,6 +105,7 @@ in the PR that lands the work.
 ## What is not verified here
 
 No install has run on the target laptop, no live boot has been tested, the
-container image has not been built by the workflow, and the restic restore drill
-has not been executed. Do not describe anything as working until it has run
-against real hardware. `README.md` lists the same gap; keep them in step.
+container image has not been built by the workflow, the restic restore drill has
+not been executed, and the ucore rebase path is unexercised on this hardware. Do
+not describe anything as working until it has run against real hardware.
+`README.md` lists the same gaps; keep them in step.

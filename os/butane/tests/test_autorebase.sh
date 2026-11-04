@@ -34,16 +34,24 @@ if len(autorebase) != 1:
 
 unit = autorebase[0]
 body = unit.get("contents") or ""
-required = [
-    "/usr/bin/rpm-ostree rebase",
-    "--bypass-driver",
-    "ostree-unverified-registry:__UCORE_IMAGE__",
-    "ConditionPathExists=!/etc/ucore-autorebase/done",
-    "/usr/bin/touch /etc/ucore-autorebase/done",
-    "/usr/bin/systemctl disable ucore-autorebase.service",
-    "/usr/bin/systemctl reboot",
+
+# Active directives only. A commented-out line still contains the text, and this
+# repo has shipped comment-blind guards before, so strip comments first.
+active = [
+    line.strip()
+    for line in body.splitlines()
+    if line.strip() and not line.lstrip().startswith(("#", ";"))
 ]
-missing = [line for line in required if line not in body]
+
+required = [
+    "ConditionPathExists=!/etc/ucore-autorebase/done",
+    "ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver "
+    "ostree-unverified-registry:__UCORE_IMAGE__",
+    "ExecStart=/usr/bin/touch /etc/ucore-autorebase/done",
+    "ExecStart=/usr/bin/systemctl disable ucore-autorebase.service",
+    "ExecStart=/usr/bin/systemctl reboot",
+]
+missing = [line for line in required if line not in active]
 if missing:
     raise SystemExit(
         "FAIL: the autorebase unit is incomplete; missing:\n  " + "\n  ".join(missing)

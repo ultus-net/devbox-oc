@@ -47,17 +47,24 @@ before the USB is written.
 
 ```sh
 export SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)"
-export TS_AUTHKEY=tskey-auth-REPLACE_ME
+read -rsp 'Tailscale auth key: ' TS_AUTHKEY; export TS_AUTHKEY
 export OC_HOSTNAME=devbox
 export IMAGE=ghcr.io/ultus-net/devbox:prod
 
 BUTANE=/path/to/butane ./os/butane/build.sh
 ```
 
+`IMAGE` must name the package the workflow publishes (it derives the owner from
+`github.repository_owner`). GHCR packages are private by default, and the host
+pulls anonymously, so set the package visibility to public before installing.
+If it must stay private, add a read-only token and a `podman login ghcr.io` step;
+the container cannot start after an OS reinstall otherwise.
+
 `TS_AUTHKEY` is a Tailscale auth key. Create it in the Tailscale admin console
 with the `tag:devbox` tag. Use a single-use or short-lived key. It is written to
-`/etc/devbox/tailscale-authkey` on the host and revoked after the node joins.
-This is the only secret on the install media.
+`/etc/devbox/tailscale-authkey` on the host. After a successful join the host
+deletes that file, so a revoked key cannot break later boots. Revoke the key in
+the console as well. This is the only secret on the install media.
 
 `OC_HOSTNAME` is the MagicDNS name. Keep it stable, because the client's saved
 server URL contains it. The default is `devbox`.
@@ -79,10 +86,12 @@ balenaEtcher, or the writer you normally use. Confirm the USB device with
 2. At the live prompt, copy `os/butane/ucore.ign` onto the live system. A second
    USB stick is the easiest route.
 3. Confirm the target OS disk one more time with `lsblk`.
-4. Prepare the data disk. Booted from the live media, create one GPT partition
-   labelled `data` on the by-id path, then format it ext4 with the label `data`.
-   This destroys everything on the device, so read the by-id path twice. Confirm
-   the result before continuing:
+4. **First install only.** Prepare the data disk. Booted from the live media,
+   create one GPT partition labelled `data` on the by-id path, then format it
+   ext4 with the label `data`. This destroys everything on the device, so read
+   the by-id path twice. Skip this step when reinstalling the OS on a box whose
+   data disk already holds `/srv`; the runbook says the same. Confirm the result
+   before continuing:
 
 ```sh
 lsblk -f /dev/disk/by-id/ata-REPLACE_ME
@@ -142,6 +151,23 @@ tailscale ping devbox
 ssh core@devbox
 ```
 
+`sshd` is masked, because it is a second listener on the wired LAN and this box
+has one door. Tailscale SSH serves the shell from inside `tailscaled`. It needs an
+ACL rule before it answers. In the Tailscale admin console, add:
+
+```json
+{
+  "action": "accept",
+  "src": ["autogroup:member"],
+  "dst": ["tag:devbox"],
+  "users": ["autogroup:member"]
+}
+```
+
+Without that rule, `ssh core@devbox` refuses the connection even though the node
+is up. The physical console and Intel AMT are the recovery path if the tailnet is
+down.
+
 If the join failed, check `sudo journalctl -u oc-tailnet.service -u tailscaled`.
 The most common cause is a key that was already used, expired, or scoped to a tag
 the ACL does not allow.
@@ -172,16 +198,17 @@ EOF
 chmod 600 secrets.env
 ```
 
-Copy it to the box and install it with tight permissions:
+Send the file over the SSH session and install it with tight permissions. This
+uses SSH stdin, so it does not depend on `scp` being available under Tailscale
+SSH:
 
 ```sh
-scp secrets.env core@devbox:/tmp/secrets.env
 ssh core@devbox 'sudo install -d -m 0700 /etc/devbox && \
-  sudo install -m 0600 -o root -g root /tmp/secrets.env /etc/devbox/secrets.env'
+  umask 077 && sudo tee /etc/devbox/secrets.env >/dev/null && \
+  sudo chmod 0600 /etc/devbox/secrets.env' < secrets.env
 ```
 
-Delete the temporary copy in `/tmp` on the box and the local `secrets.env` after
-the install. Do not commit either one.
+Delete the local `secrets.env` after the install. Do not commit it.
 
 Then start the environment writer and the container:
 

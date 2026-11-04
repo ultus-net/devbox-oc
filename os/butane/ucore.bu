@@ -123,7 +123,8 @@ systemd:
         What=/dev/disk/by-label/data
         Where=/srv
         Type=ext4
-        Options=defaults,noatime,nofail,x-systemd.device-timeout=30s
+        Options=defaults,noatime,nofail
+        TimeoutSec=30
         [Install]
         WantedBy=local-fs.target
     - name: oc-paths.service
@@ -164,8 +165,13 @@ systemd:
         Type=oneshot
         Nice=10
         IOSchedulingClass=idle
-        EnvironmentFile=/etc/devbox/backup.env
+        # Stop the workload so the session database is not captured mid-write.
+        # The leading - keeps the backup running if the stop already happened.
+        ExecStartPre=-/usr/bin/systemctl stop opencode.service
         ExecStart=/usr/local/sbin/oc-backup
+        # Run after success or failure, so a failed backup never leaves the server
+        # down.
+        ExecStopPost=-/usr/bin/systemctl start opencode.service
     - name: oc-backup.timer
       enabled: true
       contents: |
@@ -209,6 +215,16 @@ systemd:
             [Socket]
             ListenStream=
             ListenStream=127.0.0.1:9090
+    # sshd is the other listener Fedora CoreOS enables by default, and ucore's
+    # server firewalld profile lets it through on the wired LAN. That is a second
+    # door beside the tailnet. Mask it; Tailscale SSH authenticates by tailnet
+    # identity and runs inside tailscaled, so a shell over the tailnet still works
+    # once the ACL grants it. The Ignition SSH key stays for a manual unmask from
+    # the physical console.
+    - name: sshd.service
+      mask: true
+    - name: sshd.socket
+      mask: true
     # This box is always on. Masking the sleep targets is what stops an idle
     # policy or a stray `systemctl suspend` from taking it off the network.
     - name: sleep.target

@@ -49,6 +49,13 @@ mapfile -t env_paths < <(printf '%s\n' "$container_section" | sed -n 's/^Environ
 grep -Eq '^PublishPort=127\.0\.0\.1:4096:4096$' "$q" \
   || fail "the container port is not bound to loopback"
 
+# Without [Install] the generated opencode.service is never wanted at boot, so
+# the box comes up healthy-looking with no workload.
+install_section="$(awk '/^\[Install\]/{on=1;next} /^\[/{on=0} on' "$q")"
+[ -n "$install_section" ] || fail "quadlet has no [Install] section"
+printf '%s\n' "$install_section" | grep -Eq '^WantedBy=default\.target$' \
+  || fail "quadlet is not wanted by default.target, so it will not start at boot"
+
 # No shipped file may define the password. The env file is written at boot from
 # /etc/devbox/secrets.env, which is not in git.
 if sed ':a;/\\$/N;s/\\\n//;ta' "$q" | grep -q 'OPENCODE_PASSWORD'; then

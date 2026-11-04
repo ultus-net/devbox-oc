@@ -58,8 +58,11 @@ Pruning is manual.
 ## Restore from restic
 
 Use this when `/srv` is corrupt, a file was deleted, or the data disk was
-replaced. Never restore over the live `/srv` in one step. Restore to a new
-directory, inspect it, then swap.
+replaced. Never restore over the live `/srv` in one step. Restore to a scratch
+device, inspect it, then copy the contents into `/srv`.
+
+The backup snapshot root is `/data`, because `/srv` is mounted at `/data` inside
+the container. A restore therefore lands at `/restore/data/...`.
 
 1. Stop the workload so nothing writes during the restore:
 
@@ -67,33 +70,45 @@ directory, inspect it, then swap.
 ssh core@devbox 'sudo systemctl stop opencode.service'
 ```
 
-2. List snapshots:
+2. Attach a scratch disk or USB device and mount it at `/mnt/restore`. Confirm it
+   is a real mount before writing to it; otherwise the restore lands on the OS
+   disk, which is disposable:
+
+```sh
+ssh core@devbox 'findmnt /mnt/restore'
+```
+
+3. List snapshots:
 
 ```sh
 ssh core@devbox 'sudo oc-restic snapshots'
 ```
 
-3. Restore the chosen snapshot to `/srv-restore`. The override mounts the target
-   writable; the default mount is read-only:
+4. Restore the chosen snapshot into the scratch mount. The override mounts the
+   target writable; the default mount is read-only:
 
 ```sh
-ssh core@devbox 'sudo RESTIC_MOUNT=/srv-restore:/restore:rw \
+ssh core@devbox 'sudo RESTIC_MOUNT=/mnt/restore:/restore:rw \
   oc-restic restore latest --target /restore'
 ```
 
-4. Inspect the restored tree. Confirm the OpenCode session database, the repos,
+5. Inspect `/mnt/restore/data`. Confirm the OpenCode session database, the repos,
    and the config are present and readable.
-5. Move the old `/srv` aside and put the restored tree in place, or reinstall
-   with the restored data disk. The exact move is a deliberate operator step, not
-   a timed script, because it is the point of no return.
-6. Start the container and confirm health:
+6. Copy the restored tree into `/srv`, which is still the mounted data disk:
+
+```sh
+ssh core@devbox 'sudo rsync -aHAX --delete /mnt/restore/data/ /srv/'
+```
+
+7. Start the container and confirm health:
 
 ```sh
 ssh core@devbox 'sudo systemctl start opencode.service'
 ssh core@devbox 'sudo podman ps --format "{{.Names}} {{.Status}}"'
 ```
 
-7. Keep the old copy until a client has read a session from the restored data.
+8. Unmount the scratch device. Keep it until a client has read a session from the
+   restored data.
 
 A backup that has never been restored is an assumption. Run this drill on a
 throwaway disk before trusting the nightly job.
@@ -127,8 +142,12 @@ ssh core@devbox 'sudo podman auto-update --dry-run'
 cat image/prod-digest.txt
 ```
 
-The digest record is in the repository, not on the host. Pull the previous
-digest, tag it `:prod`, push it back to GHCR, then restart:
+The digest record is in the repository, not on the host. `image.yml` prints the
+promoted digest in its job summary, because a workflow token cannot push to the
+protected `main`. After a production build, copy that digest into
+`image/prod-digest.txt` in a PR. That PR is the rollback record.
+
+Pull the previous digest, tag it `:prod`, push it back to GHCR, then restart:
 
 ```sh
 ssh core@devbox 'sudo systemctl restart opencode.service'
@@ -196,15 +215,22 @@ leave it there.
 
 ## Replace the OS disk
 
-The OS disk is disposable. The data disk is not.
+The OS disk is disposable. The data disk is not, and this procedure must never
+touch it.
 
 1. Confirm a restic snapshot exists and is readable.
-2. Follow `docs/install.md` with the same data disk by-id path.
+2. Follow `docs/install.md` from step 4.5 (the `coreos-installer` command) only.
+   **Do not run install step 4.4.** That step creates the `data` partition and
+   filesystem and destroys the disk. On an OS reinstall the data disk already
+   holds `/srv`; Ignition mounts it by label and leaves it alone.
 3. After the rebase, confirm `srv.mount` is active and `/srv` still holds the
    repositories and sessions.
 4. Re-provision `/etc/devbox/secrets.env` and start `oc-env` and `opencode`.
 5. Re-pair the client if the tailnet name changed. It should not, because the
    hostname is pinned.
+
+If the data disk was accidentally formatted, stop and restore from restic before
+starting the workload. Do not write to the fresh filesystem first.
 
 ## Hardware checks
 
@@ -212,6 +238,7 @@ Run these monthly, and after any unexplained reboot.
 
 ```sh
 ssh core@devbox 'sensors'
+ssh core@devbox 'lsblk -o NAME,SIZE,MODEL,SERIAL'
 ssh core@devbox 'sudo smartctl -a /dev/nvme0n1 | head -40'
 ssh core@devbox 'sudo smartctl -a /dev/nvme1n1 | head -40'
 ssh core@devbox 'upower -i $(upower -e | grep BAT)'
