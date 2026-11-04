@@ -18,9 +18,9 @@ resource "azurerm_subnet" "vm" {
   virtual_network_name = azurerm_virtual_network.this.name
   address_prefixes     = [var.vm_subnet_cidr]
 
-  # Private subnet. Blocks the implicit platform egress IP, so an explicit
-  # outbound method is mandatory. See docs/superpowers/specs/2026-10-27-devbox-opencode-design.md.
-  default_outbound_access_enabled = false
+  # Platform outbound access, mirroring the csh-dev Bicep. The NAT gateway below
+  # is the old design kept as the port record and defaults off.
+  default_outbound_access_enabled = true
 }
 
 resource "azurerm_network_security_group" "vm" {

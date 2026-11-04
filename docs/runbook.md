@@ -26,8 +26,8 @@ consumes, and two of them fail loudly if run out of order.
 ### 1. Fill in the variables
 
 This step belongs to the superseded Terraform path. The live `csh-dev` deploy
-takes `vmImageId` and `ignitionCustomData` as pipeline variables instead, so use
-the image id from stage 2 as `vmImageId`.
+takes `vmImageId` as a queue-time parameter and the Ignition config as the
+`ucore.ign` secure file, so keep the image id from stage 2 for `vmImageId`.
 
 ```sh
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
@@ -142,9 +142,10 @@ Two consequences worth knowing:
 This stage is superseded: the VM, NIC, NSG and data disk are deployed from the
 `csh-dev` Bicep, not from this repo. The commands are kept as the record of the
 old path. Do not run them. The live deploy is `pipelines/azure-pipelines.yml` in
-`csh-dev`: run it with `deployVm=true`, `vmImageId` set to the Phase 2 image id
-and `ignitionCustomData` set to the base64 of `os/butane/ucore.ign`. Its
-post-deploy check reads the deployed NIC and NSG.
+`csh-dev`: upload `os/butane/ucore.ign` as a secure file named `ucore.ign` in the
+pipeline library, then queue the pipeline with `deployVm=true` and `vmImageId`
+set to the stage-2 image id. The post-deploy check runs on the same flag and
+reads the deployed NIC and NSG.
 
 ```sh
 terraform -chdir=terraform init

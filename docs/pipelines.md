@@ -47,18 +47,16 @@ because they are project state, not code.
    |---|---|---|
    | The resource group | Contributor | create the VM, disk, network, Key Vault |
    | The container registry | `Container Registry Repository Writer` | push and pull, no delete |
-   | The resource group | User Access Administrator | create the role assignments Terraform defines |
+   | The resource group | User Access Administrator | create the role assignments the Bicep declares |
 
-   The last row is required and is not obvious. `terraform/main.tf` creates five
-   role assignments unconditionally, and `terraform/schedule.tf` creates a sixth
-   when `schedule_start_utc` is set. Contributor cannot grant any of them, so
-   apply fails with `AuthorizationFailed`. User Access Administrator is the
-   narrow built-in that can grant them. Scope it to the resource group, not the
-   subscription.
+   The last row is required and is not obvious. The `csh-dev` Bicep grants Key
+   Vault Secrets User and the ACR role to the VM identity. Contributor cannot
+   grant either, so the deploy fails with `AuthorizationFailed`. User Access
+   Administrator is the narrow built-in that can grant them. Scope it to the
+   resource group, not the subscription.
 
-   The pipeline does not apply Terraform. Nothing in `pipelines/` invokes it, so a
-   `terraform apply` is a step you run, per `docs/runbook.md`. The role table above
-   is what the apply needs when it runs as the service connection.
+   The Terraform stack in this repo is the port record and is never applied, so
+   its own role list is history rather than a requirement.
 
 ## The one write back to GitHub
 
@@ -89,23 +87,26 @@ private endpoint is Premium-only.
 
 ## Terraform state
 
-Terraform state must not live in this repo and must not live on the pipeline
-agent. Use an Azure Storage backend with state locking. Nothing is committed.
+There is no Terraform state, because the stack in `terraform/` is the port record
+and is never applied. If the record is ever revived, state must not live in this
+repo and must not live on the pipeline agent: use an Azure Storage backend with
+state locking.
 
-If a platform team owns the resource group and forbids `terraform apply` from a
-pipeline, delete `terraform/` and deploy only the images from here. Do not let two
-tools manage the same resource.
+Do not let two tools manage the same resource. The deployed VM, network, disk,
+ACR and Key Vault belong to the `csh-dev` Bicep.
 
 ## First run order
 
 1. `./tests/verify.sh` locally. It must end with `VERIFY: all suites pass`.
 2. Run `pipelines/devbox-os.yml` once to publish the OS image. Note the managed
    image ID it prints.
-3. Set `os_image_id` in the Terraform variables to that ID.
-4. Apply Terraform yourself, from a machine with the service connection's
-   credentials. No pipeline file invokes `terraform apply`.
+3. Run the `csh-dev` pipeline once with `deployVm=false`. It creates the network,
+   disk, ACR, Key Vault and logs.
+4. Build Ignition per `docs/runbook.md`, upload the result as a secure file named
+   `ucore.ign` in the pipeline library, then queue the `csh-dev` pipeline with
+   `deployVm=true` and `vmImageId` set to the image ID from step 2.
 5. Run `pipelines/devbox-image.yml` to build and promote the container image.
-6. Follow `docs/runbook.md` from the first deploy.
+6. Follow `docs/runbook.md` from the first boot.
 
 ## Confirm the gate before trusting a PR
 

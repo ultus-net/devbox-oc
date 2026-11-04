@@ -52,9 +52,9 @@ run "units load their env" ./os/butane/tests/test_units_load_their_env.sh
 run "no scheduled stop" \
   ./terraform/tests/no_scheduled_stop.sh
 run "no scheduled stop (violation detected)" \
-  bash -c './terraform/tests/no_scheduled_stop.sh terraform/tests/fixtures/sched_violation && exit 1 || exit 0'
+  bash -c './terraform/tests/no_scheduled_stop.sh terraform/tests/fixtures/sched_violation 2>&1 | grep -q "a scheduled shutdown exists"'
 run "no scheduled stop (missing start detected)" \
-  bash -c './terraform/tests/no_scheduled_stop.sh terraform/tests/fixtures/sched_no_start && exit 1 || exit 0'
+  bash -c './terraform/tests/no_scheduled_stop.sh terraform/tests/fixtures/sched_no_start 2>&1 | grep -q "no scheduled start"'
 run "vault name derivable without state" \
   ./terraform/tests/key_vault_name_derived.sh
 run "auth key stored" \

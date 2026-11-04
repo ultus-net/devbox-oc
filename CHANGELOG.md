@@ -103,8 +103,11 @@ All notable changes to this project. One entry per landed change, newest first.
   `terraform/tests/no_scheduled_stop.sh` stays, with a message pointing at the
   template check for the VM, and `tests/verify.sh` now runs its two fixtures so
   the negative controls are not orphaned. The port record's
-  `enable_nat_gateway` defaults false, so it cannot declare a public IP by
-  default. `docs/runbook.md` opens with a do-not-apply banner:
+  `enable_nat_gateway` defaults false and its subnet uses platform default
+  outbound access, so it mirrors the Bicep and cannot declare a public IP by
+  default. `docs/pipelines.md` and `docs/runbook.md` now describe the `csh-dev`
+  stage-one and stage-two deploys instead of a `terraform apply`.
+  `docs/runbook.md` opens with a do-not-apply banner:
   the Terraform stack is the port record, its start schedule is dormant, and the
   live stages read the vault and disk names from the `csh-dev` deployment.
   `README.md` drops the retired NAT gateway from its diagram and cost table, and

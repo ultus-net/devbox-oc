@@ -148,8 +148,9 @@ not here: `scripts/check-template.py` reads the compiled Bicep and
 `scripts/check-deployed-network.sh` reads the live NIC and NSG.
 
 Every guard listed above was checked against a mutation it is meant to catch, and
-the mutation was confirmed to land before the result was trusted. One has a
-documented negative control: the integrity test rejects a corrupted tarball.
+the mutation was confirmed to land before the result was trusted. Three have a
+documented negative control: the integrity test rejects a corrupted tarball, and
+the stop guard rejects each of its two fixtures.
 
 ## What is not verified here
 
