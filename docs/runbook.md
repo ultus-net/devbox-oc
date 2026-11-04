@@ -100,10 +100,12 @@ artifact, and the failure appears at create time.
 
 ### 3. Generate Ignition with real values
 
-The repository ships `os/butane/ucore.ign` compiled from placeholders. The
-Terraform port record refuses to plan against it, and the `csh-dev` deploy boots
-it as `customData`, so the check matters either way: a placeholder config would
-boot a VM whose SSH key is a well-known dummy.
+The repository ships `os/butane/ucore.ign` compiled from placeholders. Stage one
+of the `csh-dev` pipeline must have run first (`deployVm=false`), because it
+creates the vault and disk the Ignition config names. The Terraform port record
+refuses to plan against placeholders, and the `csh-dev` deploy boots the file as
+`customData`, so the check matters either way: a placeholder config would boot a
+VM whose SSH key is a well-known dummy.
 
 ```sh
 export SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
