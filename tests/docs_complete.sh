@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A doc set that omits the recovery path is incomplete. This asserts the files
-# exist and that each operational topic is actually written down somewhere.
+# exist and that each operational topic is written down somewhere.
 #
 # It checks presence, not prose quality: a topic mentioned in passing passes.
 # That is deliberate, because the alternative is a test that encodes wording.
@@ -9,35 +9,33 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
-for f in README.md CHANGELOG.md docs/runbook.md docs/pipelines.md; do
+for f in README.md CHANGELOG.md docs/design.md docs/install.md docs/runbook.md; do
   [ -s "$root/$f" ] || fail "missing or empty: $f"
 done
 
-for topic in restore rollback tailnet snapshot; do
+for topic in restore rollback tailnet restic lid; do
   grep -riq "$topic" "$root/docs" "$root/README.md" || fail "no documentation for: $topic"
 done
 
-# Deployment topics are scoped to the runbook, not the whole docs tree. A
-# recursive scan would pass vacuously, because the plan documents in
-# docs/superpowers already contain these words.
-for topic in "first deploy" regenerate "pair --url"; do
-  grep -riq -- "$topic" "$root/docs/runbook.md" \
-    || fail "runbook has no first-deployment coverage for: $topic"
+# First install is a different procedure from daily operation, so it must be
+# written down, and it must name the two checks that catch a half-finished
+# install: the booted OS and the tailnet daemon.
+grep -riq "first install" "$root/docs/install.md" \
+  || fail "install doc has no first-install heading"
+for topic in "rpm-ostree status" tailscaled "coreos-installer" restic; do
+  grep -riq -- "$topic" "$root/docs/install.md" \
+    || fail "install doc does not cover: $topic"
 done
 
-# The idle contract must state what is NOT protected, or an operator will be
-# surprised when the box stops under a connected client.
-grep -riq "not protected" "$root/README.md" || fail "README does not state what the idle gate does not protect"
+# A laptop in a server room has risks a cloud VM hid. The design must name them,
+# or the operator will not know why the lid and the battery matter.
+for topic in "battery" "lid" "power loss" "thermal"; do
+  grep -riq "$topic" "$root/docs/design.md" \
+    || fail "design doc does not record the hardware risk: $topic"
+done
 
-# The published image is ucore, built from the upstream bootc container, so a VM
-# boots ucore directly. An operator who expects the old rebase sees one boot and
-# no second reboot, so the runbook must say how to confirm the booted OS is ucore
-# and must name tailscaled, the unit most likely to be down.
-grep -riq "rpm-ostree status" "$root/docs/runbook.md" \
-  || fail "runbook does not tell the operator how to confirm the booted OS is ucore"
-grep -riq "tailscaled" "$root/docs/runbook.md" \
-  || fail "runbook does not name tailscaled, the unit most likely to be down"
-grep -riq "bootc" "$root/docs/runbook.md" \
-  || fail "runbook does not say the image is built from the ucore bootc container"
+# The unverified list is load-bearing: nothing here has run on the target laptop.
+grep -riq "not verified" "$root/README.md" \
+  || fail "README does not state what is unverified"
 
 echo "docs complete"

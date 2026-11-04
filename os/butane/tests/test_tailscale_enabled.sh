@@ -59,9 +59,9 @@ printf '%s\n' "$unit_section" \
   | grep -Eq '^[[:space:]]*(Requires|Wants)=.*tailscaled\.service' \
   || fail "oc-tailnet.service does not want or require tailscaled.service in [Unit]"
 
-# `enabled: true` is enough because the image boots ucore, which ships
-# tailscaled, so the unit exists on the first boot. The earlier design needed a
-# rebase stage to enable it, because that first boot was plain FCOS with no
-# tailscaled to enable. Both the stage and this workaround are gone.
+# `enabled: true` writes the wants symlink into /etc, which survives the rebase.
+# The first boot is plain FCOS and has no tailscaled binary, so oc-tailnet.service
+# carries ConditionPathExists=/usr/bin/tailscale and skips there. After the
+# rebase the shipped unit and the join both run normally.
 
 echo "tailscaled is enabled and orders the tailnet join"

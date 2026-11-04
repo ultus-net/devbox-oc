@@ -1,9 +1,9 @@
 # os/butane/ucore.bu
 #
-# Ignition for a VM whose OS image is built from the ucore bootc container, so it
-# boots ucore directly. There is no rebase stage: an earlier design published
-# plain Fedora CoreOS and rebased at boot, which needed two units, two marker
-# files, and three boots to reach the same OS.
+# Ignition for a bare-metal install. Fedora CoreOS installation media writes
+# this config to the OS disk, then a one-shot unit rebases the machine to
+# ucore-minimal and reboots. Everything here lives in /etc or /usr/local, both of
+# which survive the rebase.
 #
 # Placeholders are filled in by build.sh, which then runs Butane with
 # --files-dir at the repo root, so every local: path is relative to the root.
@@ -15,34 +15,29 @@ passwd:
       ssh_authorized_keys:
         - __SSH_PUBKEY__
 storage:
-  disks:
-    - device: /dev/disk/azure/scsi1/lun0
-      wipe_table: false
-      partitions:
-        - label: data
-          number: 1
-  filesystems:
-    - device: /dev/disk/by-partlabel/data
-      format: ext4
-      label: data
-      wipe_filesystem: false
+  directories:
+    - path: /etc/ucore-autorebase
+      mode: 0755
   files:
-    - path: /usr/local/sbin/oc-secrets
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: __OC_HOSTNAME__
+    # The one secret on the install media. Scoped to a tag, single-use or
+    # short-lived, and revoked after the node joins. The OpenCode password never
+    # rides here: it is written by the operator after first boot.
+    - path: /etc/devbox/tailscale-authkey
+      mode: 0600
+      contents:
+        inline: __TS_AUTHKEY__
+    - path: /usr/local/sbin/oc-env
       mode: 0755
       contents:
-        local: host/bin/oc-secrets
-    - path: /usr/local/sbin/oc-acr-login
+        local: host/bin/oc-env
+    - path: /usr/local/sbin/oc-backup
       mode: 0755
       contents:
-        local: host/bin/oc-acr-login
-    - path: /usr/local/sbin/oc-idle-check
-      mode: 0755
-      contents:
-        local: host/bin/oc-idle-check
-    - path: /usr/local/sbin/oc-snapshot
-      mode: 0755
-      contents:
-        local: host/bin/oc-snapshot
+        local: host/bin/oc-backup
     - path: /usr/local/sbin/oc-tailnet
       mode: 0755
       contents:
@@ -51,10 +46,6 @@ storage:
       mode: 0755
       contents:
         local: host/bin/oc-tailnet-up
-    - path: /usr/local/sbin/lib-imds.sh
-      mode: 0644
-      contents:
-        local: host/bin/lib-imds.sh
     - path: /usr/local/sbin/oc-paths
       mode: 0755
       contents:
@@ -63,42 +54,47 @@ storage:
           set -eu
           install -d -o 1000 -g 1000 \
             /srv/repos /srv/opencode/share /srv/opencode/config /srv/opencode/state
-    # Rendered from host/quadlet/opencode.container by build.sh, so the ACR name
-    # is substituted before the quadlet is baked in.
+    # Rendered from host/quadlet/opencode.container by build.sh, so the image
+    # reference is substituted before the quadlet is baked into the install media.
     - path: /etc/containers/systemd/opencode.container
       mode: 0644
       contents:
         local: os/butane/.opencode.container.ign.tmp
-    - path: /etc/devbox/oc-secrets.env
-      mode: 0600
+    # A closed lid must not take the box off the tailnet.
+    - path: /etc/systemd/logind.conf.d/10-devbox.conf
+      mode: 0644
       contents:
         inline: |
-          VAULT_NAME=__VAULT_NAME__
-          ACR_NAME=__ACR_NAME__
-          # The one shipped definition of where the password goes. The quadlet loads
-          # this same path, so the producer and the consumer name it in one place
-          # instead of agreeing by coincidence of a script default. A guard test
-          # requires exactly one definition across every shipped file and unit.
-          OUT_FILE=/etc/opencode/env
-          # Without this the tailnet join has no key source on a fresh box, and
-          # oc-tailnet-up fails with "no auth key".
-          TS_AUTHKEY_SECRET=__TS_AUTHKEY_SECRET__
-    - path: /etc/devbox/oc-idle.env
-      mode: 0600
-      contents:
-        inline: |
-          IDLE_MIN=45
-          BOOT_GRACE=900
-    - path: /etc/devbox/oc-snapshot.env
-      mode: 0600
-      contents:
-        inline: |
-          DISK_ID=__DISK_ID__
-          RG=__RG__
-          SUBSCRIPTION_ID=__SUBSCRIPTION_ID__
+          [Login]
+          HandleLidSwitch=ignore
+          HandleLidSwitchExternalPower=ignore
+          HandleLidSwitchDocked=ignore
+          IdleAction=ignore
 systemd:
   units:
+    # First boot is Fedora CoreOS. This rebases it to ucore-minimal and reboots.
+    # The marker file stops a second run on the ucore boot, and disabling the
+    # unit is a belt-and-braces second copy of the same condition.
+    - name: ucore-autorebase.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Rebase Fedora CoreOS to ucore-minimal and reboot
+        ConditionPathExists=!/etc/ucore-autorebase/done
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        Type=oneshot
+        StandardOutput=journal+console
+        ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-unverified-registry:__UCORE_IMAGE__
+        ExecStart=/usr/bin/touch /etc/ucore-autorebase/done
+        ExecStart=/usr/bin/systemctl disable ucore-autorebase.service
+        ExecStart=/usr/bin/systemctl reboot
+        [Install]
+        WantedBy=multi-user.target
     # A mount unit's name must match its Where= path, so /srv is srv.mount.
+    # The partition and filesystem are prepared once, outside Ignition, so an OS
+    # reinstall cannot wipe the data disk. Ignition only mounts it by label.
     - name: srv.mount
       enabled: true
       contents: |
@@ -108,29 +104,14 @@ systemd:
         What=/dev/disk/by-label/data
         Where=/srv
         Type=ext4
-        Options=defaults,noatime,nofail
+        Options=defaults,noatime,nofail,x-systemd.device-timeout=30s
         [Install]
         WantedBy=local-fs.target
-    - name: oc-secrets.service
-      enabled: true
-      contents: |
-        [Unit]
-        Description=Write OpenCode env and ACR auth from Key Vault
-        After=network-online.target srv.mount
-        Wants=network-online.target
-        [Service]
-        Type=oneshot
-        RemainAfterExit=yes
-        EnvironmentFile=/etc/devbox/oc-secrets.env
-        ExecStart=/usr/local/sbin/oc-secrets
-        ExecStart=/usr/local/sbin/oc-acr-login
-        [Install]
-        WantedBy=multi-user.target
     - name: oc-paths.service
       enabled: true
       contents: |
         [Unit]
-        Description=Create persistent directory layout on the data disk
+        Description=Create the persistent directory layout on the data disk
         After=srv.mount
         Requires=srv.mount
         Before=opencode.service
@@ -140,54 +121,47 @@ systemd:
         ExecStart=/usr/local/sbin/oc-paths
         [Install]
         WantedBy=multi-user.target
-    - name: oc-idle.service
-      contents: |
-        [Unit]
-        Description=Probe for idleness
-        After=opencode.service
-        [Service]
-        Type=oneshot
-        # oc-secrets.env carries OUT_FILE, which is where the password file is. The
-        # idle env file only carries the tuning knobs, so a path change touches one
-        # file and both the writer and this probe follow it.
-        EnvironmentFile=/etc/devbox/oc-secrets.env
-        EnvironmentFile=/etc/devbox/oc-idle.env
-        ExecStart=/usr/local/sbin/oc-idle-check
-    - name: oc-idle.timer
+    - name: oc-env.service
       enabled: true
       contents: |
         [Unit]
-        Description=Check idleness every 5 minutes
-        [Timer]
-        OnBootSec=20min
-        OnUnitActiveSec=5min
-        [Install]
-        WantedBy=timers.target
-    - name: oc-snapshot.service
-      contents: |
-        [Unit]
-        Description=Snapshot the data disk
+        Description=Write the OpenCode environment file from secrets.env
         After=srv.mount
+        Requires=srv.mount
         [Service]
         Type=oneshot
-        EnvironmentFile=/etc/devbox/oc-snapshot.env
-        ExecStart=/usr/local/sbin/oc-snapshot
-    - name: oc-snapshot.timer
+        RemainAfterExit=yes
+        ExecStart=/usr/local/sbin/oc-env
+        [Install]
+        WantedBy=multi-user.target
+    - name: oc-backup.service
+      contents: |
+        [Unit]
+        Description=Back up the data disk with restic
+        After=srv.mount network-online.target
+        Wants=network-online.target
+        Requires=srv.mount
+        [Service]
+        Type=oneshot
+        Nice=10
+        IOSchedulingClass=idle
+        ExecStart=/usr/local/sbin/oc-backup
+    - name: oc-backup.timer
       enabled: true
       contents: |
         [Unit]
-        Description=Nightly data disk snapshot
+        Description=Nightly restic backup of the data disk
         [Timer]
-        OnCalendar=*-*-* 02:00:00 UTC
+        OnCalendar=*-*-* 02:00:00
         Persistent=true
+        RandomizedDelaySec=30min
         [Install]
         WantedBy=timers.target
-    # ucore installs the tailscale RPM but enables no service, and it vendors the
-    # repo disabled. Without this the join below has no daemon to talk to, and the
-    # box has no reachable path on first boot.
+    # ucore ships the tailscale RPM but enables no service, and it vendors the
+    # repo disabled. Without this the join below has no daemon to talk to.
     #
     # No contents: this enables the shipped unit. A contents block would shadow
-    # /lib/systemd/system/tailscaled.service.
+    # /usr/lib/systemd/system/tailscaled.service.
     - name: tailscaled.service
       enabled: true
     - name: oc-tailnet.service
@@ -195,25 +169,22 @@ systemd:
       contents: |
         [Unit]
         Description=Join the tailnet and serve OpenCode over TLS
-        After=network-online.target oc-secrets.service tailscaled.service
+        # The first boot is Fedora CoreOS, which has no tailscale binary. Skip
+        # there instead of failing loudly, then run on the ucore boot.
+        ConditionPathExists=/usr/bin/tailscale
+        After=network-online.target tailscaled.service
         Wants=network-online.target tailscaled.service
         [Service]
         Type=oneshot
         RemainAfterExit=yes
-        # A unit does not inherit another unit's EnvironmentFile. Without this the
-        # join runs with TS_AUTHKEY_SECRET and VAULT_NAME unset, skips Key Vault
-        # entirely, and fails with "no auth key" on every fresh boot.
-        EnvironmentFile=/etc/devbox/oc-secrets.env
-        # Joins only when no state exists, then advertises the loopback port.
         ExecStart=/usr/local/sbin/oc-tailnet-up
         ExecStart=/usr/local/sbin/oc-tailnet
         [Install]
         WantedBy=multi-user.target
     # ucore-minimal ships Cockpit and switches firewalld to the server profile so
     # it is reachable. The shipped cockpit.socket listens on 9090 across every
-    # interface, and the service behind it runs privileged with / mounted, so on
-    # this box it would be a second root-equivalent door from the VNet and the
-    # tailnet. This design has one door: the tailnet, via tailscale serve.
+    # interface, and the service behind it runs privileged with / mounted. This
+    # design has one door, the tailnet, so the socket is rebound to loopback.
     #
     # An empty assignment resets a list option, so `ListenStream=` first drops the
     # shipped 9090 and the loopback line replaces it. Without the reset the second
@@ -225,16 +196,26 @@ systemd:
             [Socket]
             ListenStream=
             ListenStream=127.0.0.1:9090
-    # ucore ships podman-restart.service already; do not redefine it. Enable the
-    # shipped one instead, plus the auto-update timer that AutoUpdate=registry
-    # depends on.
+    # This box is always on. Masking the sleep targets is what stops an idle
+    # policy or a stray `systemctl suspend` from taking it off the network.
+    - name: sleep.target
+      mask: true
+    - name: suspend.target
+      mask: true
+    - name: hibernate.target
+      mask: true
+    - name: hybrid-sleep.target
+      mask: true
+    - name: suspend-then-hibernate.target
+      mask: true
+    # podman auto-update depends on both the restart unit and this timer. ucore
+    # ships them; enable rather than redefine.
     - name: podman-restart.service
       enabled: true
       dropins:
         - name: 10-devbox.conf
           contents: |
             [Unit]
-            After=oc-secrets.service
+            After=oc-env.service
     - name: podman-auto-update.timer
       enabled: true
-

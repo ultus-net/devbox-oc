@@ -6,6 +6,19 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- Bare-metal deployment path. Ignition for Fedora CoreOS installation media, one
+  enabled rebase to `ghcr.io/ublue-os/ucore-minimal:stable`, a separate data disk
+  mounted at `/srv`, masked sleep targets, and a logind policy that ignores a
+  closed lid. `docs/install.md` is the first-install procedure.
+- `oc-env`, `oc-backup`, `oc-tailnet` and `oc-tailnet-up` host scripts. The env
+  writer fails closed on an empty password, the backup uses a pinned restic image
+  read-only and never prunes, and the tailnet join is idempotent and durable.
+- GitHub Actions CI. `verify.yml` runs the repo gate with pinned Butane and
+  shellcheck. `image.yml` builds the container, smoke-gates it before pushing,
+  and publishes to GHCR.
+- `docs/design.md` recording the bare-metal architecture, the pivot, and the
+  hardware risks the cloud hid. `docs/runbook.md` rewritten for backup, restore,
+  rollback, disk replacement and hardware checks.
 - Fedora toolbox container image with OpenCode installed from the verified glibc
   npm artifact, pinned and sha512-checked at build time. The upstream ghcr image
   is musl-only and cannot be inherited on a glibc base.
@@ -77,6 +90,13 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- Pivoted from an Azure VM to an always-on HP laptop in a server room. The
+  workload is unchanged: ucore host, podman quadlet, tailnet-only reachability,
+  separate data disk. Terraform, Key Vault, ACR, the Logic App, the NAT Gateway,
+  the idle deallocator and the `oc` wake wrapper are deleted with the cloud
+  control plane they served. Secrets now come from `/etc/devbox/secrets.env`,
+  written by the operator after first boot. Backups are restic to an off-box
+  repository, not a managed disk snapshot.
 - The OS image is published through a managed disk instead of a storage account.
   `os/build-os-image.sh` creates an upload-ready disk sized from the artifact,
   takes a write SAS with `az disk grant-access`, uploads the VHD to that SAS,
@@ -165,6 +185,12 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Removed
 
+- `terraform/`, `pipelines/`, `tools/oc`, their fixtures and their guards. There
+  is no cloud subscription in the deploy path any more.
+- `host/bin/lib-imds.sh`, `oc-secrets`, `oc-acr-login`, `oc-idle-check` and
+  `oc-snapshot`, plus the unit files and tests that drove them.
+- `docs/pipelines.md`, `docs/deployment-plan.md`,
+  `docs/headless-hosting-options.md` and `docs/superpowers/`.
 - `ucore-unsigned-autorebase.service`, `ucore-signed-autorebase.service`, their
   `/etc/ucore-autorebase` marker directory, and `test_autorebase.sh`. The image
   boots ucore, so nothing needs to rebase it.

@@ -1,0 +1,47 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: python3 -m pip install --disable-pip-version-check pyyaml
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      # Pinned by version and sha256. The artifact reproducibility check reads
+      # BUTANE, and without it that check silently skips.
+      - name: Install Butane
+        env:
+          BUTANE_VERSION: v0.29.0
+          BUTANE_SHA256: 53a20d820fbaa7fda4f1afd1814974badc8e448db4c151d3f1ba005dc29bc4c9
+        run: |
+          set -euo pipefail
+          url="https://github.com/coreos/butane/releases/download/${BUTANE_VERSION}/butane-x86_64-unknown-linux-gnu"
+          curl -fsSL -o /tmp/butane "$url"
+          echo "${BUTANE_SHA256}  /tmp/butane" | sha256sum -c -
+          sudo install -m 0755 /tmp/butane /usr/local/bin/butane
+          butane --version
+
+      - name: Verify
+        env:
+          BUTANE: /usr/local/bin/butane
+          # The integrity suite downloads the pinned npm artifact. A download
+          # failure is a real failure here, not a skip.
+          ALLOW_INTEGRITY_SKIP: "0"
+        run: ./tests/verify.sh

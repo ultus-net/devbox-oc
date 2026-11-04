@@ -1,16 +1,21 @@
 # devbox-oc
 
-An AI development server in Azure that you can destroy and rebuild without
-losing work. The operating system is ucore-minimal, a Fedora CoreOS derived image
-built from its upstream bootc container, so a VM boots it directly. The toolchain
-runs in a Fedora container. The OpenCode TUI and desktop app connect to it
-directly over a private tailnet, with no public IP and no open inbound port.
+An AI development server on a repurposed HP laptop in a server room. It runs
+ucore-minimal, a Fedora CoreOS derived image, as an immutable host, runs the
+OpenCode server in a podman container, and is reached only over a private
+tailnet. The OS disk and the data disk are separate, and a nightly restic backup
+leaves the box.
 
 ## Why it exists
 
 Local dev environments drift and break in ways that cost hours and produce
 nothing. Here the environment is two images plus a data disk, so recovery is a
-redeploy rather than a repair.
+rebuild rather than a repair.
+
+The box used to be an Azure VM. Terraform, Key Vault, ACR, the idle
+deallocator, and the wake wrapper are gone with it: a laptop has no control
+plane to pay for and no reason to scale to zero. `docs/design.md` records the
+pivot and its reasons.
 
 ## Architecture
 
@@ -18,85 +23,60 @@ redeploy rather than a repair.
 flowchart LR
   TUI["TUI<br/>opencode --server"] --> TN
   DESK["Desktop app<br/>pairing link"] --> TN
-  COCK["Cockpit<br/>https://host:8443"] --> TN
   TN["tailnet<br/>WireGuard plus TLS"] --> HOST
-  subgraph VM["ucore-minimal VM (no public IP)"]
+  subgraph BOX["HP laptop, server room, always on"]
     HOST["tailscaled<br/>serves loopback only"]
     Q["podman quadlet<br/>opencode container"]
-    CP["cockpit.socket<br/>127.0.0.1:9090"]
-    IDLE["oc-idle.timer<br/>deallocates when idle"]
-    SN["oc-snapshot.timer<br/>nightly"]
+    ENV["oc-env.service<br/>writes /etc/opencode/env"]
+    BK["oc-backup.timer<br/>nightly restic"]
     HOST --> Q
-    HOST --> CP
+    ENV --> Q
   end
-  Q --> DD["/srv data disk<br/>repos, session DB"]
-  VM --> NAT["NAT Gateway<br/>explicit egress"]
+  Q --> DD["/srv data disk<br/>repos, session DB, config"]
+  DD --> BK
+  BK --> OFF["off-box restic repository<br/>NAS, B2, or S3"]
+  BOX --> LAN["wired LAN and firewall"]
+  LAN --> NET["GHCR, npm, model APIs"]
 ```
 
 ## Three update cadences, deliberately independent
 
 | Layer | Built by | Updated by |
 |---|---|---|
-| OS image (`ucore-minimal`) | `pipelines/devbox-os.yml`, building a VHD from the upstream bootc container pinned by digest | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
-| Container image | `pipelines/devbox-image.yml` into ACR | `podman auto-update` on the `:prod` tag, kept only if the health check passes |
-| Data disk | not built | nightly incremental snapshot |
-| Tailnet path | `tailscaled` enabled by Ignition, then `oc-tailnet.service` | both must be up; without them the box has no data path |
+| OS (`ucore-minimal`) | upstream, installed from Fedora CoreOS media then rebased once | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
+| Container image | `.github/workflows/image.yml` into GHCR | `podman auto-update` on the `:prod` tag, kept only if the health check passes |
+| Data (`/srv`) | not built | nightly restic backup to an off-box repository |
 
 Fusing the first two would make every OpenCode release an OS rebuild plus a
 reboot. They stay separate on purpose.
 
 The container update is not gated on idleness. `podman-auto-update.timer` fires
-on its own schedule, and it restarts the container when `:prod` moves. The health
+on its own schedule and restarts the container when `:prod` moves. The health
 check decides whether a new image is kept, not whether a session is running.
-`CHANGELOG.md` records this as a known gap.
 
-Bastion Developer is not created by this repo. Enable it by hand before you need
-console access, because it is the fallback when the tailnet path is down.
+## Secrets
 
-## The idle contract
+| Secret | Where it lives | Written by |
+|---|---|---|
+| `OPENCODE_PASSWORD` | `/etc/devbox/secrets.env`, mode 0600 | operator, after first boot |
+| `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` | `/etc/devbox/secrets.env` | operator, after first boot |
+| Tailscale auth key | `/etc/devbox/tailscale-authkey`, mode 0600, in Ignition | `os/butane/build.sh` |
+| SSH public key | Ignition, no secret | `os/butane/build.sh` |
 
-The box deallocates itself after 45 idle minutes so it does not bill while you
-are not working. It stays up while any of these is true:
+`oc-env.service` reads the password from `secrets.env` and writes
+`/etc/opencode/env`. It fails closed when the password is absent or empty, and
+the quadlet carries `Requires=oc-env.service`, so a failed write never serves a
+passwordless server.
 
-- a session is running
-- a shell command is running
-- a terminal is open
-- a turn is blocked on an approval
-- a turn is blocked on a form question
+The Tailscale key is the only secret on the install media. It is scoped to a
+tag, single-use or short-lived, and revoked after the node appears. Revoking it
+does not disconnect the node: identity lives in `/var/lib/tailscale`.
 
-**What is not protected.** A connected TUI with no running turn does not keep the
-box up. Neither does an SSH session, nor a build running outside an OpenCode
-turn. Tailscale connection state and container process liveness are too noisy to
-gate on: an idle editor holding a socket would pin the box awake forever and
-defeat the cost goal. Hold the box open deliberately with the pin file when you
-need to:
+## Always on
 
-```sh
-sudo touch /var/lib/oc-idle/pin
-```
-
-A probe error means **stay up** while the container is running, because a half-started
-container may still hold a session. With the container down, an unreadable API is
-treated as idle instead, so a box that refuses to serve does not also refuse to stop.
-
-## Cost shape
-
-Approximate, historical westeurope USD projection, not the current
-`newzealandnorth` NZD budget:
-
-| Item | Monthly |
-|---|---|
-| `Standard_B2as_v2` (2 vCPU / 8 GiB) running 24/7 | 63 |
-| the same, on a weekday schedule with idle stop | ~12 |
-| OS disk, 64 GiB Premium SSD | 11 |
-| Data disk, 128 GiB Standard SSD | 10 |
-| NAT Gateway | 33 |
-| Snapshots | ~6 |
-| ACR Basic | 5 |
-| Bastion Developer (break-glass) | 0 |
-
-The disks and the NAT Gateway are fixed costs that sleeping does not remove, so
-they dominate once the VM is on a schedule.
+There is no idle deallocation and no scheduled stop. Suspend and hibernate are
+masked in Ignition, and logind ignores a closed lid. The laptop battery covers a
+short power cut; the firmware setting to power on after AC loss covers the rest.
 
 ## Run the tests
 
@@ -109,70 +89,52 @@ Everything the repo asserts runs through one gate:
 It runs every suite and then `shellcheck` over all shell scripts. It ends with
 `VERIFY: all suites pass`.
 
-Individual suites:
+Set `BUTANE` when you change anything under `os/butane/`, or the artifact
+reproducibility check skips:
+
+```sh
+BUTANE=/path/to/butane ./tests/verify.sh
+```
 
 | Suite | What it protects |
 |---|---|
-| `host/tests/test_oc-idle-check.sh` | the box is never stopped while busy; probes fail closed |
-| `host/tests/test_oc-secrets.sh` | the server password file is mode 0600 and never clobbered by an empty secret |
-| `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent and uses a durable node |
-| `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is published over the tailnet |
-| `host/tests/test_snapshot_region.sh` | a data-disk snapshot is created in the disk's region, matching the Terraform default |
-| `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk, never a named volume on the OS disk |
-| `os/tests/test_build_os_image.sh` | the OS image script refuses without its tools, rejects a tag, publishes through a managed disk with no storage account, and builds a Gen2 image from the pinned bootc ref |
-| `os/tests/test_build_os_image_one_vhd.sh` | a build that yields more than one VHD aborts instead of uploading an arbitrary file |
-| `os/butane/tests/test_bootc_image.sh` | no rebase unit, marker path, or runtime rebase returns to the Ignition config, in the source and the compiled artifact |
-| `os/butane/tests/test_units_have_scripts.sh` | every unit runs a script that is baked into the image, and the artifact reproduces from its source |
-| `os/butane/tests/test_tailscale_enabled.sh` | `tailscaled` is enabled, so the join has a daemon to talk to |
-| `os/butane/tests/test_units_load_their_env.sh` | every unit loads the env file that defines the variables its script reads |
+| `host/tests/test_oc-env.sh` | the environment file is 0600 and an empty password fails closed |
+| `host/tests/test_oc_backup.sh` | restic is pinned, the data mount is read-only, and no run prunes |
+| `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent, durable, and needs a real key |
+| `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is not published |
+| `host/tests/test_nosleep.sh` | sleep targets are masked and a closed lid is ignored |
+| `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk and the workload fails closed |
+| `os/butane/tests/test_autorebase.sh` | one enabled rebase unit, pinned, marked, disabled, rebooted |
+| `os/butane/tests/test_no_azure.sh` | no Azure endpoint or deleted module survives |
+| `os/butane/tests/test_tailscale_enabled.sh` | `tailscaled` is enabled and orders the join |
+| `os/butane/tests/test_units_have_scripts.sh` | every unit runs a shipped script, and the artifact reproduces |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
-| `terraform/tests/no_public_ip.sh` | no public IP and no internet-allow ingress |
-| `terraform/tests/no_scheduled_stop.sh` | no scheduled hard stop ever returns |
-| `terraform/tests/data_disk_protected.sh` | the data disk stays `prevent_destroy` |
-| `terraform/tests/key_vault_name_derived.sh` | the vault name is derivable from tfvars, without state |
-| `terraform/tests/authkey_is_stored.sh` | the Tailscale auth key reaches Key Vault |
-| `terraform/tests/authkey_name_matches_build.sh` | the auth key's secret name agrees with the Ignition build default |
-| `terraform/tests/password_secret_name_matches.sh` | the password's secret name agrees across Terraform, the script, and Ignition |
-| `terraform/tests/variables_documented.sh` | every variable without a default is documented in the example |
-| `pipelines/tests/test_os_pipeline.sh` | the OS pipeline targets `rg-csh-dev`, installs podman, pins its builder, keeps the Azure credential across `sudo`, and names no storage account |
-| `pipelines/tests/test_pipeline_shape.sh` | the PR gate has a `pr:` trigger, no service connection, and installs its own tooling |
-| `tests/docs_complete.sh` | the recovery topics stay written down |
-| `tools/tests/test_oc.sh` | the wake-and-connect wrapper starts the box and waits for health |
+| `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
+| `tests/docs_complete.sh` | the install and recovery topics stay written down |
 
-`./tests/verify.sh` makes 26 `run` calls over 25 distinct suite files: the
-`no_public_ip` script runs twice, once against a violating fixture and once
-against a clean one. The table above lists all 25 files.
-
-Every guard listed above was checked against a mutation it is meant to catch, and
-the mutation was confirmed to land before the result was trusted. One has a
-documented negative control: the integrity test rejects a corrupted tarball.
+Every guard was checked against a mutation it is meant to catch, and the mutation
+was confirmed to land before the result was trusted. The integrity test has a
+documented negative control: it rejects a corrupted tarball.
 
 ## What is not verified here
 
-This repo has no Azure subscription and no container engine. So:
-
-- `terraform validate` passes, but no `plan` or `apply` has run.
-- The container image has never been built. `image/smoke.sh` runs in the pipeline
-  as a blocking gate before promotion.
-- The OS image has never been built. The bootc build path, the `vhd` output type,
-  and a Gen2 boot are unverified against a real subscription.
-- Pipeline definitions parse as YAML, but no pipeline run has executed.
-
-Anything requiring credentials is unproven until the first real run.
+No install has run on the target laptop. No live boot has been tested. The
+container image has not been built by the GitHub Actions workflow. The restic
+restore drill has not been executed, and the ucore rebase path is documented
+upstream but unexercised on this hardware. Nothing here should be described as
+working until it runs against real hardware.
 
 ## Documentation
 
-- `docs/runbook.md` covers restore, rollback, tailnet rejoin, snapshot pruning.
-- `docs/pipelines.md` covers building this repo from Azure DevOps into the work
-  subscription.
-- `docs/superpowers/specs/` holds the design and its verified facts.
-- `docs/superpowers/plans/` holds the implementation plan.
-- `docs/headless-hosting-options.md` answers whether the OpenCode server can run
-  serverless, and prices the anchor-plus-jobs shape against the VM-only plan.
+- `docs/design.md` records the architecture, the pivot, and the hardware risks.
+- `docs/install.md` is the first-install procedure.
+- `docs/runbook.md` covers daily checks, backup, restore, rollback, and disk
+  replacement.
+- `CHANGELOG.md` records every landed change and the honest gaps.
 
 ## Status
 
-All twelve tasks of the plan are implemented. The invariants named above each have
-a guard, and those guards were checked against mutations they are meant to catch.
-See `CHANGELOG.md` for the change list and for the honestly unverified gaps.
+The bare-metal pivot is implemented on a branch. The invariants named above each
+have a guard, and those guards were checked against mutations they are meant to
+catch. See `CHANGELOG.md` for the change list.

@@ -1,21 +1,20 @@
 # Agent instructions: devbox-oc
 
-This repo builds a portable Azure development server that hosts OpenCode. Read
-`~/.config/opencode/STANDARDS.md` and
+This repo builds a portable bare-metal development server that hosts OpenCode.
+Read `~/.config/opencode/STANDARDS.md` and
 `~/.config/opencode/style/coding-style.md` first. Those rules apply here in full.
 This file records only what is specific to this repository, and it wins where the
 two disagree.
 
 ## What this repo is
 
-Two images and a data disk. The OS is ucore-minimal, a Fedora CoreOS derived
-image built from its upstream bootc container by digest, so a VM boots it
-directly. The toolchain runs in a Fedora toolbox container. OpenCode is reached
-over a private tailnet with no public IP.
+One always-on HP laptop, two disks, two images. The host is ucore-minimal, a
+Fedora CoreOS derived image consumed from upstream. The toolchain runs in a
+Fedora toolbox container under podman. OpenCode is reached over a private tailnet
+with no public listener. The data disk is `/srv`, separate from the OS disk.
 
-This repo is the source of truth. Azure DevOps builds it directly from GitHub and
-deploys into the work subscription, so there is no copy to keep in step.
-`docs/pipelines.md` records the one-time console setup.
+This repo is the source of truth for the host configuration and the container
+image. It ships no cloud infrastructure.
 
 ## Non-negotiables
 
@@ -23,23 +22,27 @@ These are load-bearing. A change that breaks one is a correctness bug, not a
 preference.
 
 - **Fedora family only.** No Ubuntu, Debian, or Alpine at any layer: OS, base
-  image, or container. `ubuntu-latest` appears in `pipelines/*.yml` as the CI
-  runner, which is not a shipped layer and is allowed.
-- **No public IP and no inbound internet rule.** Reachability is Tailscale.
-  Bastion Developer is break-glass only. `terraform/tests/no_public_ip.sh` guards
-  this.
-- **Everything that listens, listens on loopback.** Services are published over the
-  tailnet with `tailscale serve`, never bound to an interface. ucore ships Cockpit
-  and enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in;
-  `host/tests/test_cockpit_loopback.sh` guards that.
-- **No scheduled stop.** Start is scheduled, stop is idle-based. A timer that
-  deallocates on a clock is a data-loss path and
-  `terraform/tests/no_scheduled_stop.sh` rejects it.
-- **The data disk is `prevent_destroy`.** Rebuilding the VM must never destroy
-  work. `terraform/tests/data_disk_protected.sh` guards this.
-- **The password comes from Key Vault at boot.** No shipped file may define
-  `OPENCODE_PASSWORD` by any route, because Ignition ships as the VM's
-  `custom_data` and stays readable in deployment history.
+  image, or container. `ubuntu-latest` appears in `.github/workflows/*.yml` as
+  the CI runner, which is not a shipped layer and is allowed.
+- **No public listener and no inbound port forward.** Reachability is Tailscale.
+  `tailscale serve` publishes loopback with real TLS.
+  `os/butane/tests/test_no_azure.sh` keeps the Azure network path deleted.
+- **Everything that listens, listens on loopback.** ucore ships Cockpit and
+  enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in;
+  `host/tests/test_cockpit_loopback.sh` guards that. The OpenCode port is
+  published as `127.0.0.1:4096:4096`.
+- **Always on. No scheduled stop and no idle deallocation.** Sleep targets are
+  masked and logind ignores the lid. `host/tests/test_nosleep.sh` guards this.
+- **The data disk is a separate physical device.** Reinstalling the OS must never
+  destroy `/srv`. It is prepared once from the live media and addressed by
+  `/dev/disk/by-id` then mounted by its `data` label. Ignition never partitions
+  or formats it.
+- **The password comes from `/etc/devbox/secrets.env` at first boot.** No shipped
+  file may define `OPENCODE_PASSWORD` by any route, because Ignition ships as the
+  install media's config and stays readable. Only the scoped Tailscale auth key
+  rides the install media.
+- **Retention stays manual.** `oc-backup` never calls `restic forget` or
+  `restic prune`.
 
 ## Verification
 
@@ -60,18 +63,7 @@ Butane 0.29.0 binary:
 BUTANE=/path/to/butane ./tests/verify.sh
 ```
 
-CI installs that exact version, pinned by sha256, and fails the step if the skip
-line appears.
-
-Terraform checks are separate:
-
-```sh
-terraform -chdir=terraform fmt -check -recursive
-terraform -chdir=terraform validate
-```
-
-`validate` needs a real working directory. It fails in a copy, so mutate
-`main.tf` in place with a backup when testing a change to it.
+The pinned version and its sha256 are in `.github/workflows/verify.yml`.
 
 ## How the tests are written
 
@@ -81,21 +73,21 @@ terraform -chdir=terraform validate
   that it catches. A guard that has never failed has not been tested.
 - **Grep the mutation before trusting the result.** Several rounds produced
   false passes from a mutation that never landed.
-- **A rule is only as wide as its reader.** "No shipped file defines X" was true
-  of every file the parser opened and false of one included via `local:`.
+- **A rule is only as wide as its reader.** A guard that walks named keys misses
+  the same string in a drop-in. Parse the document and walk its scalars.
 
 ## Layout
 
 | Path | What lives there |
 |---|---|
-| `host/bin/` | scripts baked into the image: secret fetch, idle probe, snapshot |
+| `host/bin/` | scripts baked into the image: env writer, restic backup, tailnet join and serve |
 | `host/quadlet/` | the podman quadlet for the OpenCode container |
-| `os/butane/` | Ignition source (`ucore.bu`) and the compiled `ucore.ign` |
-| `os/` | the OS image publish script |
-| `image/` | toolbox container: Dockerfile, toolchains, smoke test, digest |
-| `terraform/` | VM, disk, network, Key Vault, ACR permissions |
-| `pipelines/` | Azure Pipelines: verify, OS image, container image |
-| `docs/` | runbook, pipeline setup, design and plans |
+| `host/tests/` | behavioural guards for those scripts and the quadlet |
+| `os/butane/` | Ignition source (`ucore.bu`), build scripts, and the compiled `ucore.ign` |
+| `image/` | toolbox container: Dockerfile, toolchains, smoke test, digest record |
+| `.github/workflows/` | verify gate and the GHCR image build |
+| `tests/` | the one verification gate and the docs/CI guards |
+| `docs/` | design, first install, and the runbook |
 
 `os/butane/ucore.ign` is a compiled artifact and must stay byte-identical to what
 `os/butane/build-placeholder.sh` produces. Never hand-edit it.
@@ -106,8 +98,12 @@ Follow the branch and commit prefixes in `STANDARDS.md`. Open a PR to `main` and
 never push to it directly. Record every landed change in `CHANGELOG.md` in the
 same commit.
 
+Track work as GitHub issues, link the PR with `Fixes #<id>`, and close the issue
+in the PR that lands the work.
+
 ## What is not verified here
 
-No `terraform apply`, container build, or pipeline run has ever executed, and no
-live boot has been tested. Do not describe anything as working until it has run
-against a real subscription. `README.md` lists the same gap; keep them in step.
+No install has run on the target laptop, no live boot has been tested, the
+container image has not been built by the workflow, and the restic restore drill
+has not been executed. Do not describe anything as working until it has run
+against real hardware. `README.md` lists the same gap; keep them in step.

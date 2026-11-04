@@ -1,13 +1,5 @@
 # SDD scratch and anything generated per-machine
 .superpowers/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/.terraform/
-terraform/tfplan
-terraform/*.tfvars
-!/terraform/*.tfvars.example
-*.tfplan
-*.plan.json
 *.ign.tmp
 # Scratch dir the artifact reproducibility check creates next to the artifact.
 os/butane/ign-repro.*
@@ -18,3 +10,5 @@ os/butane/.ucore.tmp.bu
 .scratch/
 .pr-body.md
 .commit-msg-tmp*.txt
+# Local tool cache (Butane, shellcheck) used by the verification gate.
+.tools/

@@ -1,38 +1,29 @@
 #!/usr/bin/env bash
-# Join the tailnet with a reusable, tagged auth key, then advertise the
-# OpenCode server. Runs on every boot so a rebuild rejoins without a human.
+# Join the tailnet on first boot, using the scoped auth key from Ignition.
+#
+# The key is the only secret that ever touches the install media. It is written
+# to /etc/devbox/tailscale-authkey at mode 0600 and revoked in the admin console
+# after the node appears. Revoking does not remove the node: identity lives in
+# /var/lib/tailscale.
 #
 # --ephemeral is deliberately NOT used: the node identity must be stable so
-# MagicDNS and ACLs keep working across restarts.
+# MagicDNS and the client's saved server URL keep working across restarts.
 set -euo pipefail
 
 STATE_DIR="${STATE_DIR:-/var/lib/tailscale}"
 AUTH_KEY_FILE="${AUTH_KEY_FILE:-/etc/devbox/tailscale-authkey}"
 LOGIN_SERVER="${LOGIN_SERVER:-}"
 
-# The key may arrive from Key Vault at boot instead of Ignition, which keeps it
-# out of custom_data.
-if [ ! -r "$AUTH_KEY_FILE" ] && [ -n "${TS_AUTHKEY_SECRET:-}" ]; then
-  install -d -m 0700 "$(dirname "$AUTH_KEY_FILE")"
-  # shellcheck disable=SC1090,SC1091
-  . "$(dirname "$0")/lib-imds.sh"
-  key="$(kv_secret "${VAULT_NAME:?}" "$TS_AUTHKEY_SECRET")"
-  # An empty key file is readable, so every later boot would skip Key Vault and
-  # the join would fail with a misleading error instead.
-  if [ -z "$key" ] || [ "$key" = "null" ]; then
-    echo "oc-tailnet-up: empty auth key from Key Vault" >&2
-    exit 1
-  fi
-  (umask 077; printf '%s\n' "$key" > "$AUTH_KEY_FILE")
-  chmod 0600 "$AUTH_KEY_FILE"
-fi
-
+# State present means the node already joined. Re-authenticating on every boot
+# would mint a new node whenever the old key was revoked, which is exactly what
+# revoking it after install is meant to avoid.
 if [ -f "$STATE_DIR/tailscaled.state" ]; then
   echo "oc-tailnet-up: state present, leaving tailscale as configured"
   exit 0
 fi
 
-[ -r "$AUTH_KEY_FILE" ] || { echo "oc-tailnet-up: no auth key" >&2; exit 1; }
+[ -r "$AUTH_KEY_FILE" ] || { echo "oc-tailnet-up: no auth key at $AUTH_KEY_FILE" >&2; exit 1; }
+[ -s "$AUTH_KEY_FILE" ] || { echo "oc-tailnet-up: auth key file is empty" >&2; exit 1; }
 
 args=(--auth-key "file:$AUTH_KEY_FILE" --hostname "$(hostname)" --accept-routes=false)
 [ -n "$LOGIN_SERVER" ] && args+=(--login-server "$LOGIN_SERVER")

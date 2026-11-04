@@ -13,48 +13,42 @@
     ]
   },
   "storage": {
-    "disks": [
+    "directories": [
       {
-        "device": "/dev/disk/azure/scsi1/lun0",
-        "partitions": [
-          {
-            "label": "data",
-            "number": 1
-          }
-        ],
-        "wipeTable": false
+        "path": "/etc/ucore-autorebase",
+        "mode": 493
       }
     ],
     "files": [
       {
-        "path": "/usr/local/sbin/oc-secrets",
+        "path": "/etc/hostname",
+        "contents": {
+          "compression": "",
+          "source": "data:,devbox"
+        },
+        "mode": 420
+      },
+      {
+        "path": "/etc/devbox/tailscale-authkey",
+        "contents": {
+          "compression": "",
+          "source": "data:,tskey-auth-REPLACE_ME"
+        },
+        "mode": 384
+      },
+      {
+        "path": "/usr/local/sbin/oc-env",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/3RVa2/buBL9zl9xrux70wJ+9X7YYr1IiyBxAWPbpnDSB9AtUlocRYQpUuVQct02/30xkl27WGwQwJKsOTPnMfTgP9OG43Rt/ZR8i7XmUg3wglJeIpWE65r8ZTAEpthSRK2ZtyEaFDFU+JN2eKcbl6C9wTbaRLAJmqVWDWBC3lTkExlcv1m8vry+Wty9ubi5eX+9ukKro9VrRxM1UAO8ZWIsX13doHZNV3+Cvlrc3OLizXIEDvABF9+aSLh8uYRlWM9JO0cGwe/7loHTBO9lHoZOobK5dm6HrU0lYghpHLzboaZYWWYbPI86Bt3T4MFNnhOztFMDaKSoPVvyCYW2Tno70i31Y9aRWhsaxn0IBoV1BOtRO53TRCmmhDE1AbWtSaqVGuB1gKFCqE1wKxA69XLnwSdtPUW4oA0LPUOF9R25nEaCLO813iaIYdJODZBKnbC89zbZ4HsjGI+mlPKpoXYdvk5DPmbKIyWekG8f93w17hsdDRJxQqQvjY0dKZ3EPGncA6aANXWN9wpRV54CKn1IypdGG0fpjLHwrY3Bi/Ev7MHfCxTaubXONygpErahcUZQNZjy4M1pv1B0kKwrQqHzNMK2tHkpcpRhuzc5bQNMtIWkS9c6poM4hY2c9gZg1bGy/r4LpuPQWcjIXWAyc9hiD7cOIfVGkASdU6gZ3NS12/XVIxw17EFGv3p2xmqw70d8fiK47I7Nad+5C6HAiYQ+pFLgu/ViSYNOQrO1bNedtbaqyFidyO1GaLyzm04z6ySO/cqlAN0Hz4d1MDtE0oZ73T/PPyPqVFIUXz3kn9ned/Z0+5RKy+A82jrB99yF4fXb27sXy5cLaNHN9UHt4qIGqGNo90nBmkotCxBlxeYic2x8vxrdeLFnfMRbs4wu7H9GTqsBIhUNawevq17wCS787mRacKlr6pta35JPDN1bVukN/dKyjiEnklHleCBt9lQJeUn5BnloKTK4Juesv2cZ2wRiMQTkm4qiTjRRc2TD74fR589/krB8GF6QKWG9w7+v20Om3l28fXl79/ri1eI8G34/3s2fH69PUR8ydbO4XC2ONSe383GoyefB0PhwID9kcrBwSc71DI1lOV3Pby6fzH6fjbqPJ2qCbPjI2OhltbLhLHs8dXY9tpXhCZeZUk2leYPZ06dKuF4tV+e/FBwEyB5nan/wYmwwrjB7OpvtX7harjKlWu0akupNe9drgWx4JJshG55Q6gALfMT4G7JhV5vhE378wMfj/Tky3ziX4dMf4qVXAOVlQHaUew6q6rRDiOjO9m635JtRHzB5kEIfkwzP/vd/wfhqE56owiqVqlpGrjaJqvrg/dVy9TAVHycfuj+ZNUVd4yxWGBfIhqmqszMsPixvVR2tTwXO/vGDd/5f/sufHck829epqt1fneqr8rIKBrPffqraP/47AAD///ye+hixBwAA"
+          "source": "data:;base64,H4sIAAAAAAAC/3RU7W7bRhD8f08xpZQqNkzJKZAasOoAhSMDBorKsF2kQBQEa3IlHkre0bdLyYbjdy+OpCwlbv/xlvsxM7dzg58mjYTJnXUTdmvckRRmgE/BKkMLxrxmd+5zBru1Dd5V7BRLWzKWwVdtiq85kPqQVuRoxTmEs8AqbdrYDMwAtwWjJpGNDzkcrzmgtGsWWIeV1aO2j61oxUfwoT1drpxV6x0y75Z2NcalwooZYBOsKjuox4Q1m+S8vvMPk37ouGXxiIJcDloqByxtEMWd93qEGNXCChpn+34tBVc+oiYtXlgFhnXq27+Zd0rWcejIXJAtkZVeOD8FOdCdRFF8AFe1Pu6Iivpa2g5x2nY4476hvGQ1A1zzfWMDy9kO1BGkmyocok6dWqIUVF5alywyNsKKlBuP2ta8JFsaczM7v57d3ny9uPxjdpYMn/bPp+n/6PWcmPlfty812+8+39fsMp/zpMs0cdDbAzyBs8Ij8VnKbn2K4bsEH37+ZQp+sIp3Uzwb8xlpQDLcB5HgC759Q2yCJCPnvCIw5fg+y5gBrigII1C8DWhBDuKbkPFpL89uyWAFOSl1ErdZ1q2w8U2Zgx84a5Tj5hSkrZpWt3cq43Y3SxIFidhVt+Ab6+QIJJBHUa7ykWC22/8LW8Z2uWcZmzWVDZ8lidkUEcnlxc1ZRyiNO+44sv2M1CEZxmOCL1Pk3gAZCb8ErTMAML+a/Xk+/zj7evX7zc2n+fXHs8MD9BOGTzF18DrlOcF0agAWykzuHeO3H0WPcs4dQ5oQfOPyqE5NNsAvcd94jU4U+DoajsroSnLR8b2Fe6gtkB7rIjlcJHvY2o/BInlOpj8E38Rgh3AxOlyMXheN/qto1BW1pEwvYA9gb4NeqYHWRtEZL3607tVyWSdKZYk0R1rh+OT9eyTDt7kNjqrIdGuB5CAxpqlI/sHxyYnRqt43yPNYq3o8HCZGA9UYhQrpEslQqzoZYfb35a2pg3W6xOj1rb2RhRvtOH3o60xWVD7H8a/Hx9vIANUageuSMu6eE6WwYgWpr2xGZfnYPhrU7t3uyWAWEAoql+n2zeyus1rvcO6T7WikHXLzvb03wStjL/ffAAAA///JzmrfOQYAAA=="
         },
         "mode": 493
       },
       {
-        "path": "/usr/local/sbin/oc-acr-login",
+        "path": "/usr/local/sbin/oc-backup",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/3RTbU/zNhT97l9xdxtWKs1JQBNoncqEEJqmiXVqy8QECLnObWOa2MF2eGv73x85TZ6nSOAP8dvx8T3HJ72fktrZZK50QvoZ5sLlrAeXrzIXekngc4L/rvoOSqHFkjJQGWmv/BssjAWh4fxiApYWllwO3qxIg9AZvFjlifUgIS8TabQXSpN1iah9Hj86o2P4m6hyDX+gEFmpNAgpTa09ZMqJeUFZzBx54FQbqFRFC6EKdn4xefjn/OpyhNG6Gw//6EagHFh6qpWlbItsfD0LuPH1bMi/rGWLbHL551/T2eT/fdJtLN5rS9LGyiBjPXA5FYXMSa66AkfTi6P0t/SXpjtiMWB0mCmrRUmAUYqDpFBzrsrMxS5HxupSuBWkp6dMaedFUQDPgJeQnqbpx7Pj6xkOkLHG0hFGh4HkYWdw7n3lhkmye5KStN9VGktTJgNk0lLmwhlZ2wL4wk3DHccp8Bv4dzydwR0D4DwTXvDaFqSlyQhwaYX2D/6topGQklx7HX4Bd2SflaRRtO7M234F3acbReumb8HYidmjSUx4muOE2hAGI9qIBVWVVdovoH/g+oBRIxZhA49PwC304xa5u60/QKYWcAv8HTBqtxDuYbOB2/2VEaCuiwLh/veQSc0ASOYG0EgupOWFWSo9BG0+hh3h7OfjgH1VHo7YQjHmyypUWa48ldUnj5rETfBumhakdXrWGDYcDtd40HzDFIdhst1u73RQ23nUmvfDjLRt/JNP14Y7x75r3oS/nU5+Bf6SDhDOACNfVsjK53bUlsxkXpoM0pMmpM3KtwAAAP//hFKeuzYEAAA="
-        },
-        "mode": 493
-      },
-      {
-        "path": "/usr/local/sbin/oc-idle-check",
-        "contents": {
-          "compression": "gzip",
-          "source": "data:;base64,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"
-        },
-        "mode": 493
-      },
-      {
-        "path": "/usr/local/sbin/oc-snapshot",
-        "contents": {
-          "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/2xUbW/bNhD+zl9xo621xULRcbs3oUaWOItjbFkK2wW2YUBBi2eLjUSyfHGWePrvA2W52Lx9EnEvz909z50GX/DoHV8rzVHvYC18RQawElsQYI3SgSnNgmoQvBbWVyaA2UCoEKQIAqTyDxAqEaAytfSdw6P3ymi4vgKhJRl0RofW+BymFQoLSvvohC4RNsZ17lJ4hMcKHYIAh+uoaglbgx4endHbnAzIAKYORUAPRtdPOSwwoA6pkPIgQJoyNqgDSmiEjqIGH9DCS2lKz13Ua2Me8ka+gjWWInokA5BYY1B6C2tRPkTrYeNMAwLSuA4kenQ7TNhVbIQGiaVKg+WEeAzAMBqwyuJGqJqQ6/nypw/z6wkd7vtncdE/UoMOP0XlULaULGYpaDErLhazE9fy/dVyupi/W83vf+nBTkzFxYnhBOHn++ll8qTU47tgGh+fUdRCS21cqFpK5nfXywmtQrAF5+fffJ+Pv36T91/eYBBJXq5kojg8cSNiqMY8mAfUlBAfRGMndPhSioDAInyV/ZY1mVxlt9ldtvz9FSVaNDihEndr8ydLYGy479JaSkiHk/LL6GpgG78E1sD5CNgt3PXFi+Aiwh8EgA73qd32QljFduiSCJPx6Pw7Nhqz0fmXDr2JrsRJGsdnry+z8U02vmmEFltMO5GL5+gwL02TjW9oh/kXfPwEzMGLXJQlev+ha+nFK0rIWng8UOMLzv8Phfu49qVTNq2f5/8RqeXHlmbORJsiFrOWW2d2SqLz/E6VznizCfnUNDYG5Mfr8pSQf5HyejQC9iu8e7/q+ma3QC9jqIxTzyKVL+AKhUMHw303Qks/x02NTifCVk8WCxDW1qrscvhHbzQ9cpvmbflwnxQ75Xj8ho2+ZaPzHrQTEn5gwAxwiTuuY13D27c/3t+QfUKrzaECLeAfC9jSs+S0zlh0QaGnBaRwAFqmm1ZGX4sgkrW34L09wkyNfaJnQA+ELnpi5/JQoj+xlkJ7dkBUunSdXqKmBaQlIgAtaUlqktRmu0UHLIAp2edfWl9UQs8CJX8HAAD//2EWsk8YBQAA"
+          "source": "data:;base64,H4sIAAAAAAAC/2RUYW/bNhD9zl/xJmtLE1S2nDhe6izZ0jQdDGzYkBjYgLZwKPJkEZZJgaScBE3++0AqSp3uk0Ty7h7v3nsc/DBqnR0VSo9Ib1FwV7EB3nOxRtvAVwTJPYdUbg1v4oYpy6ww97DkvBKw1BinvLEP0HxDEkrDkbDk3ZD0dsgGbIBFRSi4WLcNbKtdiOFolNYk+zrCaM+VJgvX4VTGeWgi6aDNcxQboOFizVcErmUM25J1ymgIrrXxkFaVHgX5OyIdwYYYObuFctiYVvuIyGVmdP0wYwPw/mKbNuJtyeLOKk99v3EAyocCwjQPSq+6nq7Jk/YBOpTmuuX1EItKOThhVdPXEryuHW5LY1fkb2Esbhvbarp9i4IEbx2xASTV5JVeRcA7a/QKTvPGVSbiKmsp9lnUXeOSHNktOXBU7YZrSBIqjGHIHHlk1Bo0qqGSq5qx66ubxfxyOf/z4versyT9urueZdKINdmhMqNuxs+f31zFD4+ns4koJ3w6pvLdzyfTciLp+IjeSToRJ+WxyCd5eXR0cpRTkfNxXpRHcjqeTMY50WEpiun4MH9K2M3V5fXV4mb5cf5HxN9dz7IReTGStC3M/WhHOE8J+3CxuFh+mF+HnP5/lgU2nxLGQm9v9vEVJCqDxIisI3KGdJzg/KfDU9C98hif4omxT8gsknQXOsEXPD4i1EHyLJ8gDbyOCqkSSdrf4FWaNr1BLIloAu7xLZSxAf7mziGorZMrt4oXNble91Hhw+iQ5+5RqkBz7QwqU0sX8/5qSF8aSdEBzt0ZK99GKbzo95uBKh4tU7ROaXIuNhXEpfyQkd4uQ/2zJH2zWXvaNPsJ85Y32LMbZCWStA9J9nD173zBRLUxEvk0z3cP2V0Vrjn/eHPWTS2zqJWmMJtPyDSSNCwTfDmFNAwQ3NHLptIMAJ6VePB48c/N8uDx/eHyYB+NVdqX2PvRfdZ7Lxnn57voOD1lADkumDSa8Mv33AbW3KuM16z1r44lGVzM6/gofVeDWXGWs8bIYDHbamSZ3eAzA7KM9DaLRO1idEdbU7ebcPCi2qfZKMhkZk0fE1638F4iSd/0//vdYZLuGjTp+Y0VkGWer9DZJTRkxVn6K2P/467jNOsYjD5IUisS9l8AAAD//9qICtjxBQAA"
         },
         "mode": 493
       },
@@ -62,7 +56,7 @@
         "path": "/usr/local/sbin/oc-tailnet",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/4RUwY7iRhC9+ysq4xzHNpuskgzZ2QuXXW0UULByRW13QZfwdlld1TAk2n+Pug2EYRTlgpCq6vV7r165/K6JEpqOfIP+AJ0RV5Swit1A4kAdwnJEv2CLIBgOGMB4Cwvu9yMpsM8tamjwqHAkdRDQDND+toYeg0pdlEWZG6Q3wxkExsAvhAJOdZR503xwLPqx/nAG+lir1AlQGQbmsTP9/hGEwSOpw5AQHULPXg15DDByUPAcrsRIAF9GFrQJIzX/+TsqcMj/ySsGj1pf+osyTXQcvb19E7oTGA+fd56U2IMNPFbkk+x+GqyF+z3qr0BbUGf00jIBYvJrYNFHUEeSZZ9gjzgKHDnsye+gi5o5TUBAKjhs03BA0zvTDQhmZ8g/FiUcHfUu1Y7pqeRZoygq+XdzprS5sK/FAb6QqCRNY8ADep320aalHRk+te1qDQOJoscg4BEtWBIl32t2VeZvlhdwGwUFDAj27G1RQkfeJlfMtAkzBDT2BOQhCtaFoEKFkWGkEbeGhqKYw8P3fy8Xm3ax2qyWf7Tz5/ezp5++PVwLmdql9P7HS2WxXHxZfW5v5p5mT7P76u3wL9N0UUJVdTv4avYol/hsaQcSw4GyrI5ZJef7X8kBRU3O8b0NGa2qcoSf7zl/e4CHVJk3zbsffq5n9ax+N38leKJ0k9dk52iCUbwuBIJJcU/Jyt4adZeTu14lB9pN6eiwN1EwRQj46MGIYNITzowtbAN/zdOBWbPQI8fBQs/DQBb/X+Nbf/9D6P2aJrVfEMf8/nr9aVITJSdcmWtor4+nsonq0Cv1RlHSIZ6/DemybCroKX8SkkGYRXrOQxzoL7SbPZ5y7lOaA3VRk1VgoiV9rVOhqkTcs4aIxRsHRI1GKf4JAAD//6O9XRsnBQAA"
+          "source": "data:;base64,H4sIAAAAAAAC/2SSQW/bPgzF7/oU/Mf/42y3W7FhQdtLLh0woMHinQvZZioiniiQVLps6Hcf5DQd0l1F8fH3Hln912aVtqfYYtxD7zW4Cta5n0gDWEC4TxhXPCIoyh4FOM7P5mmKaPBEFsCDoJ+g+7qBAcVoS4M3bFzlqvmjDn56EYAk/JNQIZglXbbtdWC12+b6RfC2MW2KsDFMzKn3w+4dKJehroKBo3mKKJBYDEghYqHqOcex9PgIFA1l6wdsoAuk5VMh5jgdYPTmIXkLy4IWUHDWYKB4lJhltyxPXkbwcSy1VOIYYCI1jChHXysedokMNFDSYwx5YEHo88wl+Mp08gH9ofB9eYxkxBFG4VRTLGNcVXpGnKhH8YbTASLbcbIGHKGgNvBdEbrXQDebu4IKHjTgNDVO0aDGzJAo4dbT5NwSFv//vl89dKv1w/r+W7e8ubr4/PF58Vq467r15lS6+vC8cK6Cuu4f4Yff4TG6geOWHkGz7GmPszU2neP5u15BNS+mjXu78lmtrueN37yd+ryARaks2/by/afmorloLpdnyEekc9s+W8Bo851pyfV0jzSWZzucbkYQvCBEdtXcxEK/cHzY4UHLakZSE+qzIZQg80h2zm9Q16rhxiSj+8eZmres7k8AAAD//32GQUZGAwAA"
         },
         "mode": 493
       },
@@ -70,17 +64,9 @@
         "path": "/usr/local/sbin/oc-tailnet-up",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/3RUX28itxd996c4a/hlE/1iYPvQqERsi7K0TTebSIGNVKURMuM7jIvHHtkesjThu1ceICHJ9gk8tu899/xx6123Dr4707ZLdomZDAVr4Q+nLWJBiFIbSxH3OhaQ8FQHOTN0jCjnc1KQdSywoNVxOm0h1ZJ81IHSkrVwVZE9c4oQyC/Jd3Bd2wBnQUvyK8yciwiuKTyrtVHw9LfTNjT9XB0hUdSltB3WYi0IQVVBJXlpoAMUGT0jLyOZFS6vJqgDqX4D26aeWpGNOq5Q1iFiRggxYUdwrIUvcq6zT5djSKswPLsIWBBVuHd+oe0cMvMuBHgKUfoYOixQhKDaodIV5VIbxsaT4WQ0/XR+PeDth6dFX3SX0neNnnUTeSGThtacDb9Ofp9+Hv05/fX8YpQuvPjQF12KWVfRcua+Pd8Tid4FrdacXVz9dn45HY+ub0ZNv/11X6w5Yy1MCkpaoJQrSO/1kpB7V+IzrXAjaxMh44ZzbUMkqeBynM+tjtrZY9wXOisaGgJ0ZC0kAVyOrA7RlVMlo+wwneMW7yA8ePvFCBx3ODjALYQFbz9MxtO0nXbHo7Pr0SSBxN1p4xOGBoE0BkJBlOid9Hrg7UOlvZUlval9xBnQQijImKygbAGlGyMOxmcfej/1jpufDwzovCzT40dJCqFLFTqhSGUWtBrw9uFiOQ2UeYoJ7c3w68Vkejn8Mur/vObg7TfwdxCGFlRWcdUQnWtDyYmepNrEIrittY2M5Ddk37vaKISFrvaVsKqpl9yaLL89lZy1C1upgyGpkh3Je+d3qnUSfUkG8Q94e0GrRP3jI253qwG4rY3ZpxugrHDgLhPbSIu66m9H2YX4lVs4Ph78sLn7TUckdnPNgMO6lGGB3snJKSqvbczx/n/hL/t+1//jW/0YkBWlU+j92Cj9cpvlmm2cJXLw9lOWnpOgOiHKSPsjfXeg5hQqT4FsPIYhuUz8PdWBDMiczfW89qSSpM1svQbB7X/Y+vERD99vZ90TeQ1bp1uqTrFmTPp5GByKJsQi0cuTX/qv6wtRuBC3fj3c/T9KGzLLqIrCuzpSGOTSBDpi24TtPwDb7KWG/08djZtrKzZv7uujR4w9s1FXyf3p3u0vd2vO/g0AAP//CB5QDw4GAAA="
+          "source": "data:;base64,H4sIAAAAAAAC/5RUYU/jRhD9vr/i1Y7ooeKE9kM/BFH1pEvbtJSTIFepQghNvON4y3rX2h07RFz+e7UOIRxUle5bHM978+bNG+ffTLoYJkvjJux6LCnWKsfv3jhIzRAy1rHAO1QmRMHSezlBF41bDQWx9C1rUCc17nmDKvgG85UzYrwbq1zlWNQ8vDJxQHhnN4hcBhZITQLuOUB8V9a8qzAuClmLhrWhMeaSoOtgRNipHOIxYSknmvulf5gkibEky0USkRqRoPGacfrj6SnIaQTu/T1rPA1FujEOpXfRW1Y5qJKkoGa4BKO2ZQpxjKsES4NqzxHOCwI3vufn0imMZidGNrCm5wiT9E16ChNrlgdlOx+KgtuaGw5k00CarVlyIGG7weXHBbrIenqQ8UzddMl3RhRaWkb0KseftDLlh8vrYbwEKa1hJ99GROpZI3JIrn66usA9c4u1D8MkVAYfIwJHoSBxrCILCu48WtNyRcYqdb14v5jdfZhfnWejx+eHafF2rm2m3n9a/Hb3x+zvu1/mF7ME+OKPafG/m9pm6uLjr/PLu+vZ1V+zod/L52mxzZTKcS0kjDZwZCdomFx8sS0bmPQG/3jjWKelDezJu5IkzezdELHNkF2VY+07q9EYJyA4Xu941jW7XRJTRq0eIrumuA/PCda1Keu0OX6gUuwG65oSX9jHxMhTlPYBNnFQKymy1Hujx8pUuEFRIRs9O3vwRY9jGjXD7VmS4RTAZe2R+bJ4usSia6eILw05gWXqh3vc84BiindlVl1gnSWaByM4VZVR6gZFQDb6Yk8ZbvH5Mx7/u53zh/smwWvoT0c/nO0afH+GbeKPX8d/+HgYy4PBTSubN8SKwiqevyuG/RapPkuA6etWRVH7KI4aRjZ6t/99nF5QWXIrRfCdcDyvyEY+ToIdstHL5CW9R0dIDb9LHa1fGVc8HdWr0mOlDsZ3LbLRY8Ld/Hy7zdS/AQAA//9iDinpXwUAAA=="
         },
         "mode": 493
-      },
-      {
-        "path": "/usr/local/sbin/lib-imds.sh",
-        "contents": {
-          "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/1yRX2/TMBTF3/0pjrxAN4nETTT+VYr4oyGxh22I8YhUGfeWmCZOsK8rsbTfHSVpB92Lr/1wzzm/4zOEiuraVGQ207X8oUMlznDnCI12+ietUrsix5b/gNsNOXSaqxcILbjyRAjG244DjHauZay8XTN0pz1n4vrm6n756fbqy9317bdSVszdQqn81duseHmZHaZqiPVKs1ZHI9XqyFWhRj8phG1WYTk+zi/QC6Buja7hKbTRGypl0ueLdFAPC6Wm2A05zvRD9JSZtlF7CXJGYDhLmZx33jpeY/YszCCTo5LEDr9+Iw1fPd5Hby+kAEz0NdJ1uEfaIJ8j/YybQ+IF+0j4LgBAJv0J7v6d7my6JR9s68pinr9J50U6z58/xk56cmYvD/uTs8cs08ZQOADPxF6IzXYZyHjiE/ytjjWXMsklnG6GFgo5fZHANAfQf93hWNC4eOjGEV9I7HbwxNE75E+BixFYfohctd4+aLatW+AjaU8eST8qPzLIo0XSjyb77ImXmjiCSvoh82lHr7NL+V8NW11HGvj/BgAA//83bYyrpgIAAA=="
-        },
-        "mode": 420
       },
       {
         "path": "/usr/local/sbin/oc-paths",
@@ -94,85 +80,57 @@
         "path": "/etc/containers/systemd/opencode.container",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/4RVQW8bRw+9z68goMN3kXedL0WLqthD4jiIUSQ27MQBYhgIvUNpB54dbkjuKuqvL2ZWkt3CQC+Shhy+IR/JpwV0rFb/GNFHspoHSi17qlpOhiGRuIVbwEVSwxjJgzHUZG199GutOzXqfQ3KMLDvMf1PYUOJBI0FhNArBKvgjVvAEzCsQyQYkyeZIQ8483cNQWFAUfKACggJLUw5INgSOlRI7BZw/pPaG0OxJWDykGgiAc0GBUw760LaVO7uSwp2796RthIGC5yay4HSGXsCTxM8VfsVk2mTyLYsjyecYkhUGcqGzL1ZG8nLPuD2RKkVMq2UZAotuQXMAcAp7oDFkyhYN5egFXwN1vFocE0/xiCkzRIQ1hgyzX/SDm5xjAZrsrYDlgx3dg2RNyGBWogRItkM+MRpqRy2wTpIDAOqbln8TA3DMMboFtAKeUoWMOoyNy0Y5JwpU1oIK/czcPCRYINGB2KJciuUVAMnsNyBQdiotQreY4jQRs4dC0mN0K/yq3telvl3Zi4y+sodq36BOXd3dqjo3l30uKEGW/E0PfDPIWJLHUdPUuFfo1ArVeB6dq4GYe+OwZ+wp+Yw0u5qfIhBuysWa179/7fqtDqtXq1+Of391/LhztMUhFNPyd6HSE0ZykN0TWl6fqP5cPnxvKk77im/7W45jj01tcpUCw2sq6Nvf/7mFnCzJ+7d20LxJvIDRjDmmDtnBDGPeGa2I/BoCD7oY+4Rwu1HEHoYQ/TwSDSoW+RbfQWfSmvygvTkYSqJrMA6NIiYvB7wLm8KWvWPXI/1aYdCz5KuIrcYZ/Px1urby8Etp3XYPI+eLf8ZWKp+4dVsfh78ZjT+Mng0aoQ2QU12zi3g+6w3gKPxyVj83+d1KxRlUmgLIU8QhPW/diW3JctERxit2y3dIhNtXdAsPdvMX4+PtN/ZAg4DWgeKawJB60gyzQl4sNAHtdBW8Lm80Q+sWQGKxhVIoTK5Hjr0wIn+AC88DHnbgsGWx5hdE4FQz1NW2pzAZkTBZESV+1DSPOt9U48q9UzUQ0hHmuDkZCLJ87W/e5GMZMLYvD7Vvelz6IlHa14dLddkEkib1/tzEdMrksC+xLm7m3kr7901FXlpMG5xlz37v4X7oprk3+4aT+usWgfF/DsAAP//4ofBXl4GAAA="
+          "source": "data:;base64,H4sIAAAAAAAC/4RUQW/bSA+9z68goMN3caTk62IXa0CHNHXRANsmSLZboEGwZTS0RXg0VIeUXP/7xUi2ky0C7MWWOOQT35tHFtCKWvV9QB/IKukpNuKpbCQacqTkClfAdVTDEMiDCVRkTXU610r3atT5ClSgF99h/J/ChiIlNEmQCL0CWwmXroBnYFhzIBiipzRDHnHm/wpYocek5AEVECIaj7mAbQEtKkRxBax+UHNvmGwBGD1EGimB5oACxr21HDele/gc2R7dO9ImcW8ssb7pKV6JJ/A0wjPbLxhN60i2k7Q9kxg4UmmYNmTucm2UXj8Dac4ojqVSGrkhV8CcDBLDHiR5SgrWzu1rCV/YWhkM7uj7wIm0XgDCGjlLTHGEXWIjUOMQIJCpK6bqZ/EmirBjayEK9Ki6k+QX+Q7YILdBWaGJ/6RMENkqtITB2r0rYJ2kmzBlMGVPJbxHDtAEyYpzVCP0ywyu1CQyXeTnzDwI+tKdOv+JuXu4Ojb56K473FC9aZtUslR3q9s/Lq9Wf39cVZ7GJ/mx7JN4d8r/hB3VRwe62+EpsLa3kqy++P9v5Xl5Xl4sfzn//dfpx63iyEliR9Hec6B68tCxuqI4vsyoP9x8XNVVKx3lb7u/JAwd1ZWmsUrUiy5PZ4f3r66Ae1JlifDu7SThJsgTBjCRkPU3gpAdKXHS0aMheNZtvgOMcHMPiXgeHFfAlqifLNCV8GlyabZ0Rx7GqZclWIsGAaPXI+TN/QRY/qvdE0VtMdGLvssgDYY5fMpafn29uJG45s3L6jnyn4UT8Ve+msMviy8Hk8+9R6M60YbV0t65Ar7NGwJwMDkbpvNv85DMAiFE2gFn3wCvfzJ9vpk82AcXL1yRtbaWNS+LXdavwy0dJm0Chx6tBcU1QUJrKWWZI0hv3LEaN6X7MKFddb6uBk3VzOeJ44kNnJ2NlLITDrnX0SiNGOo353oI/ckdyWD1xSlyR5aYtH5zeJ+21C0lFj/VuYf7eWQe3R1N41xj2OE+nxz27eO0jsi/3dee1jgEO66ifwIAAP//38bNPLcFAAA="
         },
         "mode": 420
       },
       {
-        "path": "/etc/devbox/oc-secrets.env",
+        "path": "/etc/systemd/logind.conf.d/10-devbox.conf",
         "contents": {
           "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/0yPUW8aMRCE3+9XjHKvAX4BDyiiatW0lZKjVZ+QsRe8xfFevGvg/n3lo6ryujOz883Pze552H/ffNuuz5dFoMtBbosxOU9RUqDSbZ5e7rLz5S5/VHsMkSCZoJHHkQICHTmzsWTIEddIhWCRMDrVq5SAk5Au59h7dSGRIYkL2vWwyAp1b81s8REq92SRUD0VuBzmg5es9Y0KcvOygfOMMIN1PTirkQut350KEecTDhO8cPYcKHuaJagvPFojdjXZEhucqisBRmpdj0LvlQsp6Oa8pWnu+DDP+SKqoAuV6f/8IyeaQWtmW3Y/dsP+05fn7XpF5lcyUvYSaEX50vX4xRal2n13G2aOUybDH+GM6BRZcKYJKrU06AyHYyGNOMjtsdV0PcQv/uUWdcTRcVJc2SIessBVi+3Fw7IbXveb3fD56/b3/nX79LId1i2m3iVaNNuZpu5vAAAA//8Vlt95DgIAAA=="
+          "source": "data:;base64,H4sIAAAAAAAC/4r2yU/PzIvl8kjMS8lJ9clMCS7PLEnOsM1Mz8svSkUXdq0oSS3KS8wJyC9PLcKhxiU/OTs1BSbpmZKT6phckpmfBxMBBAAA//8S5piocgAAAA=="
         },
-        "mode": 384
-      },
-      {
-        "path": "/etc/devbox/oc-idle.env",
-        "contents": {
-          "compression": "",
-          "source": "data:,IDLE_MIN%3D45%0ABOOT_GRACE%3D900%0A"
-        },
-        "mode": 384
-      },
-      {
-        "path": "/etc/devbox/oc-snapshot.env",
-        "contents": {
-          "compression": "",
-          "source": "data:,DISK_ID%3Ddc-placeholder%0ARG%3Drg-devbox-placeholder%0ASUBSCRIPTION_ID%3D00000000-0000-0000-0000-000000000000%0A"
-        },
-        "mode": 384
-      }
-    ],
-    "filesystems": [
-      {
-        "device": "/dev/disk/by-partlabel/data",
-        "format": "ext4",
-        "label": "data",
-        "wipeFilesystem": false
+        "mode": 420
       }
     ]
   },
   "systemd": {
     "units": [
       {
-        "contents": "[Unit]\nDescription=Devbox data disk\n[Mount]\nWhat=/dev/disk/by-label/data\nWhere=/srv\nType=ext4\nOptions=defaults,noatime,nofail\n[Install]\nWantedBy=local-fs.target\n",
+        "contents": "[Unit]\nDescription=Rebase Fedora CoreOS to ucore-minimal and reboot\nConditionPathExists=!/etc/ucore-autorebase/done\nAfter=network-online.target\nWants=network-online.target\n[Service]\nType=oneshot\nStandardOutput=journal+console\nExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-unverified-registry:ghcr.io/ublue-os/ucore-minimal:stable\nExecStart=/usr/bin/touch /etc/ucore-autorebase/done\nExecStart=/usr/bin/systemctl disable ucore-autorebase.service\nExecStart=/usr/bin/systemctl reboot\n[Install]\nWantedBy=multi-user.target\n",
+        "enabled": true,
+        "name": "ucore-autorebase.service"
+      },
+      {
+        "contents": "[Unit]\nDescription=Devbox data disk\n[Mount]\nWhat=/dev/disk/by-label/data\nWhere=/srv\nType=ext4\nOptions=defaults,noatime,nofail,x-systemd.device-timeout=30s\n[Install]\nWantedBy=local-fs.target\n",
         "enabled": true,
         "name": "srv.mount"
       },
       {
-        "contents": "[Unit]\nDescription=Write OpenCode env and ACR auth from Key Vault\nAfter=network-online.target srv.mount\nWants=network-online.target\n[Service]\nType=oneshot\nRemainAfterExit=yes\nEnvironmentFile=/etc/devbox/oc-secrets.env\nExecStart=/usr/local/sbin/oc-secrets\nExecStart=/usr/local/sbin/oc-acr-login\n[Install]\nWantedBy=multi-user.target\n",
-        "enabled": true,
-        "name": "oc-secrets.service"
-      },
-      {
-        "contents": "[Unit]\nDescription=Create persistent directory layout on the data disk\nAfter=srv.mount\nRequires=srv.mount\nBefore=opencode.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-paths\n[Install]\nWantedBy=multi-user.target\n",
+        "contents": "[Unit]\nDescription=Create the persistent directory layout on the data disk\nAfter=srv.mount\nRequires=srv.mount\nBefore=opencode.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-paths\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "oc-paths.service"
       },
       {
-        "contents": "[Unit]\nDescription=Probe for idleness\nAfter=opencode.service\n[Service]\nType=oneshot\n# oc-secrets.env carries OUT_FILE, which is where the password file is. The\n# idle env file only carries the tuning knobs, so a path change touches one\n# file and both the writer and this probe follow it.\nEnvironmentFile=/etc/devbox/oc-secrets.env\nEnvironmentFile=/etc/devbox/oc-idle.env\nExecStart=/usr/local/sbin/oc-idle-check\n",
-        "name": "oc-idle.service"
-      },
-      {
-        "contents": "[Unit]\nDescription=Check idleness every 5 minutes\n[Timer]\nOnBootSec=20min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n",
+        "contents": "[Unit]\nDescription=Write the OpenCode environment file from secrets.env\nAfter=srv.mount\nRequires=srv.mount\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-env\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
-        "name": "oc-idle.timer"
+        "name": "oc-env.service"
       },
       {
-        "contents": "[Unit]\nDescription=Snapshot the data disk\nAfter=srv.mount\n[Service]\nType=oneshot\nEnvironmentFile=/etc/devbox/oc-snapshot.env\nExecStart=/usr/local/sbin/oc-snapshot\n",
-        "name": "oc-snapshot.service"
+        "contents": "[Unit]\nDescription=Back up the data disk with restic\nAfter=srv.mount network-online.target\nWants=network-online.target\nRequires=srv.mount\n[Service]\nType=oneshot\nNice=10\nIOSchedulingClass=idle\nExecStart=/usr/local/sbin/oc-backup\n",
+        "name": "oc-backup.service"
       },
       {
-        "contents": "[Unit]\nDescription=Nightly data disk snapshot\n[Timer]\nOnCalendar=*-*-* 02:00:00 UTC\nPersistent=true\n[Install]\nWantedBy=timers.target\n",
+        "contents": "[Unit]\nDescription=Nightly restic backup of the data disk\n[Timer]\nOnCalendar=*-*-* 02:00:00\nPersistent=true\nRandomizedDelaySec=30min\n[Install]\nWantedBy=timers.target\n",
         "enabled": true,
-        "name": "oc-snapshot.timer"
+        "name": "oc-backup.timer"
       },
       {
         "enabled": true,
         "name": "tailscaled.service"
       },
       {
-        "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\nAfter=network-online.target oc-secrets.service tailscaled.service\nWants=network-online.target tailscaled.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\n# A unit does not inherit another unit's EnvironmentFile. Without this the\n# join runs with TS_AUTHKEY_SECRET and VAULT_NAME unset, skips Key Vault\n# entirely, and fails with \"no auth key\" on every fresh boot.\nEnvironmentFile=/etc/devbox/oc-secrets.env\n# Joins only when no state exists, then advertises the loopback port.\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",
+        "contents": "[Unit]\nDescription=Join the tailnet and serve OpenCode over TLS\n# The first boot is Fedora CoreOS, which has no tailscale binary. Skip\n# there instead of failing loudly, then run on the ucore boot.\nConditionPathExists=/usr/bin/tailscale\nAfter=network-online.target tailscaled.service\nWants=network-online.target tailscaled.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-tailnet-up\nExecStart=/usr/local/sbin/oc-tailnet\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "oc-tailnet.service"
       },
@@ -186,9 +144,29 @@
         "name": "cockpit.socket"
       },
       {
+        "mask": true,
+        "name": "sleep.target"
+      },
+      {
+        "mask": true,
+        "name": "suspend.target"
+      },
+      {
+        "mask": true,
+        "name": "hibernate.target"
+      },
+      {
+        "mask": true,
+        "name": "hybrid-sleep.target"
+      },
+      {
+        "mask": true,
+        "name": "suspend-then-hibernate.target"
+      },
+      {
         "dropins": [
           {
-            "contents": "[Unit]\nAfter=oc-secrets.service\n",
+            "contents": "[Unit]\nAfter=oc-env.service\n",
             "name": "10-devbox.conf"
           }
         ],
