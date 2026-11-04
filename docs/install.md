@@ -1,4 +1,4 @@
-# Install the devbox on the HP laptop
+# Install the devbox on the HP EliteDesk Mini
 
 This is the first install path. It assumes physical access, a wired network, and
 two disks. Read `docs/design.md` first; the decisions there explain why the steps
@@ -16,16 +16,20 @@ provision the runtime secrets over Tailscale.
    - Set **Power On After Power Failure** to **On**. The exact label varies by
      model; look for "AC Power Recovery" or "After Power Loss".
    - Disable **Wake on LAN** unless you plan to use it. The box is always on.
-   - Set the **lid close** action to **Do nothing** if the firmware has one.
-     Linux masks suspend as well, so this is belt and braces.
-   - Enable **Intel AMT/vPro** if the model supports it and the server-room
+   - Enable **Intel vPro/AMT** if the SKU has it and the wired server-room
      network allows it. This is the out-of-band console when the tailnet is down.
    - Note the Secure Boot state. The ucore install path needs Secure Boot off
      until the ucore signing key is enrolled. The enrollment guide is at
      `https://projectucore.org/docs/secure-boot/`. Enroll it after the install if
      the server-room policy requires Secure Boot.
-3. Connect wired Ethernet and AC power.
-4. Identify the two disks. Do not guess.
+3. Fit the two disks. The OS goes on an M.2 NVMe SSD. The data disk is the second
+   M.2 NVMe on the 800 G4, or a 2.5 inch SATA SSD in a caddy on either model.
+   Confirm the caddy and the screws came with the chassis before relying on the
+   SATA bay.
+4. Connect wired Ethernet, the 65W adapter, and the UPS. The Mini has no internal
+   power source, so the UPS is the only thing between a power cut and an unclean
+   shutdown.
+5. Identify the two disks. Do not guess.
 
 ```sh
 lsblk -o NAME,SIZE,MODEL,SERIAL
@@ -82,7 +86,7 @@ balenaEtcher, or the writer you normally use. Confirm the USB device with
 
 ## 4. Install
 
-1. Boot the laptop from the USB stick.
+1. Boot the Mini from the USB stick.
 2. At the live prompt, copy `os/butane/ucore.ign` onto the live system. A second
    USB stick is the easiest route.
 3. Confirm the target OS disk one more time with `lsblk`.
@@ -263,9 +267,13 @@ pairing link is single-use and expires in five minutes. The TUI uses
 - Confirm `systemctl is-enabled tailscaled` says `enabled`.
 - Confirm `systemctl list-timers oc-backup.timer` shows the next run.
 - Confirm `systemctl is-enabled suspend.target` says `masked`.
-- Confirm `systemctl show -p HandleLidSwitch` says `HandleLidSwitch=ignore`.
-- Confirm the lid closes without suspending: close it for a minute and check that
+- Confirm `systemctl show -p IdleAction` says `IdleAction=ignore`.
+- Confirm the box stays up while idle: leave it idle for an hour and check that
   `tailscale ping devbox` still answers.
+- Confirm the cooling: `sensors` reports a stable idle temperature and the fan
+  spins up under load.
+- Confirm the UPS: pull AC power for a minute and check that `uptime` keeps
+  climbing, then restore AC power.
 - Run the restore drill in `docs/runbook.md` before trusting the backup.
 - Record the installed ucore digest and the container digest in the change that
   lands the install.

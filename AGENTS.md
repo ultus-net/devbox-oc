@@ -8,10 +8,11 @@ two disagree.
 
 ## What this repo is
 
-One always-on HP laptop, two disks, two images. The host is ucore-minimal, a
-Fedora CoreOS derived image consumed from upstream. The toolchain runs in a
-Fedora toolbox container under podman. OpenCode is reached over a private tailnet
-with no public listener. The data disk is `/srv`, separate from the OS disk.
+One always-on HP EliteDesk G4 35W Desktop Mini, two disks, two images. The host
+is ucore-minimal, a Fedora CoreOS derived image consumed from upstream. The
+toolchain runs in a Fedora toolbox container under podman. OpenCode is reached
+over a private tailnet with no public listener. The data disk is `/srv`, separate
+from the OS disk.
 
 This repo is the source of truth for the host configuration and the container
 image. It ships no cloud infrastructure.
@@ -33,7 +34,8 @@ preference.
   `host/tests/test_cockpit_loopback.sh` and `host/tests/test_no_lan_listener.sh`
   guard both. The OpenCode port is published as `127.0.0.1:4096:4096`.
 - **Always on. No scheduled stop and no idle deallocation.** Sleep targets are
-  masked and logind ignores the lid. `host/tests/test_nosleep.sh` guards this.
+  masked and logind sets `IdleAction=ignore`. `host/tests/test_nosleep.sh` guards
+  this.
 - **The data disk is a separate physical device.** Reinstalling the OS must never
   destroy `/srv`. It is prepared once from the live media and addressed by
   `/dev/disk/by-id` then mounted by its `data` label. Ignition never partitions
@@ -104,7 +106,7 @@ in the PR that lands the work.
 
 ## What is not verified here
 
-No install has run on the target laptop, no live boot has been tested, the
+No install has run on the target Mini, no live boot has been tested, the
 container image has not been built by the workflow, the restic restore drill has
 not been executed, and the ucore rebase path is unexercised on this hardware. Do
 not describe anything as working until it has run against real hardware.

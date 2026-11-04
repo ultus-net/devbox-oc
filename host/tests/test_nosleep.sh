@@ -2,8 +2,8 @@
 # host/tests/test_nosleep.sh
 #
 # This box is always on and lives in a server room. A sleep target that is not
-# masked, or a logind policy that honours a closed lid, takes it off the tailnet
-# with no way back except a physical visit.
+# masked, or a logind policy that acts on idle, takes it off the tailnet with no
+# way back except a physical visit.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 bu="${1:-$here/../../os/butane/ucore.bu}"
@@ -43,13 +43,11 @@ logind = [
     if (entry.get("path") or "").startswith("/etc/systemd/logind.conf.d/")
 ]
 if not logind:
-    raise SystemExit("FAIL: no logind drop-in, so a closed lid suspends the box")
+    raise SystemExit("FAIL: no logind drop-in, so an idle policy can suspend the box")
 
 body = "\n".join(logind)
-for directive in ("HandleLidSwitch=ignore", "HandleLidSwitchExternalPower=ignore",
-                  "IdleAction=ignore"):
-    if directive not in body:
-        raise SystemExit(f"FAIL: logind drop-in does not set {directive}")
+if "IdleAction=ignore" not in body:
+    raise SystemExit("FAIL: logind drop-in does not set IdleAction=ignore")
 PY
 
-echo "sleep is masked and a closed lid is ignored"
+echo "sleep is masked and idle suspend is ignored"

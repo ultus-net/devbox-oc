@@ -1,7 +1,8 @@
 # Devbox runbook
 
-Operating procedures for the always-on HP laptop. `docs/install.md` covers the
-first install; this file covers the day after, and the day something breaks.
+Operating procedures for the always-on HP EliteDesk Mini. `docs/install.md`
+covers the first install; this file covers the day after, and the day something
+breaks.
 
 The box is reached over Tailscale. There is no public IP and no inbound port
 forward. If the tailnet is down, use the physical console, Intel AMT/vPro if the
@@ -240,19 +241,22 @@ Run these monthly, and after any unexplained reboot.
 ssh core@devbox 'sensors'
 ssh core@devbox 'lsblk -o NAME,SIZE,MODEL,SERIAL'
 ssh core@devbox 'sudo smartctl -a /dev/nvme0n1 | head -40'
-ssh core@devbox 'sudo smartctl -a /dev/nvme1n1 | head -40'
-ssh core@devbox 'upower -i $(upower -e | grep BAT)'
+ssh core@devbox 'sudo smartctl -a /dev/nvme1n1 | head -40'   # data disk on the second M.2
+ssh core@devbox 'sudo smartctl -a /dev/sda | head -40'        # data disk in the SATA caddy
 ssh core@devbox 'journalctl -k -p err -b'
 ```
 
-Watch for a battery that reports swelling, a fan that never spins up, a disk that
-reallocates sectors, or thermal throttling in the journal. A laptop in a closed
-lid needs airflow; if the CPU idles above 70 C, improve the stand or open the lid.
+Run the SMART line that matches where the data disk sits. Watch for a fan that
+never spins up, a disk that reallocates sectors, or thermal throttling in the
+journal. The 35W T-series part runs cool, but a dust-clogged heatsink still
+pushes the idle temperature up; if it idles above 70 C, clean the dust and
+confirm the fan spins. Run the UPS self-test and check the cell age at the unit's
+panel. Keep a spare 65W adapter and watch the journal for brownout resets.
 
 ## Power loss
 
-The laptop battery covers a short outage. The charger covers the rest. Set the
-firmware to power on after AC loss, or the box stays off after a long outage.
+The UPS covers a short outage. The firmware powers the box back on after a long
+one. Without the UPS, the first cut is an unclean shutdown.
 
 After a power event, confirm:
 
@@ -264,8 +268,8 @@ ssh core@devbox 'sudo systemctl status srv.mount'
 ```
 
 The filesystem is ext4 on the data disk. A power loss can still leave it dirty;
-the boot repairs it. A repeated unclean shutdown is a reason to replace the
-battery or the charger, not to disable the journal.
+the boot repairs it. A repeated unclean shutdown is a reason to test the UPS and
+the 65W adapter, not to disable the journal.
 
 ## What is on the box, and what survives
 

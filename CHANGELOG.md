@@ -8,8 +8,8 @@ All notable changes to this project. One entry per landed change, newest first.
 
 - Bare-metal deployment path. Ignition for Fedora CoreOS installation media, one
   enabled rebase to `ghcr.io/ublue-os/ucore-minimal:stable`, a separate data disk
-  mounted at `/srv`, masked sleep targets, and a logind policy that ignores a
-  closed lid. `docs/install.md` is the first-install procedure.
+  mounted at `/srv`, masked sleep targets, and a logind policy that ignores idle.
+  `docs/install.md` is the first-install procedure.
 - `oc-env`, `oc-backup`, `oc-restic`, `oc-tailnet` and `oc-tailnet-up` host
   scripts. The env writer fails closed on an empty password. The backup runs
   restic in the Fedora image, mounts data read-only, refuses an unmounted `/srv`,
@@ -36,6 +36,10 @@ All notable changes to this project. One entry per landed change, newest first.
   separate data disk. Secrets now come from `/etc/devbox/secrets.env`, written by
   the operator after first boot. Backups are restic to an off-box repository, not
   a managed disk snapshot.
+- Retargeted the host from the laptop to the HP EliteDesk G4 35W Desktop Mini.
+  The build now requires a 35W T-series CPU, 16 GiB or more across two SODIMM
+  slots, the OS on one M.2 NVMe, `/srv` on a second physical device (the second
+  M.2 slot or a 2.5 inch SATA caddy), a 65W external adapter, and a UPS.
 - The data disk is prepared once from the live media and mounted by its `data`
   label. Ignition never partitions or formats it, so an OS reinstall cannot wipe
   `/srv`.
@@ -54,6 +58,9 @@ All notable changes to this project. One entry per landed change, newest first.
   `oc-snapshot`, plus the unit files and tests that drove them.
 - `docs/pipelines.md`, `docs/deployment-plan.md`,
   `docs/headless-hosting-options.md` and `docs/superpowers/`.
+- The `HandleLidSwitch*` logind policy and the lid checks in the install and
+  runbook. The Mini has no lid, so only the sleep masks and `IdleAction=ignore`
+  remain.
 - The hosted `ucore-minimal` VHD build, the managed-disk publish path, the
   Key Vault bootstrap, the ACR login, the idle deallocator and the `oc` wake
   wrapper. None of them has a purpose on a box with no control plane.
@@ -75,7 +82,7 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Known gaps
 
-- No install has run on the target laptop, and no live boot has been tested.
+- No install has run on the target Mini, and no live boot has been tested.
 - The container image has never been built by the GitHub Actions workflow.
 - The restic restore drill has not been executed against a real repository.
 - The ucore rebase path is documented upstream but unexercised on this hardware.

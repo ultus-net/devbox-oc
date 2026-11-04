@@ -1,4 +1,4 @@
-# Devbox: an always-on HP laptop running ucore and OpenCode
+# Devbox: an always-on HP EliteDesk Mini running ucore and OpenCode
 
 **Status:** approved for implementation
 **Date:** 2026-11-05
@@ -6,11 +6,11 @@
 
 ## Intent
 
-A personal AI development server that lives on a repurposed HP laptop in the
-head-office server room. It runs ucore-minimal as an immutable Fedora CoreOS
-host, runs the OpenCode server in a rootful podman container, and is reached
-only over a private tailnet. The data disk is separate from the OS disk, and a
-nightly restic backup leaves the box.
+A personal AI development server that lives on an HP EliteDesk G4 35W Desktop
+Mini in the head-office server room. It runs ucore-minimal as an immutable
+Fedora CoreOS host, runs the OpenCode server in a rootful podman container, and
+is reached only over a private tailnet. The data disk is separate from the OS
+disk, and a nightly restic backup leaves the box.
 
 The goal is unchanged: stop fighting local environment drift by making the host
 and the toolchain rebuildable artifacts. The host is now physical, always on,
@@ -22,32 +22,33 @@ The Azure design worked on paper but carried a control plane that the workload
 did not need: Terraform, Key Vault, ACR, a Logic App, a NAT Gateway, managed disk
 snapshots, Bastion, and an idle deallocator that existed only to reduce a bill.
 Every one of those is a moving part with credentials, role assignments, and
-failure modes. On a laptop in a server room, none of them earns its keep.
+failure modes. On a small desktop in a server room, none of them earns its keep.
 
 The pivot also removes the cost optimisation problem in `docs/headless-hosting-options.md`
-(the deleted document). An always-on laptop has no scale-to-zero decision, no
+(the deleted document). An always-on Mini has no scale-to-zero decision, no
 ACA job-hours calculation, and no budget that makes a 4 GiB anchor necessary.
 
 ## Hardware
 
-The host is a single HP laptop with these properties. Confirm them before an
-install; the design fails loudly when one is missing.
+The host is one HP EliteDesk G4 35W Desktop Mini with these properties. Confirm
+them before an install; the design fails loudly when one is missing.
 
 | Property | Requirement | Why |
 |---|---|---|
-| CPU | x86_64, 4 cores or more | OpenCode, a container, and subagents run locally |
-| RAM | 16 GiB or more | The measured idle server is small, but fan-out is not |
-| OS disk | One internal SSD, at least 64 GiB | ucore is installed here and may be wiped on reinstall |
-| Data disk | A second internal SSD, or a SATA SSD in a 2.5 inch bay | Sessions and repos must survive an OS reinstall |
-| Network | Wired Ethernet | A server-room box should not depend on Wi-Fi |
-| Firmware | UEFI, AC power-on after loss, lid-close ignore | A closed laptop must boot and stay awake unattended |
-| Out-of-band | Intel AMT/vPro if the model has it, otherwise physical access or a PiKVM | Tailscale is the data path, not the console |
+| CPU | i5-8500T or i5-8600T (6C/6T), or i7-8700T (6C/12T); i3-8100T/8300T is the floor | OpenCode, a container, and subagents run locally |
+| RAM | Two DDR4 SODIMM slots, 16 GiB minimum, 32 GiB preferred | The measured idle server is small, but fan-out is not |
+| OS disk | One M.2 NVMe SSD, at least 64 GiB | ucore is installed here and may be wiped on reinstall |
+| Data disk | A second physical device: the second M.2 slot on the 800 G4, or a 2.5 inch SATA SSD in a caddy on either model | Sessions and repos must survive an OS reinstall |
+| Network | Intel I219-LM 1GbE, wired only | A server-room box should not depend on Wi-Fi |
+| Power | 35W T-series CPU, 65W external adapter, an external UPS | Power must be bridged outside the chassis during an outage |
+| Firmware | UEFI, power-on after AC loss, Secure Boot off until the ucore signing key is enrolled | The box must boot and stay awake unattended |
+| Out-of-band | Intel vPro/AMT if the SKU has it and the wired network allows it, otherwise physical access or a PiKVM | Tailscale is the data path, not the console |
 
-A laptop is not the ideal 24/7 chassis. The battery is a useful built-in UPS,
-but it is also a wear item and a fire risk when it swells. Enable the
-manufacturer's charge limit if the firmware offers one, monitor the battery, and
-replace it if it deforms. A same-spec small-form-factor desktop would remove the
-lid, battery, and thermal compromises, but it would also lose the built-in UPS.
+Avoid the Pentium G5400T and G5500T: they sit below the core floor and lack
+vPro. The Mini is a fixed desktop. A UPS is mandatory because a power cut has
+nothing inside the chassis to bridge it. The 35W T-series part keeps the
+small case cool, but a failed fan or a dust-clogged heatsink still throttles or
+shuts the box down. The 65W adapter is a wear item, so keep a spare.
 
 ## Architecture
 
@@ -56,7 +57,7 @@ flowchart LR
   TUI["TUI<br/>opencode --server"] --> TN
   DESK["Desktop app<br/>pairing link"] --> TN
   TN["tailnet<br/>WireGuard plus TLS"] --> HOST
-  subgraph BOX["HP laptop, server room, always on"]
+  subgraph BOX["HP EliteDesk Mini, server room, always on"]
     HOST["tailscaled<br/>serves loopback only"]
     Q["podman quadlet<br/>opencode container"]
     ENV["oc-env.service<br/>writes /etc/opencode/env"]
@@ -105,13 +106,17 @@ design rejected and this one keeps rejected.
 5. **The data disk is a second physical device, prepared outside Ignition.**
    The OS can be reinstalled without touching `/srv`. The partition and
    filesystem are created once from the live media, and Ignition only mounts them
-   by label. If Ignition owned the disk it would re-run on a reinstall and wipe
-   the data, which is the failure this invariant exists to prevent.
+   by label. On the 800 G4 the second M.2 slot needs no caddy; on either model a
+   2.5 inch SATA SSD in a caddy works. If Ignition owned the disk it
+   would re-run on a reinstall and wipe the data, which is the failure this
+   invariant exists to prevent.
 
 6. **Always on. No idle deallocation and no scheduled stop.** The box is in a
    server room and the marginal cost is electricity. Suspend and hibernate are
-   masked, and logind ignores the lid. This replaces the Azure idle gate, the
-   Logic App wake path, and the `oc` wrapper that called `az vm start`.
+   masked, and logind sets `IdleAction=ignore`. An external UPS bridges a short
+   outage and the firmware powers the box back on after a long one. This replaces
+   the Azure idle gate, the Logic App wake path, and the `oc` wrapper that called
+   `az vm start`.
 
 7. **Secrets never enter git or the image.** The OpenCode password and the restic
    credentials live in `/etc/devbox/secrets.env`, mode 0600, provisioned by the
@@ -131,7 +136,7 @@ design rejected and this one keeps rejected.
    container if it is genuinely needed.
 
 10. **Backups are restic to an off-box repository, not a disk snapshot.** A
-    snapshot on the same laptop is not a backup. Restic gives encryption,
+    snapshot on the same box is not a backup. Restic gives encryption,
     deduplication, and version history. Retention is manual: deleting backups
     from a timer deserves a human decision.
 
@@ -170,7 +175,7 @@ in `/var/lib/tailscale`, so revoking the key does not disconnect the box.
 against `RESTIC_REPOSITORY`. Using the project image keeps the Fedora-family rule:
 the upstream restic image is Alpine. `oc-restic` passes only the `RESTIC_*`,
 `AWS_*` and `B2_*` variables, so the workload password never reaches the backup
-container. The repository is off the laptop. Backblaze B2 or any S3-compatible
+container. The repository is off the Mini. Backblaze B2 or any S3-compatible
 endpoint is acceptable, including a NAS that exposes S3; the repository URL and
 credentials are the operator's choice and live in `secrets.env`. An SFTP
 repository needs an SSH key mounted into the container, which the script does not
@@ -207,13 +212,13 @@ Tailscale SSH, which runs inside `tailscaled`.
 
 | Risk | Consequence | Mitigation |
 |---|---|---|
-| Power loss | Unclean shutdown, filesystem damage | Laptop battery acts as a UPS; set AC power-on after loss in firmware; restic backup |
-| Lid close or idle suspend | Box disappears from the tailnet | Mask sleep targets, `HandleLidSwitch=ignore`, `IdleAction=ignore` |
-| Thermal throttling or fan failure | Slow box, then shutdown | Stand or open lid for airflow, monitor `sensors`, clean dust, set a thermal shutdown policy |
-| Battery swelling | Fire risk in a server room | Charge limit, periodic inspection, remove or replace a deformed battery |
+| Power loss or UPS failure | Unclean shutdown, filesystem damage | UPS bridges a short outage; test it quarterly; set AC power-on after loss in firmware; restic backup |
+| External PSU failure | The box stops with no warning | Keep a spare 65W adapter and watch the journal for brownout resets |
+| Thermal throttling, fan failure, or dust | Slow box, then shutdown | 35W T-series keeps heat low; monitor `sensors`, clean dust, set a thermal shutdown policy |
+| No room for the second disk | The data disk cannot be fitted, so the design fails its separate-device invariant | Confirm the second M.2 slot or the 2.5 inch caddy before buying; treat the second device as mandatory |
 | Single data disk failure | Loss of uncommitted work | Off-box restic backup, push code, monitor SMART |
 | No out-of-band management | A hung box needs a physical visit | Enable AMT/vPro if present, otherwise a PiKVM or documented console access |
-| Consumer NIC or firmware bug | Tailnet or network drops after update | Prefer wired Ethernet, pin firmware updates, keep a USB Ethernet adapter as a spare |
+| NIC or firmware bug | Tailnet or network drops after update | Prefer wired Ethernet, pin firmware updates, keep a USB Ethernet adapter as a spare |
 | Theft or physical access | Disk readable | Server-room access control; LUKS is a documented optional hardening step, not the default because unattended reboot needs a TPM or key file |
 
 ## Anti-goals
@@ -228,7 +233,7 @@ Tailscale SSH, which runs inside `tailscaled`.
 
 ## What is not verified
 
-No install has run on the target laptop. The container image has not been built
+No install has run on the target Mini. The container image has not been built
 by the GitHub Actions workflow. The restic restore drill has not been executed.
 The ucore autorebase path is documented upstream but has not been exercised on
 this hardware. Treat every one of those as unproven until it runs.

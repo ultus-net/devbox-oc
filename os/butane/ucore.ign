@@ -103,8 +103,8 @@
       {
         "path": "/etc/systemd/logind.conf.d/10-devbox.conf",
         "contents": {
-          "compression": "gzip",
-          "source": "data:;base64,H4sIAAAAAAAC/4r2yU/PzIvl8kjMS8lJ9clMCS7PLEnOsM1Mz8svSkUXdq0oSS3KS8wJyC9PLcKhxiU/OTs1BSbpmZKT6phckpmfBxMBBAAA//8S5piocgAAAA=="
+          "compression": "",
+          "source": "data:,%5BLogin%5D%0AIdleAction%3Dignore%0A"
         },
         "mode": 420
       }

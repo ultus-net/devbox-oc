@@ -9,7 +9,8 @@
 #
 # The toolbox image is built for interactive dev use: it includes dnf,
 # bash, git and the usual tooling, and it is what `toolbox create` gives
-# you locally. That parity is the point: the same image runs on your laptop.
+# you locally. That parity is the point: the same image runs on your
+# workstation.
 #
 # Pin by DIGEST. The `46` tag currently resolves to content labelled
 # `org.opencontainers.image.version: rawhide`, so the tag is not a

@@ -1,10 +1,10 @@
 # devbox-oc
 
-An AI development server on a repurposed HP laptop in a server room. It runs
-ucore-minimal, a Fedora CoreOS derived image, as an immutable host, runs the
-OpenCode server in a podman container, and is reached only over a private
-tailnet. The OS disk and the data disk are separate, and a nightly restic backup
-leaves the box.
+An AI development server on an HP EliteDesk G4 35W Desktop Mini in a server
+room. It runs ucore-minimal, a Fedora CoreOS derived image, as an immutable host,
+runs the OpenCode server in a podman container, and is reached only over a
+private tailnet. The OS disk and the data disk are separate, and a nightly restic
+backup leaves the box.
 
 ## Why it exists
 
@@ -13,7 +13,7 @@ nothing. Here the environment is two images plus a data disk, so recovery is a
 rebuild rather than a repair.
 
 The box used to be an Azure VM. Terraform, Key Vault, ACR, the idle
-deallocator, and the wake wrapper are gone with it: a laptop has no control
+deallocator, and the wake wrapper are gone with it: the Mini has no control
 plane to pay for and no reason to scale to zero. `docs/design.md` records the
 pivot and its reasons.
 
@@ -24,7 +24,7 @@ flowchart LR
   TUI["TUI<br/>opencode --server"] --> TN
   DESK["Desktop app<br/>pairing link"] --> TN
   TN["tailnet<br/>WireGuard plus TLS"] --> HOST
-  subgraph BOX["HP laptop, server room, always on"]
+  subgraph BOX["HP EliteDesk Mini, server room, always on"]
     HOST["tailscaled<br/>serves loopback only"]
     Q["podman quadlet<br/>opencode container"]
     ENV["oc-env.service<br/>writes /etc/opencode/env"]
@@ -75,8 +75,8 @@ does not disconnect the node: identity lives in `/var/lib/tailscale`.
 ## Always on
 
 There is no idle deallocation and no scheduled stop. Suspend and hibernate are
-masked in Ignition, and logind ignores a closed lid. The laptop battery covers a
-short power cut; the firmware setting to power on after AC loss covers the rest.
+masked in Ignition, and logind sets `IdleAction=ignore`. A UPS covers a short
+power cut; the firmware setting to power on after AC loss covers the rest.
 
 ## Run the tests
 
@@ -103,7 +103,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent, durable, and needs a real key |
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is not published |
 | `host/tests/test_no_lan_listener.sh` | sshd is masked and no unit declares a non-loopback listener |
-| `host/tests/test_nosleep.sh` | sleep targets are masked and a closed lid is ignored |
+| `host/tests/test_nosleep.sh` | sleep targets are masked and `IdleAction=ignore` is set |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk and the workload fails closed |
 | `os/butane/tests/test_autorebase.sh` | one enabled rebase unit, pinned, marked, disabled, rebooted |
 | `os/butane/tests/test_no_azure.sh` | no Azure endpoint or deleted module survives |
@@ -120,7 +120,7 @@ documented negative control: it rejects a corrupted tarball.
 
 ## What is not verified here
 
-No install has run on the target laptop. No live boot has been tested. The
+No install has run on the target Mini. No live boot has been tested. The
 container image has not been built by the GitHub Actions workflow. The restic
 restore drill has not been executed, and the ucore rebase path is documented
 upstream but unexercised on this hardware. Nothing here should be described as

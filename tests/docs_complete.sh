@@ -13,8 +13,9 @@ for f in README.md CHANGELOG.md docs/design.md docs/install.md docs/runbook.md; 
   [ -s "$root/$f" ] || fail "missing or empty: $f"
 done
 
-for topic in restore rollback tailnet restic lid; do
-  grep -riq "$topic" "$root/docs" "$root/README.md" || fail "no documentation for: $topic"
+# Match whole words: `ups` must not pass on the `backups` that already appears.
+for topic in restore rollback tailnet restic ups; do
+  grep -riqw "$topic" "$root/docs" "$root/README.md" || fail "no documentation for: $topic"
 done
 
 # First install is a different procedure from daily operation, so it must be
@@ -27,10 +28,10 @@ for topic in "rpm-ostree status" tailscaled "coreos-installer" restic; do
     || fail "install doc does not cover: $topic"
 done
 
-# A laptop in a server room has risks a cloud VM hid. The design must name them,
-# or the operator will not know why the lid and the battery matter.
-for topic in "battery" "lid" "power loss" "thermal"; do
-  grep -riq "$topic" "$root/docs/design.md" \
+# A Mini in a server room has risks a cloud VM hid. The design must name them,
+# or the operator will not know why the UPS and the power path matter.
+for topic in "ups" "power loss" "thermal"; do
+  grep -riqw "$topic" "$root/docs/design.md" \
     || fail "design doc does not record the hardware risk: $topic"
 done
 
@@ -47,7 +48,7 @@ grep -q "First install only" "$root/docs/install.md" \
 grep -riq "sshd is masked\|masked" "$root/docs/design.md" \
   || fail "design doc does not say sshd is masked"
 
-# The unverified list is load-bearing: nothing here has run on the target laptop.
+# The unverified list is load-bearing: nothing here has run on the target Mini.
 grep -riq "not verified" "$root/README.md" \
   || fail "README does not state what is unverified"
 

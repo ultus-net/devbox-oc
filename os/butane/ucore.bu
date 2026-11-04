@@ -79,15 +79,12 @@ storage:
       mode: 0644
       contents:
         local: os/butane/.opencode.container.ign.tmp
-    # A closed lid must not take the box off the tailnet.
+    # An idle policy must not take the box off the tailnet.
     - path: /etc/systemd/logind.conf.d/10-devbox.conf
       mode: 0644
       contents:
         inline: |
           [Login]
-          HandleLidSwitch=ignore
-          HandleLidSwitchExternalPower=ignore
-          HandleLidSwitchDocked=ignore
           IdleAction=ignore
 systemd:
   units:
