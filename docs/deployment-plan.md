@@ -640,10 +640,10 @@ the number this plan claims to save.
 **Set the property explicitly.** Omitting `defaultOutboundAccess` is not the same
 as `true`: subnets created against an API version after 2026-03-31 default to
 `false`, and the symptom is a VM that boots with no egress at all. The NSG still
-denies inbound from the Internet, and no public IP is attached. The guard does not
-follow automatically: `terraform/tests/no_public_ip.sh` reads a Terraform plan, so it
-stops covering the VM at the moment Phase 2 ports it into Bicep. Phase 2 names the
-replacement reader.
+denies inbound from the Internet, and no public IP is attached. The guard cannot
+follow automatically: the old `terraform/tests/no_public_ip.sh` read a Terraform
+plan, so it stopped covering the VM when Phase 2 ported it into Bicep. The
+replacement is the `csh-dev` template check and post-deploy reader.
 
 ## Phase 0: what you hold
 
@@ -766,12 +766,12 @@ rows above need re-deriving.
 New modules in `csh-dev/infra/modules`, ported from the Terraform that already
 encodes these invariants. Each invariant keeps a guard, because a rule with no
 reader is a rule that drifts. The guard moves with the resource, and the existing
-tests cannot follow it: `terraform/tests/no_public_ip.sh` reads a `terraform
-show -json` plan, and the VM, NIC and NSG leave that plan here. The other two
-invariant tests scan the Terraform sources directly, so they do not quietly pass:
-`data_disk_protected.sh` fails with `azurerm_managed_disk.data not found` the moment
-the disk block leaves `terraform/main.tf`, and `no_scheduled_stop.sh` greps `*.tf` and
-`schedule.tf`. Both edits are therefore part of this phase, not follow-ups.
+tests could not follow it: `no_public_ip.sh` read a `terraform show -json` plan,
+and the VM, NIC and NSG left that plan here. The other two invariant tests scanned
+the Terraform sources directly, so they did not quietly pass:
+`data_disk_protected.sh` failed with `azurerm_managed_disk.data not found` when
+the disk block left `terraform/main.tf`, and `no_scheduled_stop.sh` greps `*.tf`
+and `schedule.tf`. The first two are retired; the third is retargeted.
 
 | New module | Ports from | Invariant to keep |
 |---|---|---|
@@ -795,19 +795,21 @@ three invariant tests, and both are new work in `csh-dev`:
   rule. This is the one that catches drift, because it reads the deployed object
   rather than the template.
 
-Until both exist, these invariants are enforced by nothing that runs. That is the
-cost of moving the VM out of this repo, and the plan names it instead of claiming the
-old tests still cover a resource they can no longer see. Three edits land with the
-port so the gate keeps meaning something:
+Both checks now exist in `csh-dev`: `scripts/check-template.py` runs in the
+pipeline before deploy, and `scripts/check-deployed-network.sh` runs after it.
+The Terraform guards that can no longer see the box are retired so the gate keeps
+meaning something:
 
-- **Retire `terraform/tests/data_disk_protected.sh`** in the same change that removes
-  the disk block, because it exits `not found` rather than passing vacuously. Its
-  replacement is the `deleteOption: Detach` assertion above.
-- **Retarget `terraform/tests/no_scheduled_stop.sh`.** It keeps guarding
-  `terraform/schedule.tf`, which stays here, but its message should say the stop
-  guard for the VM moved to the template check.
-- **Update `AGENTS.md` and `README.md`**, both of which state that these tests guard
-  the deployed VM. Leaving them is the same drift this phase exists to remove.
+- **Retired `terraform/tests/no_public_ip.sh`** and its fixtures. A plan from this
+  repo no longer contains the NIC, so the check passed without reading the box.
+- **Retired `terraform/tests/data_disk_protected.sh`.** The disk is Bicep now, so
+  the block it scanned no longer describes the deployed disk. Its replacement is
+  the `deleteOption: Detach` assertion in `check-template.py`.
+- **Retargeted `terraform/tests/no_scheduled_stop.sh`.** It keeps guarding
+  `terraform/schedule.tf`, which stays here, and its message says the VM stop
+  guard moved to the template check.
+- **Updated `AGENTS.md` and `README.md`** to name the `csh-dev` readers instead of
+  the retired tests.
 
 There is deliberately no `backup.bicep`. Snapshots are taken by
 `host/bin/oc-snapshot` from inside the VM, which is where retention lands, and an

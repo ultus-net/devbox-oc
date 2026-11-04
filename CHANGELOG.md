@@ -95,6 +95,14 @@ All notable changes to this project. One entry per landed change, newest first.
   Terraform default. The pipeline test requires both the `--query
   hyperVGeneration` lookup and the explicit `= "V2"` comparison.
 
+- The Terraform guards that can no longer see the deployed VM are retired.
+  `terraform/tests/no_public_ip.sh`, `terraform/tests/data_disk_protected.sh` and
+  their fixtures are deleted. The VM, NIC, NSG and data disk live in `csh-dev`
+  Bicep now, so `scripts/check-template.py` reads the compiled template and
+  `scripts/check-deployed-network.sh` reads the live NIC and NSG.
+  `terraform/tests/no_scheduled_stop.sh` stays, with a message pointing at the
+  template check for the VM.
+
 - `docs/deployment-plan.md` and `docs/headless-hosting-options.md`: reconciled with
   live state after the operator deleted `csh-dev-env` and `csh-dev-hermes` on
   2026-11-03 in preparation for this deployment model. Phase 6 is now a fresh

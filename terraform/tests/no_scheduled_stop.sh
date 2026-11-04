@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Assert the project never reintroduces a scheduled hard stop.
+# Assert the Terraform sources kept here never reintroduce a scheduled hard stop.
 #
-# The box starts on a schedule and stops only when idle, because a fixed cutoff
-# would kill an active agent turn. That is an anti-goal (design doc, decision 6).
+# The deployed VM's stop guard moved to csh-dev's compiled-template check, because
+# the VM is declared there now. This script still covers terraform/schedule.tf,
+# which stays here, so a shutdown schedule added to the remaining sources is
+# caught.
 #
 # Usage: no_scheduled_stop.sh [dir]
 #
@@ -28,4 +30,4 @@ hits="$(
 grep -q 'azurerm_logic_app_workflow' "$dir/schedule.tf" 2>/dev/null \
   || fail "no scheduled start in $dir/schedule.tf"
 
-echo "start is scheduled, stop is not"
+echo "start is scheduled here, stop is not; the VM stop guard is in csh-dev"

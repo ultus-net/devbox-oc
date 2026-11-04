@@ -26,17 +26,20 @@ preference.
   image, or container. `ubuntu-latest` appears in `pipelines/*.yml` as the CI
   runner, which is not a shipped layer and is allowed.
 - **No public IP and no inbound internet rule.** Reachability is Tailscale.
-  Bastion Developer is break-glass only. `terraform/tests/no_public_ip.sh` guards
-  this.
+  Bastion Developer is break-glass only. The deployed VM is declared in `csh-dev`
+  Bicep: `scripts/check-template.py` reads the compiled template and
+  `scripts/check-deployed-network.sh` reads the live NIC and NSG.
 - **Everything that listens, listens on loopback.** Services are published over the
   tailnet with `tailscale serve`, never bound to an interface. ucore ships Cockpit
   and enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in;
   `host/tests/test_cockpit_loopback.sh` guards that.
 - **No scheduled stop.** Start is scheduled, stop is idle-based. A timer that
-  deallocates on a clock is a data-loss path and
-  `terraform/tests/no_scheduled_stop.sh` rejects it.
-- **The data disk is `prevent_destroy`.** Rebuilding the VM must never destroy
-  work. `terraform/tests/data_disk_protected.sh` guards this.
+  deallocates on a clock is a data-loss path. The VM's stop guard is the `csh-dev`
+  compiled-template check; `terraform/tests/no_scheduled_stop.sh` still rejects a
+  shutdown schedule in the Terraform sources kept here.
+- **The data disk survives a VM rebuild.** The disk holds the session database and
+  the repos. In `csh-dev` Bicep the data disk and NIC use `deleteOption: Detach`,
+  which `scripts/check-template.py` asserts.
 - **The password comes from Key Vault at boot.** No shipped file may define
   `OPENCODE_PASSWORD` by any route, because Ignition ships as the VM's
   `custom_data` and stays readable in deployment history.

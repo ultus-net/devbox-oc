@@ -43,16 +43,12 @@ run "tailscale enabled"   ./os/butane/tests/test_tailscale_enabled.sh
 run "bootc image"         ./os/butane/tests/test_bootc_image.sh
 run "units load their env" ./os/butane/tests/test_units_load_their_env.sh
 
-# Terraform guards. These test the assertions themselves against fixtures, since
-# a real plan needs a subscription.
-run "no public ingress (violation detected)" \
-  bash -c './terraform/tests/no_public_ip.sh terraform/tests/fixtures/violation_public_ip.json && exit 1 || exit 0'
-run "no public ingress (clean passes)" \
-  ./terraform/tests/no_public_ip.sh terraform/tests/fixtures/clean.json
+# The VM, NIC, NSG and data disk are declared in csh-dev Bicep now. Their
+# invariants are read from the compiled template in that repo, so the Terraform
+# plan and disk guards here no longer describe the deployed box and are retired.
+# The scheduled-start guard still applies: schedule.tf stays in this repo.
 run "no scheduled stop" \
   ./terraform/tests/no_scheduled_stop.sh
-run "data disk protected" \
-  ./terraform/tests/data_disk_protected.sh
 run "vault name derivable without state" \
   ./terraform/tests/key_vault_name_derived.sh
 run "auth key stored" \

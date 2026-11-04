@@ -127,9 +127,7 @@ Individual suites:
 | `os/butane/tests/test_units_load_their_env.sh` | every unit loads the env file that defines the variables its script reads |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
-| `terraform/tests/no_public_ip.sh` | no public IP and no internet-allow ingress |
-| `terraform/tests/no_scheduled_stop.sh` | no scheduled hard stop ever returns |
-| `terraform/tests/data_disk_protected.sh` | the data disk stays `prevent_destroy` |
+| `terraform/tests/no_scheduled_stop.sh` | no scheduled hard stop returns in the Terraform sources kept here; the VM stop guard is in `csh-dev` |
 | `terraform/tests/key_vault_name_derived.sh` | the vault name is derivable from tfvars, without state |
 | `terraform/tests/authkey_is_stored.sh` | the Tailscale auth key reaches Key Vault |
 | `terraform/tests/authkey_name_matches_build.sh` | the auth key's secret name agrees with the Ignition build default |
@@ -140,9 +138,12 @@ Individual suites:
 | `tests/docs_complete.sh` | the recovery topics stay written down |
 | `tools/tests/test_oc.sh` | the wake-and-connect wrapper starts the box and waits for health |
 
-`./tests/verify.sh` makes 26 `run` calls over 25 distinct suite files: the
-`no_public_ip` script runs twice, once against a violating fixture and once
-against a clean one. The table above lists all 25 files.
+`./tests/verify.sh` makes 23 `run` calls over 23 distinct suite files. The table
+above lists all 23 files.
+
+The deployed VM's network and disk invariants are guarded in the `csh-dev` repo,
+not here: `scripts/check-template.py` reads the compiled Bicep and
+`scripts/check-deployed-network.sh` reads the live NIC and NSG.
 
 Every guard listed above was checked against a mutation it is meant to catch, and
 the mutation was confirmed to land before the result was trusted. One has a
