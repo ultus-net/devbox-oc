@@ -135,6 +135,8 @@ Nothing here should be described as working until it runs against real hardware.
 - `docs/install.md` is the first-install procedure.
 - `docs/runbook.md` covers daily checks, backup, restore, rollback, and disk
   replacement.
+- `docs/web-access.md` covers the tailnet-only client path: the served address,
+  browser sign-in, CORS, verification, teardown, and the failures.
 - `CHANGELOG.md` records every landed change and the honest gaps.
 
 ## Status
