@@ -103,4 +103,13 @@ rc=0
 run_up FAIL_UP=1 >/dev/null 2>&1 || rc=$?
 [ "$rc" -ne 0 ] || fail "T7 swallowed a failed first join"
 
+# T8: the keyless steady state is an empty key file, not a missing one. Ignition
+# creates the file empty, and it must not be mistaken for a usable key.
+setup
+: > "$tmp/devbox/tailscale-authkey"
+: > "$tmp/state/tailscaled.state"
+joined T8
+[ "$(wc -l < "$tmp/up-calls")" -eq 0 ] || fail "T8 called tailscale with an empty key"
+[ -f "$tmp/state/tailscaled.state" ] || fail "T8 removed the tailnet state"
+
 echo "tailnet join is idempotent, key-driven and cannot latch"

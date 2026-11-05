@@ -42,6 +42,7 @@ if [ -z "${BUTANE:-}" ]; then
 fi
 
 run "ignition units"         ./os/butane/tests/test_units_have_scripts.sh os/butane/ucore.bu os/butane/ucore.ign
+run "keyless build"          ./os/butane/tests/test_keyless_build.sh
 
 # The integrity test needs the pinned npm tarball. It fails rather than silently
 # passing when it cannot obtain one. ALLOW_INTEGRITY_SKIP=1 is a local opt-out for

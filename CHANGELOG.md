@@ -40,6 +40,10 @@ All notable changes to this project. One entry per landed change, newest first.
   The build now requires a 35W T-series CPU, 16 GiB or more across two SODIMM
   slots, the OS on one M.2 NVMe, `/srv` on a second physical device (the second
   M.2 slot or a 2.5 inch SATA caddy), a 65W external adapter, and a UPS.
+- The Tailscale auth key is optional at build time. A keyless build ships no key,
+  and the operator joins from the console after first boot. Ignition now writes a
+  `getty@tty1` autologin drop-in, because Fedora CoreOS ignores
+  `coreos.autologin` and the console is the only door before the join.
 - The data disk is prepared once from the live media and mounted by its `data`
   label. Ignition never partitions or formats it, so an OS reinstall cannot wipe
   `/srv`.

@@ -31,13 +31,25 @@ storage:
       mode: 0644
       contents:
         inline: __OC_HOSTNAME__
-    # The one secret on the install media. Scoped to a tag, single-use or
-    # short-lived, and revoked after the node joins. The OpenCode password never
-    # rides here: it is written by the operator after first boot.
+    # The one secret that may ride the install media. Scoped to a tag,
+    # single-use or short-lived, and revoked after the node joins. A keyless build
+    # leaves this file empty, and the operator joins from the console. The
+    # OpenCode password never rides here: it is written after first boot.
     - path: /etc/devbox/tailscale-authkey
       mode: 0600
       contents:
         inline: __TS_AUTHKEY__
+    # A keyless build has no tailnet, and sshd is masked, so the local console is
+    # the only way in until the join. FCOS ignores coreos.autologin, so write the
+    # getty drop-in instead. Use the upstream getty arguments and add autologin;
+    # the unit's TTYPath selects the console. `core` already has passwordless sudo.
+    - path: /etc/systemd/system/getty@tty1.service.d/10-autologin.conf
+      mode: 0644
+      contents:
+        inline: |
+          [Service]
+          ExecStart=
+          ExecStart=-/usr/sbin/agetty --autologin core --noreset --noclear - ${TERM}
     - path: /usr/local/sbin/oc-env
       mode: 0755
       contents:

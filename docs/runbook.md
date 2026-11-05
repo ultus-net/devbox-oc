@@ -20,6 +20,9 @@ ssh core@devbox 'df -h /srv'
 ssh core@devbox 'findmnt -no SOURCE /srv'
 ```
 
+On a keyless install that has not been joined yet, `oc-tailnet` is expected to
+be failed. Join it from the console first.
+
 `oc-env` and `opencode` must both be active. A failed `oc-env` stops the
 container by design. `podman ps` must show the container as `healthy`. `findmnt`
 must name the data device, not the OS disk.
@@ -174,7 +177,16 @@ database migration, or recover deleted files.
 ## Rejoin the tailnet
 
 The tailnet is the only data path. If the box is unreachable, get console access
-first, then:
+first. A keyless install starts with neither a key nor node state, so
+`oc-tailnet.service` is failed until you join. The console autologins as `core`
+on tty1. Join with the same flags the unit uses, then restart it:
+
+```sh
+sudo tailscale up --auth-key tskey-auth-... --hostname devbox --accept-routes=false
+sudo systemctl restart oc-tailnet.service
+```
+
+A node that already has state needs only the restart and the diagnosis:
 
 ```sh
 sudo tailscale status
@@ -184,8 +196,8 @@ sudo journalctl -u oc-tailnet.service -u tailscaled --no-pager | tail -40
 
 The node must stay non-ephemeral and keep its hostname, or MagicDNS and the
 client's saved server URL break. If the node key has expired, mint a new auth key
-in the Tailscale admin console, write it to `/etc/devbox/tailscale-authkey` at
-mode 0600, and restart the unit.
+in the Tailscale admin console with the `tag:devbox` tag, write it to
+`/etc/devbox/tailscale-authkey` at mode 0600, and restart the unit.
 
 Never paste the key into a git-tracked file or the container image.
 
@@ -226,7 +238,8 @@ touch it.
    filesystem and destroys the disk. On an OS reinstall the data disk already
    holds `/srv`; Ignition mounts it by label and leaves it alone.
 3. After the rebase, confirm `srv.mount` is active and `/srv` still holds the
-   repositories and sessions.
+   repositories and sessions. If the rebuild was keyless, join from the console
+   first; `ssh` needs the tailnet.
 4. Re-provision `/etc/devbox/secrets.env` and start `oc-env` and `opencode`.
 5. Re-pair the client if the tailnet name changed. It should not, because the
    hostname is pinned.

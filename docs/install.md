@@ -5,8 +5,8 @@ two disks. Read `docs/design.md` first; the decisions there explain why the step
 are in this order.
 
 The short version: boot Fedora CoreOS installation media, install to the OS disk
-with an Ignition file that also joins the tailnet, let ucore rebase once, then
-provision the runtime secrets over Tailscale.
+with an Ignition file that joins the tailnet or leaves the join for the console,
+let ucore rebase once, then provision the runtime secrets over Tailscale.
 
 ## 1. Prepare the hardware
 
@@ -51,7 +51,7 @@ before the USB is written.
 
 ```sh
 export SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)"
-read -rsp 'Tailscale auth key: ' TS_AUTHKEY; export TS_AUTHKEY
+read -rsp 'Tailscale auth key (empty for keyless): ' TS_AUTHKEY; export TS_AUTHKEY
 export OC_HOSTNAME=devbox
 export IMAGE=ghcr.io/ultus-net/devbox:prod
 
@@ -64,11 +64,18 @@ pulls anonymously, so set the package visibility to public before installing.
 If it must stay private, add a read-only token and a `podman login ghcr.io` step;
 the container cannot start after an OS reinstall otherwise.
 
-`TS_AUTHKEY` is a Tailscale auth key. Create it in the Tailscale admin console
-with the `tag:devbox` tag. Use a single-use or short-lived key. It is written to
+`TS_AUTHKEY` is optional. With a key, the host joins the tailnet on its first
+ucore boot. The key is created in the Tailscale admin console with the
+`tag:devbox` tag, single-use or short-lived, and written to
 `/etc/devbox/tailscale-authkey` on the host. After a successful join the host
 deletes that file, so a revoked key cannot break later boots. Revoke the key in
-the console as well. This is the only secret on the install media.
+the console as well. In a keyed build this is the only secret on the install
+media.
+
+A keyless build ships no key. Leave `TS_AUTHKEY` unset and the build prints
+`KEYLESS build`; the host stays off the tailnet until you join from the console
+in step 6. The console autologins as `core` on tty1, because `sshd` is masked and
+there is no LAN listener.
 
 `OC_HOSTNAME` is the MagicDNS name. Keep it stable, because the client's saved
 server URL contains it. The default is `devbox`.
@@ -141,14 +148,25 @@ sudo journalctl -u ucore-autorebase.service --no-pager
 
 ## 6. Confirm the tailnet
 
-The box joins the tailnet on its first ucore boot, with the key from Ignition.
-The join unit is skipped on the Fedora CoreOS boot because no tailscale binary is
-installed yet.
+With `TS_AUTHKEY` set, the box joins on its first ucore boot. The join unit is
+skipped on the Fedora CoreOS boot because no tailscale binary is installed yet.
+
+A keyless build stays off the tailnet until you join from the console. The
+console autologins as `core` on tty1, and `core` has passwordless sudo. Run the
+same join the unit would have run, then restart the unit so it publishes `serve`
+and enables Tailscale SSH:
 
 ```sh
+sudo tailscale up --auth-key tskey-auth-... --hostname devbox --accept-routes=false
+sudo systemctl restart oc-tailnet.service
 tailscale status
 tailscale ip -4
 ```
+
+Mint the key in the Tailscale admin console with the `tag:devbox` tag. Use the
+hostname from `OC_HOSTNAME`; the default is `devbox`. A bare `tailscale up`
+registers the node untagged under your user identity, and the ACL below requires
+`tag:devbox`.
 
 From another machine on the tailnet:
 
@@ -171,8 +189,7 @@ ACL rule before it answers. In the Tailscale admin console, add:
 ```
 
 Without that rule, `ssh core@devbox` refuses the connection even though the node
-is up. The physical console and Intel AMT are the recovery path if the tailnet is
-down.
+is up. The console and Intel AMT are the recovery path if the tailnet is down.
 
 If the join failed, check `sudo journalctl -u oc-tailnet.service -u tailscaled`.
 The most common cause is a key that was already used, expired, or scoped to a tag

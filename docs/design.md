@@ -122,11 +122,13 @@ design rejected and this one keeps rejected.
    credentials live in `/etc/devbox/secrets.env`, mode 0600, provisioned by the
    operator after first boot. No shipped file defines them.
 
-8. **The install media may carry a Tailscale auth key.** The key is scoped to a
-   tag, is single-use or short-lived, and is revoked after the node joins. It is
-   the one exception to decision 7, and it exists because the tailnet is the path
-   used to provision the other secrets. The OpenCode password never rides the
-   install media.
+8. **The install media may carry a Tailscale auth key, and it is optional.**
+   With `TS_AUTHKEY` set, the key is scoped to a tag, single-use or short-lived,
+   and revoked after the node joins. A keyless build ships no key: the host boots
+   off the tailnet and the operator joins from the console. That is the one
+   exception to decision 7, and it exists because the tailnet is the path used to
+   provision the other secrets. The OpenCode password never rides the install
+   media.
 
 9. **Tailscale is the only data path.** No port forward, no inbound rule, no
    public listener. `tailscale serve` publishes the loopback OpenCode port with
@@ -151,13 +153,22 @@ design rejected and this one keeps rejected.
     the promoted digest is recorded in `image/prod-digest.txt` by the change that
     promotes it. The workflow never pushes to `main`.
 
+13. **Every build autologins `core` on the local console.** A keyless build has
+    no tailnet and `sshd` is masked, so the console is the only door before the
+    join. A keyed build also loses its door when the key expires or the node is
+    revoked, so the console is the recovery path either way. Fedora CoreOS
+    ignores `coreos.autologin`, so Ignition writes a `getty@tty1` drop-in.
+    `core` has passwordless sudo, which means anyone with the keyboard has the
+    box. Physical access to the unencrypted disk already implies that. Intel AMT
+    is optional and stays a second recovery path.
+
 ## Secrets
 
 | Secret | Where it lives | Written by |
 |---|---|---|
 | `OPENCODE_PASSWORD` | `/etc/devbox/secrets.env`, mode 0600 | Operator, after first boot |
 | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` | `/etc/devbox/secrets.env` | Operator, after first boot |
-| Tailscale auth key | `/etc/devbox/tailscale-authkey`, mode 0600, in Ignition | `os/butane/build.sh` from `TS_AUTHKEY` |
+| Tailscale auth key | `/etc/devbox/tailscale-authkey`, mode 0600, in Ignition | `os/butane/build.sh` from `TS_AUTHKEY`; empty in a keyless build |
 | SSH public key | Ignition, no secret | `os/butane/build.sh` from `SSH_PUBKEY` |
 
 `oc-env.service` reads `OPENCODE_PASSWORD` from `secrets.env` and writes
@@ -165,9 +176,10 @@ design rejected and this one keeps rejected.
 or empty. The quadlet carries `Requires=oc-env.service`, so a failed bootstrap
 does not serve a passwordless server.
 
-The Tailscale key is the only secret on the install media. Revoke it in the
-Tailscale admin console after the node appears. The node identity and state live
-in `/var/lib/tailscale`, so revoking the key does not disconnect the box.
+In a keyed build, the Tailscale key is the only secret on the install media.
+Revoke it in the Tailscale admin console after the node appears. The node
+identity and state live in `/var/lib/tailscale`, so revoking the key does not
+disconnect the box. A keyless build ships no key at all.
 
 ## Backup and recovery
 
