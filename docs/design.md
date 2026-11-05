@@ -135,7 +135,9 @@ design rejected and this one keeps rejected.
    a real TLS certificate. Cockpit ships with ucore, so an Ignition drop-in
    rebinds its socket to loopback and it is deliberately not published. Use
    Tailscale SSH and the OpenCode client. Add Cockpit later as a loopback
-   container if it is genuinely needed.
+   container if it is genuinely needed. `docs/web-access.md` records the client
+   path, the proof that no public listener exists, and the failures that look
+   like a broken server but are not.
 
 10. **Backups are restic to an off-box repository, not a disk snapshot.** A
     snapshot on the same box is not a backup. Restic gives encryption,

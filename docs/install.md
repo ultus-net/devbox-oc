@@ -280,6 +280,10 @@ opencode --server https://devbox.<tailnet>.ts.net     # TUI
 pairing link is single-use and expires in five minutes. The TUI uses
 `OPENCODE_PASSWORD` from the same password manager entry.
 
+`docs/web-access.md` is the full client path: the browser sign-in, the
+tailnet-only invariant, the verification checklist, and the teardown. Read it
+before opening the browser.
+
 ## 9. Finish the checkout
 
 - Confirm `rpm-ostree status` names ucore-minimal.

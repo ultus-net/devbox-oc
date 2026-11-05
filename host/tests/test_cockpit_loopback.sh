@@ -78,4 +78,22 @@ fi
 grep -Eq 'tailscale serve --bg --https="\$\{OC_HTTPS_PORT\}" "http://127\.0\.0\.1:\$\{OC_TCP_PORT\}"' "$tailnet" \
   || fail "oc-tailnet does not publish OpenCode on its loopback port"
 
+# Funnel is the public counterpart of Serve. A funnel mount here would put the
+# box on the internet, which is the one property the tailnet exists to keep.
+if grep -Eq 'tailscale[[:space:]]+funnel' "$tailnet"; then
+  fail "oc-tailnet enables Funnel, which would publish the box to the internet"
+fi
+
+# Every serve target must be the OpenCode loopback port. A second mount, such as
+# Cockpit on 9090, would reopen the door the loopback drop-in closes. Read-only
+# subcommands are not targets and are allowed.
+serve_lines="$(sed 's/#.*//' "$tailnet" | grep -E 'tailscale[[:space:]]+serve' || true)"
+target_lines="$(printf '%s\n' "$serve_lines" \
+  | grep -vE 'tailscale[[:space:]]+serve[[:space:]]+(status|reset|drain|advertise|get-config|set-config)([[:space:]]|$)' \
+  || true)"
+stray_serve="$(printf '%s\n' "$target_lines" | grep -v 'OC_TCP_PORT' || true)"
+[ -z "$stray_serve" ] \
+  || fail "oc-tailnet serves a target other than the OpenCode loopback port:
+$stray_serve"
+
 echo "cockpit listens on loopback only and is not published"

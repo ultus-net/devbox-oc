@@ -22,6 +22,15 @@ All notable changes to this project. One entry per landed change, newest first.
   risks the cloud hid, and the decisions behind them.
 - `docs/runbook.md` rewritten for backup, restore, prune, rollback, data-disk
   replacement, OS-disk replacement and hardware checks.
+- `docs/web-access.md`, the tailnet-only client path. It records the served
+  address and its valid spellings, HTTP Basic sign-in, the same-origin CORS
+  rule, the `/` versus `/api/info` check, the backup window that interrupts a
+  long turn, teardown, and the failure table. It names every OpenTunnel route
+  that would publish the server and keeps remote access off. The responses were
+  measured against OpenCode 2.1.4, the version pinned in the image, and the doc
+  states that no serve mount has run on the Mini. `tests/docs_complete.sh` now
+  scopes its invariant assertions to that section, and
+  `host/tests/test_cockpit_loopback.sh` rejects a Funnel call.
 - Fedora toolbox container image with OpenCode installed from the verified glibc
   npm artifact, pinned and sha512-checked at build time. The upstream ghcr image
   is musl-only and cannot be inherited on a glibc base.

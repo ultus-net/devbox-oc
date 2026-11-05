@@ -9,7 +9,8 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
-for f in README.md CHANGELOG.md docs/design.md docs/install.md docs/runbook.md; do
+for f in README.md CHANGELOG.md docs/design.md docs/install.md docs/runbook.md \
+  docs/web-access.md; do
   [ -s "$root/$f" ] || fail "missing or empty: $f"
 done
 
@@ -51,5 +52,63 @@ grep -riq "sshd is masked\|masked" "$root/docs/design.md" \
 # The unverified list is load-bearing: nothing here has run on the target Mini.
 grep -riq "not verified" "$root/README.md" \
   || fail "README does not state what is unverified"
+
+# The client path is the one door. The invariant section must name every route
+# that would publish the server, and the prohibition must stay a prohibition,
+# not merely a mention. Scope the greps to the section, so a token elsewhere in
+# the file cannot satisfy them.
+web="$root/docs/web-access.md"
+
+# Print one section, from its heading to the next level-two heading. A check
+# scoped this way cannot be satisfied by the same token in another section.
+section() {
+  awk -v want="$1" 'index($0, want) == 1 { f = 1; next }
+    f && /^## / { exit }
+    f' "$web"
+}
+
+invariant="$(section "## The invariant:")"
+[ -n "$invariant" ] || fail "web-access doc has no invariant section"
+for term in "tailscale funnel" "pair --remote" "service set remote" desktop \
+  internet; do
+  printf '%s\n' "$invariant" | grep -Fqi -- "$term" \
+    || fail "web-access invariant does not name: $term"
+done
+
+# The prohibition must be inside the invariant and must stay a prohibition. A
+# rewrite that recommends the routes, or moves the warning elsewhere, fails.
+printf '%s\n' "$invariant" | grep -Fqi "remote access stays off" \
+  || fail "web-access invariant does not keep remote access off"
+printf '%s\n' "$invariant" | grep -Fqi "never use them" \
+  || fail "web-access invariant does not prohibit the OpenTunnel routes"
+grep -Eq 'Never run .opencode pair --remote.' "$web" \
+  || fail "web-access doc does not prohibit opencode pair --remote"
+
+# Each proof command has to live in the section that explains it.
+verify="$(section "## Verify the path")"
+teardown="$(section "## Take the publication down")"
+cors="$(section "### CORS")"
+for topic in "tailscale funnel status" "serve reset" "--cors"; do
+  case "$topic" in
+    "serve reset") body="$teardown" ;;
+    "--cors") body="$cors" ;;
+    *) body="$verify" ;;
+  esac
+  printf '%s\n' "$body" | grep -Fq -- "$topic" \
+    || fail "web-access section does not cover: $topic"
+done
+for topic in "api/info" "not on the tailnet"; do
+  printf '%s\n' "$verify" | grep -Fq -- "$topic" \
+    || fail "web-access verify section does not cover: $topic"
+done
+printf '%s\n' "$verify" | grep -Fqi "Available on the internet" \
+  || fail "web-access verify does not give the funnel pass condition"
+grep -Fqi "tailnet only" "$web" \
+  || fail "web-access doc does not scope the publication to the tailnet"
+
+for f in README.md docs/design.md docs/install.md docs/runbook.md; do
+  grep -Fq "docs/web-access.md" "$root/$f" \
+    || fail "$f does not link the web-access doc"
+done
 
 echo "docs complete"

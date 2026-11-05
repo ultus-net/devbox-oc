@@ -27,6 +27,31 @@ be failed. Join it from the console first.
 container by design. `podman ps` must show the container as `healthy`. `findmnt`
 must name the data device, not the OS disk.
 
+## Remote web access
+
+The browser and client path is `docs/web-access.md`. It records the served
+address, the Basic-auth sign-in, the tailnet-only invariant, the full
+verification checklist, and the failure table.
+
+The one check worth running daily, because it separates a proxy fault from an
+auth fault:
+
+```sh
+ssh core@devbox 'curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4096/api/info'
+```
+
+`401` is healthy: the server is up and asking for the password. No code is a
+container or listener fault. `200` would mean authentication is off, which this
+build never configures.
+
+A `401` with the password rejected is a different fault: the server generated its
+own password because `OPENCODE_PASSWORD` did not reach the process. Check
+`/etc/opencode/env` and look for a `server password ...` line in
+`journalctl -u opencode.service`.
+
+A `200` on `/` proves nothing; the HTML shell is deliberately unauthenticated.
+The API is the check.
+
 ## Rotate the OpenCode password
 
 1. Generate a new value and store it in the password manager.
