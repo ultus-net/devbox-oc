@@ -60,7 +60,7 @@ check decides whether a new image is kept, not whether a session is running.
 |---|---|---|
 | `OPENCODE_PASSWORD` | `/etc/devbox/secrets.env`, mode 0600 | operator, after first boot |
 | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` | `/etc/devbox/secrets.env` | operator, after first boot |
-| Tailscale auth key | `/etc/devbox/tailscale-authkey`, mode 0600, in Ignition | `os/butane/build.sh` |
+| Tailscale auth key | `/etc/devbox/tailscale-authkey`, mode 0600, in Ignition | `os/butane/build.sh`; empty in a keyless build |
 | SSH public key | Ignition, no secret | `os/butane/build.sh` |
 
 `oc-env.service` reads the password from `secrets.env` and writes
@@ -68,9 +68,11 @@ check decides whether a new image is kept, not whether a session is running.
 the quadlet carries `Requires=oc-env.service`, so a failed write never serves a
 passwordless server.
 
-The Tailscale key is the only secret on the install media. It is scoped to a
-tag, single-use or short-lived, and revoked after the node appears. Revoking it
-does not disconnect the node: identity lives in `/var/lib/tailscale`.
+In a keyed build, the Tailscale key is the only secret on the install media. It
+is scoped to a tag, single-use or short-lived, and revoked after the node
+appears. Revoking it does not disconnect the node: identity lives in
+`/var/lib/tailscale`. A keyless build ships no key, and you join from the console
+after first boot.
 
 ## Always on
 
@@ -108,6 +110,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `os/butane/tests/test_autorebase.sh` | one enabled rebase unit, pinned, marked, disabled, rebooted |
 | `os/butane/tests/test_no_azure.sh` | no Azure endpoint or deleted module survives |
 | `os/butane/tests/test_tailscale_enabled.sh` | `tailscaled` is enabled and orders the join |
+| `os/butane/tests/test_keyless_build.sh` | a keyless build ships no key and keeps the console autologin |
 | `os/butane/tests/test_units_have_scripts.sh` | every unit runs a shipped script, and the artifact reproduces |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
@@ -122,9 +125,9 @@ documented negative control: it rejects a corrupted tarball.
 
 No install has run on the target Mini. No live boot has been tested. The
 container image has not been built by the GitHub Actions workflow. The restic
-restore drill has not been executed, and the ucore rebase path is documented
-upstream but unexercised on this hardware. Nothing here should be described as
-working until it runs against real hardware.
+restore drill has not been executed, the keyless console join has not run, and
+the ucore rebase path is documented upstream but unexercised on this hardware.
+Nothing here should be described as working until it runs against real hardware.
 
 ## Documentation
 

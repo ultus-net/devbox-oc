@@ -37,6 +37,14 @@
         "mode": 384
       },
       {
+        "path": "/etc/systemd/system/getty@tty1.service.d/10-autologin.conf",
+        "contents": {
+          "compression": "",
+          "source": "data:,%5BService%5D%0AExecStart%3D%0AExecStart%3D-%2Fusr%2Fsbin%2Fagetty%20--autologin%20core%20--noreset%20--noclear%20-%20%24%7BTERM%7D%0A"
+        },
+        "mode": 420
+      },
+      {
         "path": "/usr/local/sbin/oc-env",
         "contents": {
           "compression": "gzip",

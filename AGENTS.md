@@ -43,7 +43,13 @@ preference.
 - **The password comes from `/etc/devbox/secrets.env` at first boot.** No shipped
   file may define `OPENCODE_PASSWORD` by any route, because Ignition ships as the
   install media's config and stays readable. Only the scoped Tailscale auth key
-  rides the install media.
+  rides the install media, and only in a keyed build. A keyless build
+  (`TS_AUTHKEY` unset) ships no key and the operator joins from the console.
+
+- **A keyless build keeps a console door.** Ignition writes a `getty@tty1`
+  autologin drop-in for `core`, because a keyless box has no tailnet and `sshd`
+  is masked. `os/butane/tests/test_keyless_build.sh` guards the empty key and the
+  drop-in.
 - **Retention stays manual.** `oc-backup` never calls `restic forget` or
   `restic prune`.
 

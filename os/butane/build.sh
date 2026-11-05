@@ -7,8 +7,16 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 : "${SSH_PUBKEY:?set SSH_PUBKEY to the public key of the operator}"
-: "${TS_AUTHKEY:?set TS_AUTHKEY to a scoped Tailscale auth key}"
+: "${TS_AUTHKEY:=}"
 : "${IMAGE:?set IMAGE to the GHCR image reference}"
+
+# A keyless build ships no usable secret and the operator joins from the console
+# after first boot. Say it loudly, because a typo in the variable name would
+# otherwise produce keyless media by accident.
+if [ -z "$TS_AUTHKEY" ]; then
+  echo "KEYLESS build: no TS_AUTHKEY. The host stays off the tailnet until you" >&2
+  echo "run tailscale up from the console after first boot." >&2
+fi
 
 OC_HOSTNAME="${OC_HOSTNAME:-devbox}"
 UCORE_IMAGE="${UCORE_IMAGE:-ghcr.io/ublue-os/ucore-minimal:stable}"
