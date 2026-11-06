@@ -13,7 +13,7 @@ model has it, or a PiKVM.
 These are read-only. Run them when you sit down, or from a monitoring check.
 
 ```sh
-ssh core@devbox 'systemctl is-active oc-env opencode oc-tailnet'
+ssh core@devbox 'systemctl is-active oc-env hermes-env opencode hermes oc-tailnet'
 ssh core@devbox 'sudo podman ps --format "{{.Names}} {{.Status}}"'
 ssh core@devbox 'sudo systemctl list-timers oc-backup.timer'
 ssh core@devbox 'df -h /srv'
@@ -23,9 +23,10 @@ ssh core@devbox 'findmnt -no SOURCE /srv'
 On a keyless install that has not been joined yet, `oc-tailnet` is expected to
 be failed. Join it from the console first.
 
-`oc-env` and `opencode` must both be active. A failed `oc-env` stops the
-container by design. `podman ps` must show the container as `healthy`. `findmnt`
-must name the data device, not the OS disk.
+`oc-env`, `hermes-env`, `opencode` and `hermes` must all be active. A failed
+`oc-env` or `hermes-env` stops its container by design. `podman ps` must show
+both containers as `healthy`. `findmnt` must name the data device, not the OS
+disk.
 
 ## Remote web access
 
@@ -61,10 +62,12 @@ The API is the check.
 
 ```sh
 ssh core@devbox 'sudo systemctl restart oc-env.service opencode.service'
+ssh core@devbox 'sudo systemctl restart hermes-env.service hermes.service'
 ```
 
 4. Pair the client again with `opencode pair --url ...`, or update the TUI's
-   saved password.
+   saved password. Hermes reaches OpenCode with the same password through its own
+   environment file, so restart `hermes-env` and `hermes` too.
 
 A running turn is interrupted by the container restart. Do this between turns.
 
@@ -83,7 +86,9 @@ ssh core@devbox 'sudo journalctl -u oc-backup.service -n 40 --no-pager'
 ```
 
 The timer runs nightly at 02:00 local time. It backs up `/srv` and never prunes.
-Pruning is manual.
+Pruning is manual. The unit stops both workloads before the snapshot and starts
+them again after, so neither SQLite store is captured mid-write; a turn that spans
+the window is interrupted.
 
 ## Restore from restic
 
@@ -94,10 +99,10 @@ device, inspect it, then copy the contents into `/srv`.
 The backup snapshot root is `/data`, because `/srv` is mounted at `/data` inside
 the container. A restore therefore lands at `/restore/data/...`.
 
-1. Stop the workload so nothing writes during the restore:
+1. Stop the workloads so nothing writes during the restore:
 
 ```sh
-ssh core@devbox 'sudo systemctl stop opencode.service'
+ssh core@devbox 'sudo systemctl stop opencode.service hermes.service'
 ```
 
 2. Attach a scratch disk or USB device and mount it at `/mnt/restore`. Confirm it

@@ -15,6 +15,9 @@ Requires=oc-env.service
 [Container]
 Image=__IMAGE__
 ContainerName=opencode
+# The shared network lets the Hermes container reach this server by name
+# (http://opencode:4096). The published port below stays loopback on the host.
+Network=devbox.network
 PublishPort=127.0.0.1:4096:4096
 EnvironmentFile=/etc/opencode/env
 Environment=HOME=/home/dev

@@ -118,9 +118,13 @@ design rejected and this one keeps rejected.
    the Azure idle gate, the Logic App wake path, and the `oc` wrapper that called
    `az vm start`.
 
-7. **Secrets never enter git or the image.** The OpenCode password and the restic
-   credentials live in `/etc/devbox/secrets.env`, mode 0600, provisioned by the
-   operator after first boot. No shipped file defines them.
+7. **Secrets never enter git or the image.** The OpenCode password, the Hermes
+   gateway key, the model provider key and the restic credentials live in
+   `/etc/devbox/secrets.env`, mode 0600, provisioned by the operator after first
+   boot. No shipped file defines them. Two writers read that file and each fails
+   closed: `oc-env.service` writes `/etc/opencode/env`, and `hermes-env.service`
+   writes `/etc/hermes/env` after filtering to an allowlist so an unrelated
+   secret cannot reach the control plane.
 
 8. **The install media may carry a Tailscale auth key, and it is optional.**
    With `TS_AUTHKEY` set, the key is scoped to a tag, single-use or short-lived,
@@ -131,10 +135,13 @@ design rejected and this one keeps rejected.
    media.
 
 9. **Tailscale is the only data path.** No port forward, no inbound rule, no
-   public listener. `tailscale serve` publishes the loopback OpenCode port with
-   a real TLS certificate. Cockpit ships with ucore, so an Ignition drop-in
-   rebinds its socket to loopback and it is deliberately not published. Use
-   Tailscale SSH and the OpenCode client. Add Cockpit later as a loopback
+   public listener. `tailscale serve` publishes three loopback surfaces, each
+   with a real TLS certificate: OpenCode on 443 (`127.0.0.1:4096`), the Hermes
+   dashboard on 8443 (`127.0.0.1:9119`), and the Hermes gateway API on 10000
+   (`127.0.0.1:8642`). Serve only accepts 443, 8443 and 10000 for HTTPS, which is
+   why those three. Cockpit ships with ucore, so an Ignition drop-in rebinds its
+   socket to loopback and it is deliberately not published. Use Tailscale SSH
+   plus the OpenCode and Hermes desktop clients. Add Cockpit later as a loopback
    container if it is genuinely needed. `docs/web-access.md` records the client
    path, the proof that no public listener exists, and the failures that look
    like a broken server but are not.
@@ -164,19 +171,39 @@ design rejected and this one keeps rejected.
     box. Physical access to the unencrypted disk already implies that. Intel AMT
     is optional and stays a second recovery path.
 
+14. **The Hermes control plane runs the official upstream image, and only that
+    container is exempt from the Fedora-family rule.** Hermes schedules and
+    delegates work to the OpenCode server. Nous Research publishes the image as
+    `nousresearch/hermes-agent`, and no Fedora-based build is offered, so it is
+    consumed as published rather than rebuilt. The waiver is scoped: the
+    container still publishes on loopback only, still loads its secrets from a
+    fail-closed environment file, and still persists under `/srv`. It reaches
+    OpenCode at `http://opencode:4096` on the shared `devbox` podman network, so
+    neither port leaves the host. Every other layer in the repo stays Fedora.
+
 ## Secrets
 
 | Secret | Where it lives | Written by |
 |---|---|---|
 | `OPENCODE_PASSWORD` | `/etc/devbox/secrets.env`, mode 0600 | Operator, after first boot |
+| `API_SERVER_KEY` | `/etc/devbox/secrets.env` | Operator, after first boot |
+| One of `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY` | `/etc/devbox/secrets.env` | Operator, after first boot |
+| `HERMES_DASHBOARD_BASIC_AUTH_*`, `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `TZ` | `/etc/devbox/secrets.env` | Operator, optional |
 | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` | `/etc/devbox/secrets.env` | Operator, after first boot |
 | Tailscale auth key | `/etc/devbox/tailscale-authkey`, mode 0600, in Ignition | `os/butane/build.sh` from `TS_AUTHKEY`; empty in a keyless build |
 | SSH public key | Ignition, no secret | `os/butane/build.sh` from `SSH_PUBKEY` |
 
 `oc-env.service` reads `OPENCODE_PASSWORD` from `secrets.env` and writes
-`/etc/opencode/env` for the quadlet. It fails closed when the password is absent
-or empty. The quadlet carries `Requires=oc-env.service`, so a failed bootstrap
-does not serve a passwordless server.
+`/etc/opencode/env` for the OpenCode quadlet. It fails closed when the password is
+absent or empty. The quadlet carries `Requires=oc-env.service`, so a failed
+bootstrap does not serve a passwordless server.
+
+`hermes-env.service` reads the same file and writes `/etc/hermes/env` for the
+Hermes quadlet. It requires `OPENCODE_PASSWORD` (the credential Hermes delegates
+with), `API_SERVER_KEY` (the gateway's own auth) and at least one model provider
+key. Optional keys are copied when set, and an allowlist keeps unrelated secrets
+out of the control plane's environment. It also fails closed and is `Requires=`
+by its quadlet.
 
 In a keyed build, the Tailscale key is the only secret on the install media.
 Revoke it in the Tailscale admin console after the node appears. The node
@@ -195,9 +222,9 @@ credentials are the operator's choice and live in `secrets.env`. An SFTP
 repository needs an SSH key mounted into the container, which the script does not
 do.
 
-The backup stops the workload before the snapshot and starts it again after, so
-the SQLite session store is not captured mid-write. The cost is a brief nightly
-outage of the server, which the always-on host survives.
+The backup stops both workloads before the snapshot and starts them again after,
+so neither SQLite store is captured mid-write. The cost is a brief nightly outage
+of both servers, which the always-on host survives.
 
 The restore path is `restic restore` onto a scratch device, verify, then copy the
 `/data` tree into `/srv`. The runbook contains the drill. A backup that has never
@@ -216,11 +243,12 @@ is required. If the LAN blocks outbound UDP, Tailscale falls back to DERP over
 TCP 443; test the path before relying on it.
 
 There is no inbound port forward. The host firewall rejects inbound traffic
-except established flows. The only listeners are loopback: OpenCode on 4096,
-Cockpit on 9090, and `tailscaled` for the tailnet. `tailscale serve` terminates
-TLS and proxies to loopback. `sshd` is masked because Fedora CoreOS enables it
-and the server firewall profile would expose it on the LAN. Shell access is
-Tailscale SSH, which runs inside `tailscaled`.
+except established flows. The only listeners are loopback: OpenCode on 4096, the
+Hermes gateway on 8642 and its dashboard on 9119, Cockpit on 9090, and
+`tailscaled` for the tailnet. `tailscale serve` terminates TLS and proxies to
+loopback. `sshd` is masked because Fedora CoreOS enables it and the server
+firewall profile would expose it on the LAN. Shell access is Tailscale SSH,
+which runs inside `tailscaled`.
 
 ## Risks the cloud hid
 

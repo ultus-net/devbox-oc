@@ -17,6 +17,8 @@ run() {
 }
 
 run "oc-env writes 0600"     ./host/tests/test_oc-env.sh
+run "hermes-env writes 0600" ./host/tests/test_hermes-env.sh
+run "hermes quadlet"         ./host/tests/test_hermes_quadlet.sh
 run "restic backup"          ./host/tests/test_oc_backup.sh
 run "tailnet join"           ./host/tests/test_tailnet_up.sh
 run "cockpit loopback"       ./host/tests/test_cockpit_loopback.sh

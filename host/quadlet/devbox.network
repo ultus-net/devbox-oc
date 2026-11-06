@@ -1,0 +1,18 @@
+# host/quadlet/devbox.network
+#
+# Installed to /etc/containers/systemd/ so podman's generator reads it. A
+# user-defined network is what gives the two containers name resolution: the
+# Hermes container reaches the OpenCode server at http://opencode:4096 without
+# either port leaving loopback. podman's default bridge has no such DNS.
+#
+# podman's network is a host bridge with a private subnet that the wired LAN
+# cannot route to, so joining it does not add a second door. The host still
+# publishes every service on 127.0.0.1 only.
+[Unit]
+Description=Devbox internal container network
+
+[Network]
+NetworkName=devbox
+
+[Install]
+WantedBy=default.target

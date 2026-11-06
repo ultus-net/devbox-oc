@@ -5,7 +5,8 @@ box publishes, how to open it from a browser, how to prove the path works, how t
 schedule long work, and how to take the publication down again.
 
 The box has one door: the tailnet. `tailscale serve` terminates TLS for
-`https://<host>.<tailnet>.ts.net` and proxies to OpenCode on loopback. There is no
+`https://<host>.<tailnet>.ts.net` and proxies three loopback surfaces: the
+OpenCode server, the Hermes dashboard, and the Hermes gateway API. There is no
 public listener, no inbound port forward, and no Funnel.
 
 ## The invariant: never reachable from the internet
@@ -36,31 +37,41 @@ flowchart LR
   TUI["TUI<br/>opencode --server"] --> TS
   APP["desktop app<br/>pairing link"] --> TS
   subgraph BOX["HP EliteDesk Mini"]
-    TS["tailscaled<br/>TLS on 443<br/>tailnet ACL applies"]
+    TS["tailscaled<br/>TLS on 443 / 8443 / 10000<br/>tailnet ACL applies"]
     OC["opencode serve<br/>0.0.0.0:4096 in podman"]
+    HD["hermes dashboard<br/>127.0.0.1:9119"]
+    HA["hermes gateway API<br/>127.0.0.1:8642"]
     CP["cockpit.socket<br/>127.0.0.1:9090"]
     TS -->|"http://127.0.0.1:4096"| OC
+    TS -->|"http://127.0.0.1:9119"| HD
+    TS -->|"http://127.0.0.1:8642"| HA
     TS -. "not published" .-> CP
   end
 ```
 
 | Hop | Address | Who terminates TLS |
 |---|---|---|
-| Client to box | `https://<host>.<tailnet>.ts.net:443` | `tailscaled`, with a certificate for the tailnet name |
-| Box to container | `http://127.0.0.1:4096` | nobody, loopback only |
+| OpenCode, client to box | `https://<host>.<tailnet>.ts.net:443` | `tailscaled`, with a certificate for the tailnet name |
+| OpenCode, box to container | `http://127.0.0.1:4096` | nobody, loopback only |
+| Hermes dashboard | `https://<host>.<tailnet>.ts.net:8443` → `http://127.0.0.1:9119` | `tailscaled` |
+| Hermes gateway API | `https://<host>.<tailnet>.ts.net:10000` → `http://127.0.0.1:8642` | `tailscaled` |
 | Cockpit | `http://127.0.0.1:9090` | not published, by design |
 
 The pieces that produce this:
 
-- `host/quadlet/opencode.container` publishes `127.0.0.1:4096:4096`, so the host
-  port is loopback only. The container binds `0.0.0.0:4096` inside its own
-  network namespace.
+- `host/quadlet/opencode.container` publishes `127.0.0.1:4096:4096` and
+  `host/quadlet/hermes.container` publishes `127.0.0.1:8642:8642` and
+  `127.0.0.1:9119:9119`, so every host port is loopback only. Each container
+  binds its own port inside its network namespace.
+- `host/quadlet/devbox.network` gives the two containers name resolution, so
+  Hermes reaches the server at `http://opencode:4096` without either port
+  leaving loopback.
 - `os/butane/ucore.bu` enables `oc-tailnet.service`, a one-shot unit that runs
   `oc-tailnet` after `tailscaled` is up.
-- `host/bin/oc-tailnet` runs
-  `tailscale serve --bg --https=443 http://127.0.0.1:4096` and
-  `tailscale set --ssh=true`. `--bg` makes the mount survive a reboot and a
-  `tailscale down`/`up`.
+- `host/bin/oc-tailnet` runs one `tailscale serve --bg --https=<port>
+  http://127.0.0.1:<port>` per surface (443, 8443, 10000, the only ports Serve
+  accepts for HTTPS) and `tailscale set --ssh=true`. `--bg` makes each mount
+  survive a reboot and a `tailscale down`/`up`.
 - Tailscale provisions the certificate. There is no `tailscale cert` step and no
   certificate file on the host.
 

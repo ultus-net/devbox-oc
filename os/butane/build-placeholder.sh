@@ -12,6 +12,7 @@ repo_root="$(cd "$here/../.." && pwd)"
 
 export ALLOW_PLACEHOLDERS=1
 export IMAGE="ghcr.io/REPLACE_ME/devbox:prod"
+export HERMES_IMAGE="docker.io/REPLACE_ME/hermes-agent:placeholder"
 export TS_AUTHKEY="tskey-auth-REPLACE_ME"
 export SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl devbox-placeholder"
 

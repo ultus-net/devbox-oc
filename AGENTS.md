@@ -10,9 +10,11 @@ two disagree.
 
 One always-on HP EliteDesk G4 35W Desktop Mini, two disks, two images. The host
 is ucore-minimal, a Fedora CoreOS derived image consumed from upstream. The
-toolchain runs in a Fedora toolbox container under podman. OpenCode is reached
-over a private tailnet with no public listener. The data disk is `/srv`, separate
-from the OS disk.
+toolchain runs in a Fedora toolbox container under podman. Two workloads share a
+private podman network: OpenCode, the interactive dev server, and Hermes, the
+assistant that schedules and delegates work to it. Both are reached over a
+private tailnet with no public listener. The data disk is `/srv`, separate from
+the OS disk.
 
 This repo is the source of truth for the host configuration and the container
 image. It ships no cloud infrastructure.
@@ -40,11 +42,14 @@ preference.
   destroy `/srv`. It is prepared once from the live media and addressed by
   `/dev/disk/by-id` then mounted by its `data` label. Ignition never partitions
   or formats it.
-- **The password comes from `/etc/devbox/secrets.env` at first boot.** No shipped
-  file may define `OPENCODE_PASSWORD` by any route, because Ignition ships as the
-  install media's config and stays readable. Only the scoped Tailscale auth key
+- **Runtime secrets come from `/etc/devbox/secrets.env` at first boot.** No
+  shipped file may define `OPENCODE_PASSWORD`, `API_SERVER_KEY` or a model
+  provider key by any route, because Ignition ships as the install media's config
+  and stays readable. Only the scoped Tailscale auth key
   rides the install media, and only in a keyed build. A keyless build
   (`TS_AUTHKEY` unset) ships no key and the operator joins from the console.
+  `oc-env` writes `/etc/opencode/env` and `hermes-env` writes `/etc/hermes/env`;
+  each fails closed on a missing key and each is `Requires=` by its quadlet.
 
 - **A keyless build keeps a console door.** Ignition writes a `getty@tty1`
   autologin drop-in for `core`, because a keyless box has no tailnet and `sshd`
