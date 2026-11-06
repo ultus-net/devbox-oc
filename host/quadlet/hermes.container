@@ -1,0 +1,61 @@
+# host/quadlet/hermes.container
+#
+# Installed to /etc/containers/systemd/ so podman's generator reads it. The
+# Hermes control plane schedules and delegates work to the OpenCode server.
+#
+# Image note: this is the one place the repo consumes a non-Fedora image. The
+# official Hermes image is published by Nous Research and is not offered on a
+# Fedora base, so the Fedora-family invariant is waived for this container
+# alone. See docs/design.md decision 14.
+[Unit]
+Description=Hermes agent control plane
+Wants=network-online.target
+# Ordering only between the two workloads: Hermes delegates to OpenCode, so a
+# delegation should find the server up. It is not a hard dependency, because a
+# stopped OpenCode server must not stop the assistant that talks about it.
+After=network-online.target oc-env.service hermes-env.service opencode.service
+# After= only orders the units. Without Requires=, a failed env write still lets
+# the container start with no credentials, so it serves nothing and looks
+# healthy from the outside. Fail closed instead: no secrets, no workload.
+Requires=hermes-env.service
+
+[Container]
+Image=__HERMES_IMAGE__
+ContainerName=hermes
+# The shared network is how Hermes reaches http://opencode:4096 by name. Neither
+# container port leaves loopback on the host.
+Network=devbox.network
+# Loopback only. A bare 8642 or 9119 binds every interface, which is a second
+# door on the wired LAN. 8642 is the gateway API the desktop app logs into, 9119
+# is the dashboard.
+PublishPort=127.0.0.1:8642:8642
+PublishPort=127.0.0.1:9119:9119
+EnvironmentFile=/etc/hermes/env
+# The image runs under s6 and drops to the mapped uid; the bind mount below is
+# chowned to the same pair by oc-paths.
+Environment=PUID=1000
+Environment=PGID=1000
+# The dashboard and the API server are the two surfaces the tailnet publishes.
+# Their credentials arrive through the env file, written from secrets.env.
+Environment=HERMES_DASHBOARD=1
+Environment=API_SERVER_ENABLED=true
+Environment=API_SERVER_HOST=0.0.0.0
+# The image entrypoint defaults to the interactive CLI, which exits at once under
+# a service manager. `gateway run` is the long-running server.
+Exec=gateway run
+Volume=/srv/hermes/data:/opt/data:Z
+AutoUpdate=registry
+
+# `podman auto-update` only keeps a new image if the container reports healthy,
+# so this is what makes the update path safe rather than optimistic.
+HealthCmd=hermes --version
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=3
+HealthStartPeriod=60s
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

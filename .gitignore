@@ -6,6 +6,10 @@ os/butane/ign-repro.*
 # Rendered Butane source build.sh writes before compiling. Removed on the normal
 # path, so this only covers a killed build.
 os/butane/.ucore.tmp.bu
+# Rendered quadlets and the shared network definition. Removed on the normal
+# path, so this only covers a killed build.
+os/butane/.*.container.ign.tmp
+os/butane/.*.network.ign.tmp
 # Local review scratch, never committed.
 .scratch/
 .pr-body.md

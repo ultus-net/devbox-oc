@@ -54,6 +54,10 @@ storage:
       mode: 0755
       contents:
         local: host/bin/oc-env
+    - path: /usr/local/sbin/hermes-env
+      mode: 0755
+      contents:
+        local: host/bin/hermes-env
     - path: /usr/local/sbin/oc-backup
       mode: 0755
       contents:
@@ -77,7 +81,9 @@ storage:
           #!/bin/sh
           set -eu
           install -d -o 1000 -g 1000 \
-            /srv/repos /srv/opencode/share /srv/opencode/config /srv/opencode/state
+            /srv/repos \
+            /srv/opencode/share /srv/opencode/config /srv/opencode/state \
+            /srv/hermes/data
     # The image reference is rendered here as well, so the backup runs the same
     # Fedora image as the workload and no Alpine restic image is needed.
     - path: /etc/devbox/backup.env
@@ -91,6 +97,16 @@ storage:
       mode: 0644
       contents:
         local: os/butane/.opencode.container.ign.tmp
+    # The Hermes control plane and the network that lets it reach OpenCode by
+    # name. Rendered from host/quadlet/ by build.sh.
+    - path: /etc/containers/systemd/hermes.container
+      mode: 0644
+      contents:
+        local: os/butane/.hermes.container.ign.tmp
+    - path: /etc/containers/systemd/devbox.network
+      mode: 0644
+      contents:
+        local: os/butane/.devbox.network.ign.tmp
     # An idle policy must not take the box off the tailnet.
     - path: /etc/systemd/logind.conf.d/10-devbox.conf
       mode: 0644
@@ -163,6 +179,19 @@ systemd:
         ExecStart=/usr/local/sbin/oc-env
         [Install]
         WantedBy=multi-user.target
+    - name: hermes-env.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Write the Hermes environment file from secrets.env
+        After=srv.mount
+        Requires=srv.mount
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/local/sbin/hermes-env
+        [Install]
+        WantedBy=multi-user.target
     - name: oc-backup.service
       contents: |
         [Unit]
@@ -174,13 +203,15 @@ systemd:
         Type=oneshot
         Nice=10
         IOSchedulingClass=idle
-        # Stop the workload so the session database is not captured mid-write.
-        # The leading - keeps the backup running if the stop already happened.
+        # Stop the workloads so neither SQLite store is captured mid-write. The
+        # leading - keeps the backup running if the stop already happened.
+        ExecStartPre=-/usr/bin/systemctl stop hermes.service
         ExecStartPre=-/usr/bin/systemctl stop opencode.service
         ExecStart=/usr/local/sbin/oc-backup
-        # Run after success or failure, so a failed backup never leaves the server
+        # Run after success or failure, so a failed backup never leaves a server
         # down.
         ExecStopPost=-/usr/bin/systemctl start opencode.service
+        ExecStopPost=-/usr/bin/systemctl start hermes.service
     - name: oc-backup.timer
       enabled: true
       contents: |
@@ -254,6 +285,6 @@ systemd:
         - name: 10-devbox.conf
           contents: |
             [Unit]
-            After=oc-env.service
+            After=oc-env.service hermes-env.service
     - name: podman-auto-update.timer
       enabled: true

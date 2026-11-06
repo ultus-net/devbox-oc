@@ -6,6 +6,25 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- Hermes control plane alongside OpenCode. A second podman quadlet
+  (`host/quadlet/hermes.container`) runs the official `nousresearch/hermes-agent`
+  image as the assistant that schedules and delegates work to the OpenCode
+  server. The two containers share the `devbox` podman network
+  (`host/quadlet/devbox.network`), so Hermes reaches `http://opencode:4096` by
+  name with neither port leaving loopback. Both publish on `127.0.0.1` only and
+  persist their state under `/srv/hermes/data`.
+- `hermes-env` host script and `hermes-env.service`. It reads
+  `/etc/devbox/secrets.env`, filters to an allowlist, and writes `/etc/hermes/env`
+  as a 0600 file. It fails closed on a missing `OPENCODE_PASSWORD`,
+  `API_SERVER_KEY` or model provider key, and the quadlet carries
+  `Requires=hermes-env.service`.
+- `oc-tailnet` now publishes three tailnet-only mounts: OpenCode on 443, the
+  Hermes dashboard on 8443, and the Hermes gateway API on 10000, each proxying a
+  loopback port. This is the one place the repo consumes a non-Fedora image; the
+  waiver is scoped to that container and recorded as design decision 14.
+- `host/tests/test_hermes-env.sh` and `host/tests/test_hermes_quadlet.sh` guard
+  the new env writer, the quadlet shape and the backup ordering. Both are wired
+  into `tests/verify.sh`.
 - Bare-metal deployment path. Ignition for Fedora CoreOS installation media, one
   enabled rebase to `ghcr.io/ublue-os/ucore-minimal:stable`, a separate data disk
   mounted at `/srv`, masked sleep targets, and a logind policy that ignores idle.

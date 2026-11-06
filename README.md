@@ -2,9 +2,9 @@
 
 An AI development server on an HP EliteDesk G4 35W Desktop Mini in a server
 room. It runs ucore-minimal, a Fedora CoreOS derived image, as an immutable host,
-runs the OpenCode server in a podman container, and is reached only over a
-private tailnet. The OS disk and the data disk are separate, and a nightly restic
-backup leaves the box.
+runs the OpenCode server and the Hermes control plane in podman containers on a
+shared internal network, and is reached only over a private tailnet. The OS disk
+and the data disk are separate, and a nightly restic backup leaves the box.
 
 ## Why it exists
 
@@ -27,12 +27,19 @@ flowchart LR
   subgraph BOX["HP EliteDesk Mini, server room, always on"]
     HOST["tailscaled<br/>serves loopback only"]
     Q["podman quadlet<br/>opencode container"]
-    ENV["oc-env.service<br/>writes /etc/opencode/env"]
+    H["podman quadlet<br/>hermes control plane"]
+    ENV["oc-env + hermes-env<br/>write the env files"]
+    NET2["devbox network<br/>container DNS"]
     BK["oc-backup.timer<br/>nightly restic"]
     HOST --> Q
+    HOST --> H
     ENV --> Q
+    ENV --> H
+    Q --- NET2
+    H --- NET2
   end
   Q --> DD["/srv data disk<br/>repos, session DB, config"]
+  H --> DD
   DD --> BK
   BK --> OFF["off-box restic repository<br/>NAS, B2, or S3"]
   BOX --> LAN["wired LAN and firewall"]
@@ -59,14 +66,18 @@ check decides whether a new image is kept, not whether a session is running.
 | Secret | Where it lives | Written by |
 |---|---|---|
 | `OPENCODE_PASSWORD` | `/etc/devbox/secrets.env`, mode 0600 | operator, after first boot |
+| `API_SERVER_KEY` | `/etc/devbox/secrets.env` | operator, after first boot |
+| One model provider key (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_API_KEY`) | `/etc/devbox/secrets.env` | operator, after first boot |
+| Optional Hermes keys (`HERMES_DASHBOARD_BASIC_AUTH_*`, `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `TZ`) | `/etc/devbox/secrets.env` | operator, optional |
 | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` | `/etc/devbox/secrets.env` | operator, after first boot |
 | Tailscale auth key | `/etc/devbox/tailscale-authkey`, mode 0600, in Ignition | `os/butane/build.sh`; empty in a keyless build |
 | SSH public key | Ignition, no secret | `os/butane/build.sh` |
 
 `oc-env.service` reads the password from `secrets.env` and writes
-`/etc/opencode/env`. It fails closed when the password is absent or empty, and
-the quadlet carries `Requires=oc-env.service`, so a failed write never serves a
-passwordless server.
+`/etc/opencode/env`. `hermes-env.service` reads the same file and writes
+`/etc/hermes/env`, filtered to an allowlist. Each fails closed on a missing key,
+and each quadlet carries `Requires=` on its writer, so a failed write never
+serves an unauthenticated server.
 
 In a keyed build, the Tailscale key is the only secret on the install media. It
 is scoped to a tag, single-use or short-lived, and revoked after the node
@@ -101,6 +112,8 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | Suite | What it protects |
 |---|---|
 | `host/tests/test_oc-env.sh` | the environment file is 0600 and an empty password fails closed |
+| `host/tests/test_hermes-env.sh` | the Hermes env file is 0600, allowlisted, and fails closed |
+| `host/tests/test_hermes_quadlet.sh` | the Hermes quadlet persists on `/srv`, stays on loopback, and the backup orders both workloads |
 | `host/tests/test_oc_backup.sh` | the backup runs the Fedora image, mounts data read-only, and never prunes |
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent, durable, and needs a real key |
 | `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is not published |

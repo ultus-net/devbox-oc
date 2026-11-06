@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Publish the OpenCode server on the tailnet with a real TLS certificate.
+# Publish the devbox surfaces on the tailnet with real TLS certificates.
 #
-# tailscale serve proxies https://<host>.<tailnet>.ts.net to loopback, so the
-# container port is never bound to an interface. This is the only data path:
+# tailscale serve proxies https://<host>.<tailnet>.ts.net to loopback, so no
+# container port is ever bound to an interface. This is the only data path:
 # there is no inbound port forward and no public listener.
+#
+# Three surfaces, all tailnet-only:
+#   443   -> OpenCode server          (127.0.0.1:4096)
+#   8443  -> Hermes dashboard/webapp  (127.0.0.1:9119)
+#   10000 -> Hermes gateway API       (127.0.0.1:8642)
+# Serve only accepts 443, 8443 and 10000 for HTTPS, which is why those three.
+# Each invocation sets one mount, and running it again is idempotent.
 #
 # Cockpit ships with ucore but is rebound to loopback by an Ignition drop-in and
 # is deliberately not published here. Use Tailscale SSH for a shell.
@@ -11,9 +18,16 @@ set -euo pipefail
 
 : "${OC_TCP_PORT:=4096}"
 : "${OC_HTTPS_PORT:=443}"
+: "${HERMES_DASH_TCP_PORT:=9119}"
+: "${HERMES_DASH_HTTPS_PORT:=8443}"
+: "${HERMES_API_TCP_PORT:=8642}"
+: "${HERMES_API_HTTPS_PORT:=10000}"
 
-# --bg makes the config survive reboots and tailscale restarts.
+# --bg makes each mount survive reboots and tailscale restarts. The command
+# takes one target per invocation, so each surface is its own mount.
 tailscale serve --bg --https="${OC_HTTPS_PORT}" "http://127.0.0.1:${OC_TCP_PORT}"
+tailscale serve --bg --https="${HERMES_DASH_HTTPS_PORT}" "http://127.0.0.1:${HERMES_DASH_TCP_PORT}"
+tailscale serve --bg --https="${HERMES_API_HTTPS_PORT}" "http://127.0.0.1:${HERMES_API_TCP_PORT}"
 
 # Tailscale SSH authenticates by tailnet identity, so there are no
 # authorized_keys to distribute or audit.

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Write the Hermes environment file from the operator-managed secrets file.
+#
+# Hermes needs a model provider key, the gateway API key the desktop app logs in
+# with, and the OpenCode password it uses to delegate. None of those live in git,
+# the image, or the Ignition config. The operator writes them to
+# /etc/devbox/secrets.env after first boot, and this unit is the only path from
+# there into the container.
+#
+# Fail closed: a missing required key stops the unit, and the quadlet
+# Requires= this unit, so the control plane never starts half-authenticated.
+set -euo pipefail
+
+SECRETS_FILE="${SECRETS_FILE:-/etc/devbox/secrets.env}"
+OUT_FILE="${OUT_FILE:-/etc/hermes/env}"
+
+fail() { echo "hermes-env: $1" >&2; exit 1; }
+
+[ -r "$SECRETS_FILE" ] || fail "cannot read $SECRETS_FILE"
+
+# Keys the control plane cannot start without: the OpenCode password it delegates
+# with, and the key that gates its own API server.
+REQUIRED_KEYS=(OPENCODE_PASSWORD API_SERVER_KEY)
+# At least one model provider key must be present; which vendor is the operator's
+# choice. Every one that is set is passed through.
+PROVIDER_KEYS=(OPENROUTER_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY GOOGLE_API_KEY)
+# Copied when set, ignored when absent.
+OPTIONAL_KEYS=(
+  HERMES_DASHBOARD_BASIC_AUTH_USERNAME
+  HERMES_DASHBOARD_BASIC_AUTH_PASSWORD
+  HERMES_DASHBOARD_BASIC_AUTH_SECRET
+  TELEGRAM_BOT_TOKEN
+  DISCORD_BOT_TOKEN
+  TZ
+)
+
+KNOWN_KEYS=("${REQUIRED_KEYS[@]}" "${PROVIDER_KEYS[@]}" "${OPTIONAL_KEYS[@]}")
+
+# Parse rather than source: the secrets file is data, and sourcing would execute
+# whatever it contains. The last assignment wins, as systemd's EnvironmentFile
+# does.
+declare -A values=()
+in_allowlist() {
+  local key="$1" k
+  for k in "${KNOWN_KEYS[@]}"; do
+    [ "$k" = "$key" ] && return 0
+  done
+  return 1
+}
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    ''|'#'*) continue ;;
+  esac
+  key="${line%%=*}"
+  in_allowlist "$key" || continue
+  values["$key"]="${line#*=}"
+done < "$SECRETS_FILE"
+
+# One surrounding pair of quotes is optional in an env file.
+strip_quotes() {
+  local v="$1"
+  case "$v" in
+    \"*\") v="${v#\"}"; v="${v%\"}" ;;
+    \'*\') v="${v#\'}"; v="${v%\'}" ;;
+  esac
+  printf '%s' "$v"
+}
+
+missing=()
+for key in "${REQUIRED_KEYS[@]}"; do
+  values["$key"]="$(strip_quotes "${values[$key]:-}")"
+  [ -n "${values[$key]}" ] || missing+=("$key")
+done
+[ "${#missing[@]}" -eq 0 ] || fail "unset or empty in $SECRETS_FILE: ${missing[*]}"
+
+provider_seen=0
+for key in "${PROVIDER_KEYS[@]}"; do
+  values["$key"]="$(strip_quotes "${values[$key]:-}")"
+  [ -n "${values[$key]}" ] && provider_seen=1
+done
+[ "$provider_seen" -eq 1 ] \
+  || fail "no model provider key in $SECRETS_FILE (need one of: ${PROVIDER_KEYS[*]})"
+
+for key in "${OPTIONAL_KEYS[@]}"; do
+  [ -n "${values[$key]:-}" ] || continue
+  values["$key"]="$(strip_quotes "${values[$key]}")"
+done
+
+install -d -m 0755 "$(dirname "$OUT_FILE")"
+
+umask 077
+tmp="${OUT_FILE}.tmp.$$"
+trap 'rm -f "$tmp"' EXIT
+
+# Required first, then each provider and optional key the operator actually set.
+# An optional key present but empty is skipped, so we never write `KEY=`.
+for key in "${REQUIRED_KEYS[@]}"; do
+  printf '%s=%s\n' "$key" "${values[$key]}" >> "$tmp"
+done
+for key in "${PROVIDER_KEYS[@]}" "${OPTIONAL_KEYS[@]}"; do
+  [ -n "${values[$key]:-}" ] || continue
+  printf '%s=%s\n' "$key" "${values[$key]}" >> "$tmp"
+done
+
+chmod 0600 "$tmp"
+# mv replaces the target atomically, so a reader never sees a half-written file.
+mv -f "$tmp" "$OUT_FILE"
+trap - EXIT
+
+echo "hermes-env: wrote $OUT_FILE"

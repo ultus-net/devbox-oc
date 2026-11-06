@@ -200,8 +200,9 @@ key does not remove the node; the node identity lives in `/var/lib/tailscale`.
 
 ## 7. Provision the runtime secrets
 
-The OpenCode password and the restic credentials are not on the install media.
-Create `/etc/devbox/secrets.env` on the box, mode 0600, owned by root.
+The OpenCode password, the Hermes gateway key, a model provider key and the
+restic credentials are not on the install media. Create
+`/etc/devbox/secrets.env` on the box, mode 0600, owned by root.
 
 Generate a password and store it in your password manager:
 
@@ -214,9 +215,15 @@ Create the file locally with the values:
 ```sh
 cat > secrets.env <<'EOF'
 OPENCODE_PASSWORD=replace-with-the-generated-value
+# The Hermes control plane's own gateway key. Generate one with `openssl rand -hex 32`.
+API_SERVER_KEY=replace-with-the-gateway-key
+# One model provider key, whichever vendor you use.
+OPENROUTER_API_KEY=replace-with-the-provider-key
+# Optional Hermes dashboard auth and chat channel.
+HERMES_DASHBOARD_BASIC_AUTH_USERNAME=admin
+HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=replace-with-a-dashboard-password
 RESTIC_REPOSITORY=s3:https://s3.example.invalid/devbox-restic
 RESTIC_PASSWORD=replace-with-the-restic-password
-# Add the provider credential variables for your store in the same file.
 EOF
 chmod 600 secrets.env
 ```
@@ -233,21 +240,22 @@ ssh core@devbox 'sudo install -d -m 0700 /etc/devbox && \
 
 Delete the local `secrets.env` after the install. Do not commit it.
 
-Then start the environment writer and the container:
+Then start the environment writers and the containers:
 
 ```sh
-ssh core@devbox 'sudo systemctl restart oc-env.service opencode.service'
+ssh core@devbox 'sudo systemctl restart oc-env.service hermes-env.service opencode.service hermes.service'
 ```
 
-Check that the container is healthy:
+Check that both containers are healthy:
 
 ```sh
 ssh core@devbox 'sudo podman ps --format "{{.Names}} {{.Status}}"'
-ssh core@devbox 'sudo systemctl is-active oc-env opencode'
+ssh core@devbox 'sudo systemctl is-active oc-env hermes-env opencode hermes'
 ```
 
-`oc-env` writes `/etc/opencode/env`. The quadlet loads it. If `oc-env` fails, the
-container will not start. That is the fail-closed path, not a bug.
+`oc-env` writes `/etc/opencode/env` and `hermes-env` writes `/etc/hermes/env`.
+Each quadlet loads its own file. If either writer fails, its container will not
+start. That is the fail-closed path, not a bug.
 
 If the restic repository is new, initialize it once. `oc-restic` runs restic in
 the project's Fedora image with only the restic credentials:

@@ -69,14 +69,18 @@ wrong_unit="$(listen_stream_dropins | grep -v '^cockpit\.socket/' || true)"
   || fail "a ListenStream drop-in is attached to a unit other than cockpit.socket:
 $wrong_unit"
 
-# The publisher serves OpenCode only. Publishing Cockpit as well would reopen a
-# second door, and the design deliberately has one.
+# The publisher serves the two workloads only. Publishing Cockpit as well would
+# reopen a second door, and the design deliberately has one.
 if grep -q 'COCKPIT' "$tailnet"; then
   fail "oc-tailnet still publishes Cockpit"
 fi
 
 grep -Eq 'tailscale serve --bg --https="\$\{OC_HTTPS_PORT\}" "http://127\.0\.0\.1:\$\{OC_TCP_PORT\}"' "$tailnet" \
   || fail "oc-tailnet does not publish OpenCode on its loopback port"
+grep -Eq 'tailscale serve --bg --https="\$\{HERMES_DASH_HTTPS_PORT\}" "http://127\.0\.0\.1:\$\{HERMES_DASH_TCP_PORT\}"' "$tailnet" \
+  || fail "oc-tailnet does not publish the Hermes dashboard on its loopback port"
+grep -Eq 'tailscale serve --bg --https="\$\{HERMES_API_HTTPS_PORT\}" "http://127\.0\.0\.1:\$\{HERMES_API_TCP_PORT\}"' "$tailnet" \
+  || fail "oc-tailnet does not publish the Hermes gateway on its loopback port"
 
 # Funnel is the public counterpart of Serve. A funnel mount here would put the
 # box on the internet, which is the one property the tailnet exists to keep.
@@ -84,16 +88,23 @@ if grep -Eq 'tailscale[[:space:]]+funnel' "$tailnet"; then
   fail "oc-tailnet enables Funnel, which would publish the box to the internet"
 fi
 
-# Every serve target must be the OpenCode loopback port. A second mount, such as
-# Cockpit on 9090, would reopen the door the loopback drop-in closes. Read-only
-# subcommands are not targets and are allowed.
+# Every serve target must be one of the approved loopback ports. A mount such as
+# Cockpit on 9090 would reopen the door the loopback drop-in closes. Read-only
+# subcommands are not targets and are allowed. The approved set is the three
+# surfaces this repo publishes; each one is checked to proxy 127.0.0.1 only.
 serve_lines="$(sed 's/#.*//' "$tailnet" | grep -E 'tailscale[[:space:]]+serve' || true)"
 target_lines="$(printf '%s\n' "$serve_lines" \
   | grep -vE 'tailscale[[:space:]]+serve[[:space:]]+(status|reset|drain|advertise|get-config|set-config)([[:space:]]|$)' \
   || true)"
-stray_serve="$(printf '%s\n' "$target_lines" | grep -v 'OC_TCP_PORT' || true)"
+approved='OC_TCP_PORT\|HERMES_DASH_TCP_PORT\|HERMES_API_TCP_PORT'
+stray_serve="$(printf '%s\n' "$target_lines" | grep -v "$approved" || true)"
 [ -z "$stray_serve" ] \
-  || fail "oc-tailnet serves a target other than the OpenCode loopback port:
+  || fail "oc-tailnet serves a target other than an approved loopback port:
 $stray_serve"
+
+non_loopback="$(printf '%s\n' "$target_lines" | grep -v 'http://127\.0\.0\.1:' || true)"
+[ -z "$non_loopback" ] \
+  || fail "oc-tailnet serves a target that is not loopback:
+$non_loopback"
 
 echo "cockpit listens on loopback only and is not published"
