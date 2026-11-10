@@ -144,6 +144,19 @@ link, directory and unit and is idempotent, the boot command carries both disks
 and no inbound forward, the guest check defines every helper it calls, and the
 data-disk script refuses the device that backs `/`.
 
+## The run that proved it
+
+On 2026-11-11 the harness ran `./vm/run-vm.sh --rebuild` at the tip of this
+branch and reported `VM DOGFOOD: pass` with zero failures. That run covered first
+boot on Fedora CoreOS, the rebase to `ucore-minimal:stable`, the second boot,
+`systemd-repart` on the blank data disk, `var-srv.mount` on a device separate
+from `/var`, a dummy `secrets.env`, both containers healthy, and all three
+loopback ports. It reported one `SKIP`: `cockpit-loopback`, because the image
+ships no `cockpit.socket`.
+
+`SUMMARY failures=0` is the line to look for. A `SKIP` is a conditional guard
+whose condition the image does not meet, and the report says which one.
+
 ## What it found
 
 These were found by running the harness, not by reading the config:

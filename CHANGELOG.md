@@ -18,7 +18,9 @@ All notable changes to this project. One entry per landed change, newest first.
   for `IdleAction`, and writes the fallback report only when `/srv` is a real
   mountpoint. `vm/tests/` guards the merge, the boot command, the guest check's
   helper definitions, and the data-disk root-device refusal, and `docs/vm.md` is
-  the procedure. Both are wired into `tests/verify.sh`.
+  the procedure. Both are wired into `tests/verify.sh`. A full `--rebuild` run at
+  the tip passed on 2026-11-11: `VM DOGFOOD: pass`, zero failures, one `SKIP` for
+  the absent Cockpit socket.
 - Hermes control plane alongside OpenCode. A second podman quadlet
   (`host/quadlet/hermes.container`) runs the official `nousresearch/hermes-agent`
   image as the assistant that schedules and delegates work to the OpenCode
@@ -148,9 +150,10 @@ All notable changes to this project. One entry per landed change, newest first.
 ### Known gaps
 
 - No install has run on the target Mini, and no live boot has been tested.
-- The container image has never been built by the GitHub Actions workflow.
+- The container image has been built by the GitHub Actions workflow and pulled in
+  the VM, but it has not run on the Mini.
 - The restic restore drill has not been executed against a real repository.
-- The ucore rebase path is documented upstream but unexercised on this hardware.
+- The ucore rebase has run under QEMU, not on the Mini.
 - `podman-auto-update.timer` is not gated on idleness. It follows `:prod` on its
   own schedule and restarts the container when the tag moves, so an update can
   land during a running session. The health check decides whether the new image
