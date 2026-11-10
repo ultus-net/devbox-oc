@@ -135,7 +135,12 @@ All notable changes to this project. One entry per landed change, newest first.
   smoke gate requires `SMOKE_OC_VERSION` so the pin cannot turn itself off, pins
   the built binary against the Dockerfile's `OC_VERSION`, starts the container on
   loopback, requires `401` on `/api/info`, requires the health command to pass,
-  and requires it to fail against a URL that serves nothing.
+  and requires it to fail against a URL that serves nothing. A missing pin now
+  fails the gate, and `image/tests/test_smoke_requires_pin.sh` holds that, so the
+  pin cannot revert to optional unnoticed. The quadlet still runs
+  `opencode --version` as its health check: switching it to `devbox-health` is
+  #23, because the published `:prod` image does not carry the script yet and the
+  VM dogfood run pulls `:prod`.
   `image/prod-digest.txt` held `PENDING-FIRST-BUILD` while `:prod` had been live
   since 2026-11-04, so the rollback record named no image; it now records the
   digest `sha256:fa87259b…` of the last successful `main` build (run
