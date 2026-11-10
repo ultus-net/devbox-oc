@@ -68,11 +68,19 @@ if [ "$agent_up" = 0 ]; then
   info agent "unreachable at $AGENT_URL; the report stays at $report"
 fi
 
-info release "$(rpm-ostree status | sed -n '1,12p' | tr '\n' ' ')"
+info release "$(rpm-ostree status --booted 2>/dev/null | tr '\n' ' ')"
+
+# The booted deployment is the one the marker prefixes. `rpm-ostree status`
+# prints the staged deployment too, so grepping all of its output accepts a ucore
+# that is only staged and not booted. --booted narrows the output, and the marker
+# keeps the parse honest if a later edit drops the flag.
+booted_line() {
+  grep -m1 -e '^●' -e '^\*' || true
+}
 
 # 1. The rebase landed. The first boot is Fedora CoreOS; the booted deployment
 #    after one reboot must name the ucore image.
-booted="$(rpm-ostree status | sed -n '1,12p')"
+booted="$(rpm-ostree status --booted 2>/dev/null | booted_line)"
 check_contains booted-image ucore-minimal "$booted"
 check hostname "$EXPECTED_HOSTNAME" "$(hostname)"
 
@@ -90,12 +98,20 @@ data_label="$(blkid -s LABEL -o value "$data_source" 2>/dev/null || true)"
 check data-label data "$data_label"
 # The point of the second disk is that an OS reinstall cannot destroy /srv. A
 # mount unit that fails leaves /srv a plain directory on the OS disk, which looks
-# the same to every other check, so compare the backing devices.
+# the same to every other check, so compare the parent block devices. findmnt
+# reports `/dev/vda4[/ostree/deploy/...]` for /var, and a second partition on the
+# same disk is still destroyed by a reinstall.
+source_device() { printf '%s' "${1%%\[*}"; }
+parent_device() {
+  lsblk -no PKNAME "$(source_device "$1")" 2>/dev/null | head -n1
+}
 var_source="$(findmnt -n -o SOURCE /var 2>/dev/null || true)"
-if [ -n "$data_source" ] && [ "$data_source" != "$var_source" ]; then
-  pass data-separate-device "$data_source is not $var_source"
+data_parent="$(parent_device "$data_source")"
+var_parent="$(parent_device "$var_source")"
+if [ -n "$data_parent" ] && [ "$data_parent" != "$var_parent" ]; then
+  pass data-separate-device "/dev/$data_parent is not /dev/$var_parent"
 else
-  fail data-separate-device "/srv is on ${data_source:-nothing}, the same device as /var"
+  fail data-separate-device "/srv is on ${data_source:-nothing} (parent ${data_parent:-?}), the same disk as /var (parent ${var_parent:-?})"
 fi
 check srv-owner 1000:1000 "$(stat -c '%u:%g' /srv/repos 2>/dev/null || true)"
 check oc-paths active "$(systemctl is-active oc-paths.service 2>&1)"
@@ -264,5 +280,10 @@ if mountpoint -q /srv; then
   cat "$report" > /srv/devbox-vm-report.txt 2>/dev/null || true
 fi
 
-touch "$report_dir/checked"
+# Only a passing run writes the marker the check unit's condition looks for. A
+# failed run leaves it absent, so the next boot repeats the check instead of
+# hiding the failure behind a completed oneshot.
+if [ "$failures" -eq 0 ]; then
+  touch "$report_dir/checked"
+fi
 [ "$failures" -eq 0 ]

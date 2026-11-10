@@ -45,6 +45,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(400, "bad report length\n")
             return
         body = self.rfile.read(length)
+        # A short read is a truncated report, and a truncated report has no FAIL
+        # line, which the harness would read as a pass. Refuse it instead.
+        if len(body) != length:
+            self._send(400, "truncated report: %d of %d bytes\n" % (len(body), length))
+            return
         directory = os.path.dirname(self.report_path) or "."
         os.makedirs(directory, exist_ok=True)
         fd, staged = tempfile.mkstemp(dir=directory, prefix=".report.")
