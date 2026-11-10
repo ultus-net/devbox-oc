@@ -94,6 +94,10 @@ if "refs/heads/main" not in gate:
     fail("the record job is not limited to main")
 if "pull_request" in gate:
     fail("the record job condition names a pull request event: " + gate)
+# A negation such as event_name != 'push' also admits pull requests, so any
+# event narrowing must be the positive push form.
+if "event_name" in gate and "event_name == 'push'" not in gate:
+    fail("the record job narrows by an event other than push: " + gate)
 
 for scope in ("contents", "pull-requests"):
     if scopes(record.get("permissions")).get(scope) != "write":
