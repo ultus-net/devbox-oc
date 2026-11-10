@@ -26,7 +26,7 @@ export QEMU=true
 
 # T1: --dry-run prints one argument per line, with both disks and the fw_cfg
 #     Ignition.
-cmd="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run)" || fail "T1: --dry-run failed"
+cmd="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>/dev/null)" || fail "T1: --dry-run failed"
 grep -Fqx -- "-fw_cfg" <<<"$cmd" || fail "T1: no -fw_cfg"
 grep -Fqx -- "name=opt/com.coreos/config,file=$tmp/cache/devbox-vm.ign" <<<"$cmd" \
   || fail "T1: no fw_cfg pointing at the harness Ignition"
@@ -46,7 +46,7 @@ if ! grep -Fqx -- "tcg" <<<"$cmd"; then
   fail "T3: a missing KVM device did not fall back to tcg"
 fi
 touch "$tmp/kvm"
-kvm_cmd="$(KVM_DEVICE="$tmp/kvm" "$vm/run-vm.sh" --dry-run)" || fail "T3: --dry-run with KVM failed"
+kvm_cmd="$(KVM_DEVICE="$tmp/kvm" "$vm/run-vm.sh" --dry-run 2>/dev/null)" || fail "T3: --dry-run with KVM failed"
 if ! grep -Fqx -- "kvm" <<<"$kvm_cmd"; then
   fail "T3: a readable KVM device did not select kvm"
 fi
@@ -75,16 +75,40 @@ fi
 "$vm/run-vm.sh" --stop >"$tmp/stop.out" 2>"$tmp/stop.err" || fail "T5: --stop failed with no VM"
 grep -q 'no VM pidfile' "$tmp/stop.err" || fail "T5: --stop did not say why it did nothing"
 
-# T6: the host creates the data disk as a blank file. Partitioning and
-#     formatting belong to the guest, where a separate device is the invariant
-#     under test. The only host-side disk image tool creates the OS overlay, and
-#     the data disk is a truncate.
-qemu_img_lines="$(grep -n 'qemu-img' "$vm/run-vm.sh" || true)"
-[ -n "$qemu_img_lines" ] || fail "T6: no qemu-img call, so the OS overlay is not created"
-if printf '%s\n' "$qemu_img_lines" | grep -qF "\$data"; then
-  fail "T6: qemu-img is applied to the data disk"
+# T6: on an empty cache the plan names the two writes a real run would make: an
+#     OS overlay on the pinned base and a blank data disk. The guest prepares the
+#     data disk before var-srv.mount, so the plan must not reach past a blank file.
+#     The sizes are not the defaults, so a size baked into the script cannot pass.
+export VM_DISK_SIZE=48G VM_DATA_SIZE=12G
+release="$(jq -r '.release' "$vm/fcos.json")"
+plan="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" || fail "T6: --dry-run failed"
+printf '%s\n' "$plan" | grep -F 'plan: ' > "$tmp/plan.actual" || fail "T6: --dry-run printed no disk plan"
+printf 'plan: qemu-img create -f qcow2 -F qcow2 -b %s %s 48G\nplan: truncate -s 12G %s\n' \
+  "$tmp/cache/fcos-$release.qcow2" "$tmp/cache/vm-disk.qcow2" "$tmp/cache/data.img" \
+  > "$tmp/plan.expected"
+if ! diff -u "$tmp/plan.expected" "$tmp/plan.actual"; then
+  fail "T6: the disk plan is not the two writes an empty cache needs"
 fi
-grep -qF "truncate -s \"\$data_size\" \"\$data.new" "$vm/run-vm.sh" \
-  || fail "T6: the data disk is not created as a blank file"
+
+# T6b: a populated cache is planned as reuse, not as a write it would not make.
+printf 'x' > "$tmp/cache/vm-disk.qcow2"
+printf 'x' > "$tmp/cache/data.img"
+reuse="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" || fail "T6b: --dry-run failed"
+printf '%s\n' "$reuse" | grep -F 'plan: ' > "$tmp/reuse.actual" \
+  || fail "T6b: --dry-run printed no disk plan"
+printf 'plan: reuse %s\nplan: reuse %s\n' "$tmp/cache/vm-disk.qcow2" "$tmp/cache/data.img" \
+  > "$tmp/reuse.expected"
+if ! diff -u "$tmp/reuse.expected" "$tmp/reuse.actual"; then
+  fail "T6b: a populated cache is still planned as a write"
+fi
+
+# T6c: --rebuild plans both writes even when both disks already exist.
+rebuild="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run --rebuild 2>&1 >/dev/null)" \
+  || fail "T6c: --dry-run --rebuild failed"
+printf '%s\n' "$rebuild" | grep -F 'plan: ' > "$tmp/rebuild.actual" \
+  || fail "T6c: --dry-run printed no disk plan"
+if ! diff -u "$tmp/plan.expected" "$tmp/rebuild.actual"; then
+  fail "T6c: --rebuild did not plan both writes"
+fi
 
 echo "vm run command uses the harness Ignition, two disks, and no inbound forward"

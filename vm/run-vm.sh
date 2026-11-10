@@ -112,24 +112,52 @@ if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && [ "$dry_run" 
   exit 1
 fi
 
+# One argv per disk step. --dry-run prints it on stderr instead of running it, so
+# the plan and the real path cannot drift. The write lands on a temporary name
+# and is renamed, so a failed create never leaves a disk a later run trusts. The
+# OS disk is a qcow2 overlay on the pinned base. The data disk stays blank: the
+# guest prepares it before var-srv.mount, mirroring the live-media step in
+# docs/install.md.
+run_step() {
+  if [ "$dry_run" = 1 ]; then
+    printf 'plan: %s\n' "$*" >&2
+    return 0
+  fi
+  "$@"
+}
+
+create_os_disk() {
+  local dest="$disk"
+  [ "$dry_run" = 1 ] || dest="$disk.new.$$"
+  run_step qemu-img create -f qcow2 -F qcow2 -b "$base" "$dest" "$disk_size" >/dev/null
+  [ "$dry_run" = 1 ] || mv "$dest" "$disk"
+}
+
+create_data_disk() {
+  local dest="$data"
+  [ "$dry_run" = 1 ] || dest="$data.new.$$"
+  run_step truncate -s "$data_size" "$dest"
+  [ "$dry_run" = 1 ] || mv "$dest" "$data"
+}
+
 if [ "$dry_run" = 1 ]; then
-  base="$cache/fcos-$(jq -r '.release' "$here/fcos.json").qcow2"
+  base="$("$here/fetch-fcos.sh" --print-base)"
 else
   base="$("$here/fetch-fcos.sh")"
   # Keep the guest's report URL on the same port the agent below binds.
   ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
+fi
 
-  if [ "$rebuild" = 1 ] || [ ! -s "$disk" ]; then
-    qemu-img create -f qcow2 -F qcow2 -b "$base" "$disk.new.$$" "$disk_size" >/dev/null
-    mv "$disk.new.$$" "$disk"
-  fi
+if [ "$rebuild" = 1 ] || [ ! -s "$disk" ]; then
+  create_os_disk
+elif [ "$dry_run" = 1 ]; then
+  echo "plan: reuse $disk" >&2
+fi
 
-  # A blank disk. The guest prepares the partition table and filesystem before
-  # var-srv.mount, mirroring the live-media step in docs/install.md.
-  if [ "$rebuild" = 1 ] || [ ! -s "$data" ]; then
-    truncate -s "$data_size" "$data.new.$$"
-    mv "$data.new.$$" "$data"
-  fi
+if [ "$rebuild" = 1 ] || [ ! -s "$data" ]; then
+  create_data_disk
+elif [ "$dry_run" = 1 ]; then
+  echo "plan: reuse $data" >&2
 fi
 
 if [ -r "$kvm_device" ]; then
