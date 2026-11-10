@@ -126,15 +126,22 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `os/butane/tests/test_tailscale_enabled.sh` | `tailscaled` is enabled and orders the join |
 | `os/butane/tests/test_keyless_build.sh` | a keyless build ships no key and keeps the console autologin |
 | `os/butane/tests/test_units_have_scripts.sh` | every unit runs a shipped script, and the artifact reproduces |
+| `os/butane/tests/test_data_mount.sh` | the data disk is mounted by a canonical path, not the `/srv` symlink |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
 | `image/tests/test_healthcheck.sh` | the health command accepts a serving API and rejects anything else |
 | `image/tests/test_smoke_requires_pin.sh` | the smoke gate refuses to run without a version pin |
+| `tests/docs_suite_table.sh` | every suite the gate runs is listed in the README table, and no row outlives its suite |
 | `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
 | `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |
 | `vm/tests/test_run_args.sh` | the VM boots the harness Ignition with two disks, no inbound port forward, and a disk plan it would write or reuse |
 | `vm/tests/test_disk_write.sh` | the disk write path creates both disks, renames them into place, cleans up a failed create, and reuses them without `--rebuild` |
+| `vm/tests/test_guest_helpers.sh` | every helper the guest check calls is defined, so an assertion cannot vanish |
+| `vm/tests/test_guest_assertions.sh` | the guest boot and mount parsers read the shapes the VM produces |
+| `vm/tests/test_guest_data.sh` | the data-disk repart refuses the running root device |
+| `vm/tests/test_report_agent.sh` | a truncated guest report is refused and cannot read as a pass |
+| `vm/tests/test_report_verdict.sh` | the host verdict rejects a truncated, empty or summary-less report |
 
 Every guard was checked against a mutation it is meant to catch, and the mutation
 was confirmed to land before the result was trusted. The integrity test has a

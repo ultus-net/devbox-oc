@@ -160,8 +160,9 @@ design rejected and this one keeps rejected.
 
 12. **GitHub Actions builds the container image.** The Azure DevOps pipeline and
     the ACR path are deleted. The image goes to GHCR with the workflow token, and
-    the promoted digest is recorded in `image/prod-digest.txt` by the change that
-    promotes it. The workflow never pushes to `main`.
+    the promoted digest is recorded in `image/prod-digest.txt` by a separate
+    operator PR after the build, because the workflow token cannot push to
+    `main`.
 
 13. **Every build autologins `core` on the local console.** A keyless build has
     no tailnet and `sshd` is masked, so the console is the only door before the
