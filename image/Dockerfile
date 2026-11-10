@@ -12,10 +12,9 @@
 # you locally. That parity is the point: the same image runs on your
 # workstation.
 #
-# Pin by DIGEST, to the released stream. The `45` tag and `latest` resolve to
-# this digest, and its config label reads `45`. The `46` tag is labelled
-# `rawhide`, so a tag is not a version signal: a bump is a deliberate PR that
-# reads the new digest from the registry.
+# Pin by DIGEST, to the released stream. A tag is not a version signal; see
+# docs/design.md decision 12. A bump is a deliberate PR that reads the new
+# digest from the registry.
 ARG BASE=registry.fedoraproject.org/fedora-toolbox@sha256:f510347985a36bcf2b44deefd047b20a35373abc0edfa20eb5dc9175b6eca9b7
 
 FROM ${BASE}
