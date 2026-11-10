@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # image/smoke.sh - asserts the image is fit to serve, not just to build.
 set -euo pipefail
-ref="${1:?usage: smoke.sh <image-ref> (env ENGINE, default podman; SMOKE_OC_VERSION)}"
+ref="${1:?usage: smoke.sh <image-ref> (env ENGINE, default podman; SMOKE_OC_VERSION required)}"
 
 ENGINE="${ENGINE:-podman}"
-want_version="${SMOKE_OC_VERSION:-}"
+# Required, not optional: an unset pin silently accepted any version before, and
+# that is the defect this gate exists to close.
+want_version="${SMOKE_OC_VERSION:?set SMOKE_OC_VERSION to the OC_VERSION pin in image/Dockerfile}"
 name="devbox-smoke-$$"
 port="${SMOKE_PORT:-$((20000 + RANDOM % 20000))}"
 
@@ -18,9 +20,7 @@ trap cleanup EXIT
 got="$(run opencode --version | awk '{print $NF}')"
 printf '%s\n' "$got" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' \
   || fail "opencode --version printed no version: ${got:-nothing}"
-if [ -n "$want_version" ]; then
-  [ "$got" = "v${want_version}" ] || fail "opencode is $got, the Dockerfile pins v${want_version}"
-fi
+[ "$got" = "v${want_version}" ] || fail "opencode is $got, the Dockerfile pins v${want_version}"
 
 # 2. The dev user exists with the pinned uid, so bind mounts line up.
 run id -u dev | grep -qx 1000

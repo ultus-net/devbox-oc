@@ -38,10 +38,12 @@ if FAKE_CODE='' sh "$script" >/dev/null 2>&1; then
   fail "an empty status must be unhealthy"
 fi
 
-# The probe must be the API. The HTML shell on / is unauthenticated, so a check
-# against it would pass on a server whose API is broken.
+# The probe must be the URL the quadlet's container serves: the API, on the
+# server's own loopback and port. The HTML shell on / would pass on a server
+# whose API is broken, and another port would never be the one in production.
 FAKE_ARGS="$tmp/args" FAKE_CODE=401 sh "$script" >/dev/null 2>&1 \
   || fail "the 401 probe failed"
-grep -q '/api/info' "$tmp/args" || fail "the health check does not probe /api/info"
+grep -Fq 'http://127.0.0.1:4096/api/info' "$tmp/args" \
+  || fail "the health check does not probe http://127.0.0.1:4096/api/info"
 
 echo "health command accepts a serving API and rejects everything else"

@@ -50,15 +50,13 @@ jobs:
             type=ref,event=tag
 
       # load: true keeps the image local so the smoke test runs before a push.
-      # provenance and sbom ride in the manifest, so a pulled image can be traced
-      # to its build.
+      # Attestations are not set here on purpose: the docker exporter used by
+      # load does not carry them, so claiming provenance here would be false.
       - name: Build
         uses: docker/build-push-action@v6
         with:
           context: image
           load: true
-          provenance: mode=max
-          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -68,8 +66,10 @@ jobs:
         run: |
           set -euo pipefail
           # The version comes from the Dockerfile, so the gate compares the built
-          # binary with the pin instead of accepting any semver.
+          # binary with the pin instead of accepting any semver. An empty value
+          # must fail here, not turn the pin off.
           SMOKE_OC_VERSION="$(sed -n 's/^ARG OC_VERSION=//p' image/Dockerfile)"
+          [ -n "$SMOKE_OC_VERSION" ] || { echo "no OC_VERSION in image/Dockerfile" >&2; exit 1; }
           export SMOKE_OC_VERSION
           ./image/smoke.sh "$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -1)"
 
