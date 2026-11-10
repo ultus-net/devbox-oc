@@ -131,6 +131,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
 | `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |
 | `vm/tests/test_run_args.sh` | the VM boots the harness Ignition with two disks, no inbound port forward, and a disk plan it would write or reuse |
+| `vm/tests/test_disk_write.sh` | the disk write path creates both disks, renames them into place, and reuses them without `--rebuild` |
 
 Every guard was checked against a mutation it is meant to catch, and the mutation
 was confirmed to land before the result was trusted. The integrity test has a

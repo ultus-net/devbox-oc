@@ -8,7 +8,9 @@
 # the LAN and no shared filesystem is needed.
 #
 # Ignition runs on first boot only. Use --rebuild to discard the OS overlay and
-# repeat the whole path.
+# repeat the whole path. --disks-only stops after the disk steps, so the gate can
+# exercise the write path without QEMU. VM_BASE_IMAGE replaces the pinned base
+# image with a path of your own; the disk test uses it to skip the download.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -26,6 +28,7 @@ qemu="${QEMU:-qemu-system-x86_64}"
 rebuild=0
 console=0
 dry_run=0
+disks_only=0
 stop_after=0
 stop_only=0
 while [ "$#" -gt 0 ]; do
@@ -33,6 +36,7 @@ while [ "$#" -gt 0 ]; do
     --rebuild) rebuild=1 ;;
     --console) console=1 ;;
     --dry-run) dry_run=1 ;;
+    --disks-only) disks_only=1 ;;
     --stop-after-check) stop_after=1 ;;
     --stop) stop_only=1 ;;
     --timeout)
@@ -141,11 +145,13 @@ create_data_disk() {
 }
 
 if [ "$dry_run" = 1 ]; then
-  base="$("$here/fetch-fcos.sh" --print-base)"
+  base="${VM_BASE_IMAGE:-$("$here/fetch-fcos.sh" --print-base)}"
 else
-  base="$("$here/fetch-fcos.sh")"
-  # Keep the guest's report URL on the same port the agent below binds.
-  ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
+  base="${VM_BASE_IMAGE:-$("$here/fetch-fcos.sh")}"
+  if [ "$disks_only" = 0 ]; then
+    # Keep the guest's report URL on the same port the agent below binds.
+    ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
+  fi
 fi
 
 if [ "$rebuild" = 1 ] || [ ! -s "$disk" ]; then
@@ -158,6 +164,11 @@ if [ "$rebuild" = 1 ] || [ ! -s "$data" ]; then
   create_data_disk
 elif [ "$dry_run" = 1 ]; then
   echo "plan: reuse $data" >&2
+fi
+
+if [ "$disks_only" = 1 ]; then
+  echo "disks ready: $disk $data"
+  exit 0
 fi
 
 if [ -r "$kvm_device" ]; then

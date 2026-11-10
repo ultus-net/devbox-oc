@@ -126,6 +126,17 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The disk write path had no test. `vm/tests/test_run_args.sh` proved the plan
+  matched the command, but nothing ran the create steps, so deleting either `mv`
+  in `run-vm.sh` kept every suite green and an aborted create could leave a
+  `*.new.*` disk that a later run silently ignored. `vm/tests/test_disk_write.sh`
+  runs `run-vm.sh --disks-only` with stub `qemu-img` and `truncate` on `PATH`. It
+  asserts the exact overlay and truncate argv at non-default sizes, that both
+  disks land under their final names, that no temporary name survives, that a
+  second run reuses them without calling either stub, and that `--rebuild`
+  recreates both. Dropping either `mv` fails it. `VM_BASE_IMAGE` skips the pinned
+  base download for that test, and `--disks-only` stops before QEMU, so the test
+  needs neither Butane nor KVM.
 - `vm/tests/test_run_args.sh` T6 read `run-vm.sh` for `qemu-img` and `truncate`
   instead of running it, the text-reading defect this repo's test rules forbid.
   The disk steps now go through `run_step`, which prints the argv under
