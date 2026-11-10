@@ -6,9 +6,10 @@ the pinned Fedora CoreOS QEMU image, applies the Ignition compiled from
 ucore-minimal, then runs a check suite inside the guest and posts the result to
 the host.
 
-It is not a substitute for the first install on the Mini. It proves the config
-and the container start path on emulated hardware; it cannot prove the disk
-ids, the firmware, the UPS, the tailnet join, or the thermal behaviour.
+It is not a substitute for the first install on the Mini. It is the rehearsal for
+it: it proves the config and the container start path on emulated hardware before
+any disk on the Mini is touched. It cannot prove the disk ids, the firmware, the
+UPS, the tailnet join, or the thermal behaviour.
 
 ```mermaid
 flowchart LR
@@ -21,6 +22,20 @@ flowchart LR
   U --> A["report-agent.py<br/>127.0.0.1, guest at 10.0.2.2"]
   A --> REP["pass or fail<br/>exit code + .vm-cache/report.txt"]
 ```
+
+## When to run it
+
+Run it before the first install on the Mini, and before any change under
+`os/butane/`, `host/`, `image/` or a quadlet reaches the Mini. It is step 0 of
+`docs/install.md` and the rehearsal procedure in `docs/runbook.md`.
+
+Skip it for a docs-only, test-only or CI-only change, because none of those reach
+the Ignition or the container image.
+
+Rerun it when the pinned Fedora CoreOS release moves (`vm/fcos.json`) and after an
+upstream `ucore-minimal` change you have not booted yet. The rebase and the
+container pull are the two paths that consume third-party state, and both can
+break without a commit here.
 
 ## Requirements
 

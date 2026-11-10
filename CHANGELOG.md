@@ -74,6 +74,12 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- The VM rehearsal is the documented step before bare metal, not an optional
+  extra. `README.md` leads with it, `docs/install.md` opens with a new step 0 that
+  requires `VM DOGFOOD: pass`, `docs/runbook.md` carries the procedure for a host
+  change, and `AGENTS.md` makes a passing run the readiness condition for anything
+  under `os/butane/`, `host/`, `image/` or a quadlet. `docs/vm.md` gains a "When
+  to run it" section, which also names the changes that need no run.
 - Pivoted from an Azure VM to an always-on HP laptop in a server room. The
   workload is unchanged: ucore host, podman quadlet, tailnet-only reachability,
   separate data disk. Secrets now come from `/etc/devbox/secrets.env`, written by

@@ -71,6 +71,13 @@ One gate runs everything:
 It must end with `VERIFY: all suites pass`. It is a real gate, not a formality:
 it fails rather than skips when `shellcheck` or PyYAML is missing.
 
+`./vm/run-vm.sh --rebuild` is the end-to-end rehearsal, and it runs before bare
+metal rather than after. The same Ignition, the ucore rebase, the data-disk
+mount, both containers and every loopback port run under QEMU. A change under
+`os/butane/`, `host/`, `image/` or a quadlet is not ready for the Mini until a
+run ends with `VM DOGFOOD: pass`. `tests/verify.sh` guards the harness itself;
+the run is the evidence. `docs/vm.md` is the procedure.
+
 **Set `BUTANE` when you change anything under `os/butane/`.** Without it the
 artifact reproducibility check prints `SKIP` and the gate still returns 0. Pass a
 Butane 0.29.0 binary:
@@ -122,8 +129,9 @@ in the PR that lands the work.
 
 No install has run on the target Mini and no live boot has been tested there.
 `vm/run-vm.sh` exercises the same Ignition under QEMU, including the ucore
-rebase and the container start path, but it cannot verify the firmware, the two
-physical disk ids, the tailnet join, the UPS, or the thermals. The container
-image has been built by the workflow and pulled in the VM. The restic restore
-drill has not been executed. Do not describe anything as working until it has
-run against real hardware. `README.md` lists the same gaps; keep them in step.
+rebase and the container start path, and a full run passes on a workstation. It
+cannot verify the firmware, the two physical disk ids, the tailnet join, the
+UPS, or the thermals. The container image has been built by the workflow and
+pulled in the VM. The restic restore drill has not been executed. Do not
+describe anything as working until it has run against real hardware.
+`README.md` lists the same gaps; keep them in step.

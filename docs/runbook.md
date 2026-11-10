@@ -277,6 +277,35 @@ touch it.
 If the data disk was accidentally formatted, stop and restore from restic before
 starting the workload. Do not write to the fresh filesystem first.
 
+## Rehearse a host change in the VM
+
+Any change to `os/butane/`, `host/`, `image/` or a quadlet is rehearsed under QEMU
+before it reaches the Mini. The VM runs the same Ignition and the same containers,
+so a broken mount, a masked unit or a stray LAN listener surfaces on the
+workstation instead of on the always-on box.
+
+1. Apply the change and run `./tests/verify.sh`. It must end with
+   `VERIFY: all suites pass`.
+2. Run the harness with a clean slate:
+
+   ```sh
+   ./vm/run-vm.sh --rebuild
+   ```
+
+   It takes 10 to 20 minutes, mostly the rebase download.
+3. Read the report. It must end with `VM DOGFOOD: pass` and `SUMMARY failures=0`.
+   A `SKIP` is allowed only for a conditional guard the image does not meet, and
+   the report names which one.
+4. On a failure, the log names the assertion. `journalctl` inside the guest
+   carries the unit output; attach with
+   `socat -,raw,echo=0 UNIX-CONNECT:.vm-cache/serial.sock` and detach with
+   `Ctrl-a x`.
+5. Power the VM down with `./vm/run-vm.sh --stop` once the run is recorded.
+
+Ignition is first-boot only, so `--rebuild` is what makes a rerun meaningful. A
+run without it boots the existing overlay and waits for a report the check unit
+will not produce again.
+
 ## Hardware checks
 
 Run these monthly, and after any unexplained reboot.

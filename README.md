@@ -136,23 +136,27 @@ Every guard was checked against a mutation it is meant to catch, and the mutatio
 was confirmed to land before the result was trusted. The integrity test has a
 documented negative control: it rejects a corrupted tarball.
 
-## Dogfood it in a VM
+## Rehearse the install in a VM
 
-The Ignition and the container start path run on this workstation under QEMU,
-without the Mini:
+Before the Mini is touched, the whole install path runs on a workstation under
+QEMU:
 
 ```sh
-./vm/run-vm.sh
+./vm/run-vm.sh --rebuild
 ```
 
-It boots the pinned Fedora CoreOS image, rebases to ucore on first boot, then
-runs a check suite inside the guest and exits non-zero on any failure. The guest
-posts its report to a host agent bound to `127.0.0.1`; there is no inbound port
-forward. First boot takes 10 to 20 minutes, mostly the rebase download.
+It boots the pinned Fedora CoreOS image, applies the Ignition compiled from
+`os/butane/ucore.bu`, rebases to ucore on first boot, then runs a check suite
+inside the guest and exits non-zero on any failure. A passing run ends with
+`VM DOGFOOD: pass`. The guest posts its report to a host agent bound to
+`127.0.0.1`; there is no inbound port forward. First boot takes 10 to 20 minutes,
+mostly the rebase download.
 
-Ignition is first-boot only, so use `--rebuild` after a change. `--console`
-attaches the serial console, and `--stop` powers the VM down. The full
-procedure, the checks, and the limits are in `docs/vm.md`.
+This is step 0 of `docs/install.md`, and the rehearsal for every host change.
+Nothing in `os/butane/`, `host/`, `image/` or a quadlet should reach the Mini
+without a passing run. Ignition is first-boot only, so use `--rebuild` after a
+change. `--console` attaches the serial console, and `--stop` powers the VM down.
+The full procedure, the checks, and the limits are in `docs/vm.md`.
 
 ## What is not verified here
 
@@ -161,9 +165,10 @@ Mini's hardware. The container image has been built by the GitHub Actions
 workflow and pulled by the VM, but not exercised on the target. The restic
 restore drill has not been executed, the keyless console join has not run, and
 the ucore rebase has run only under QEMU, not on the Mini. The VM harness covers
-the config and the container start path; the firmware, disk ids, tailnet join,
-UPS, and thermals still need the real box. Nothing here should be described as
-working until it runs against real hardware.
+the config and the container start path, and its full run passes on this
+workstation; the firmware, disk ids, tailnet join, UPS, and thermals still need
+the real box. Nothing here should be described as working until it runs against
+real hardware.
 
 ## Documentation
 
@@ -173,8 +178,8 @@ working until it runs against real hardware.
   replacement.
 - `docs/web-access.md` covers the tailnet-only client path: the served address,
   browser sign-in, CORS, verification, teardown, and the failures.
-- `docs/vm.md` covers the QEMU dogfood harness: the pinned base image, the
-  overlay, the checks, and what a passing run still cannot claim.
+- `docs/vm.md` covers the QEMU rehearsal that precedes the install: the pinned
+  base image, the overlay, the checks, and what a passing run still cannot claim.
 - `CHANGELOG.md` records every landed change and the honest gaps.
 
 ## Status
