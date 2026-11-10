@@ -126,14 +126,14 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
-- The docs claimed more than the tree did. The README suite table listed 23
-  suites while `tests/verify.sh` ran 29, so it read as the list while hiding six;
+- The docs claimed more than the tree did. The README suite table listed 24
+  suites while `tests/verify.sh` ran 30, so it read as the list while hiding six;
   `tests/docs_suite_table.sh` now compares both documents and fails when a suite
-  has no row or a row outlives its suite. `docs/vm.md` names the
-  `vm/fetch-fcos.sh` flags `run-vm.sh` relies on, `image/toolchains.txt` stops
-  claiming npm builds the OpenCode artifact, and `docs/design.md` records that a
-  separate operator PR writes the promoted digest because the workflow token
-  cannot push to `main`.
+  has no row, a row outlives its suite, or either side lists one twice.
+  `docs/vm.md` names the `vm/fetch-fcos.sh` flags `run-vm.sh` relies on,
+  `image/toolchains.txt` stops claiming npm builds the OpenCode artifact, and
+  `docs/design.md` records that a separate operator PR writes the promoted digest
+  because the workflow token cannot push to `main`.
 - The rollback procedure did not move the image the host runs. `docs/runbook.md`
   told the operator to re-point `:prod` and restart, but neither quadlet sets
   `Pull=`, so a restart reused the local image and the rollback changed nothing

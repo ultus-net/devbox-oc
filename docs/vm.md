@@ -165,14 +165,10 @@ quadlet's `[Install]` section when it writes the unit, so the check reads
 systemd's `WantedBy` property rather than a symlink under `/etc`. Without a boot
 target the box comes up serving nothing, so the check fails rather than noting it.
 
-`vm/tests/` holds the host-side guards: the overlay merge keeps every base file,
-link, directory and unit and is idempotent, the boot command carries both disks
-and no inbound forward, the disk write path creates both disks, renames them into
-place and cleans up a failed create, the guest check defines every helper it
-calls, the booted-deployment parse and the parent-device comparison are driven
-from fixtures, the report agent refuses a truncated post, the report verdict
-demands the summary line, and the data-disk script refuses the device that backs
-`/` including its `[/ostree/...]` spelling.
+`vm/tests/` holds the host-side guards: the overlay merge, the boot command and
+its disk plan, the disk write path, the guest helpers, the guest parsers, the
+report agent and verdict, and the data-disk script that must refuse the device
+backing `/`. The README suite table names what each one protects.
 
 ## The run that proved it
 
