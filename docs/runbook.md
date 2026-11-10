@@ -174,7 +174,7 @@ Never remove the newest snapshot before a verified restore.
 
 ## Roll back the container
 
-The quadlet follows `:prod`. Every build also publishes an immutable
+The OpenCode quadlet follows `:prod`. Every build also publishes an immutable
 `sha-<commit>` tag. Rollback is a re-point of `:prod` to the previous digest,
 a pull of that tag on the host, and then a restart.
 
@@ -182,24 +182,28 @@ A restart alone changes nothing: neither quadlet sets `Pull=`, so podman reuses
 the local image and `systemctl restart` starts the same build again. The pull is
 the step that moves the host.
 
+`image/prod-digest.txt` holds the digest `:prod` currently names. It records one
+image, so the previous digest comes from git, which logged every move:
+
 ```sh
-ssh core@devbox 'sudo podman auto-update --dry-run'
-cat image/prod-digest.txt
+git log -p -- image/prod-digest.txt
 ```
 
-The digest record is in the repository, not on the host. `image.yml` prints the
-promoted digest in its job summary, because a workflow token cannot push to the
-protected `main`. After a production build, copy that digest into
-`image/prod-digest.txt` in a PR. That PR is the rollback record.
+Copy the full line from the commit before the current one. The value already
+carries the `sha256:` prefix.
 
-Re-point `:prod` at the previous digest from a workstation logged in to GHCR:
+Re-point `:prod` at it from a workstation logged in to GHCR:
 
 ```sh
-digest=sha256:<previous>
+digest=<the full recorded digest>
 podman pull ghcr.io/ultus-net/devbox@$digest
 podman tag ghcr.io/ultus-net/devbox@$digest ghcr.io/ultus-net/devbox:prod
 podman push ghcr.io/ultus-net/devbox:prod
 ```
+
+The push prints the digest GHCR now stores for the tag. Keep it for the check
+below: a re-tagged local image is pushed as a single manifest, so its digest can
+differ from a recorded index digest.
 
 Pull the re-pointed tag on the host, then restart:
 
@@ -215,16 +219,25 @@ ssh core@devbox 'sudo podman image inspect \
   --format "{{.RepoDigests}}" ghcr.io/ultus-net/devbox:prod'
 ```
 
-The output must contain `@sha256:<previous>`. The list can hold both the index
-digest and the per-architecture digest, so check for the expected name rather
-than the last entry. If it still names only the bad digest, the pull did not
-replace the tag. `sudo podman auto-update` performs the pull and the restart in
-one step and keeps the new image only if the health check passes, so it is the
-fallback when the manual pull does not move the tag:
+The output must contain the digest the push printed for this platform. The list
+can hold both the index and the per-architecture digest, so check for the
+expected name rather than the last entry. If it is absent, the pull did not
+replace the tag: read the pull output, run `sudo podman login ghcr.io` if it
+asked for credentials, and confirm in GHCR that the re-pointed tag exists.
+`podman auto-update` runs the same pull, so it cannot repair a tag that did not
+move.
+
+To do the pull and the restart in one step instead, run auto-update. It keeps the
+new image only if the health check passes:
 
 ```sh
 ssh core@devbox 'sudo podman auto-update'
 ```
+
+Record the digest that is now live in `image/prod-digest.txt` in a PR, so the
+next rollback reads the image the host actually runs. `image.yml` prints the
+promoted digest in its job summary, because a workflow token cannot push to the
+protected `main`; after a production build, copy that digest in the same way.
 
 If GHCR is unreachable, the host keeps running the local image. Do not delete the
 local image until the rollback is confirmed.
