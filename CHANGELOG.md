@@ -126,6 +126,16 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The rollback record could go stale without anything failing.
+  `image/tests/test_digest_record.sh` accepted `PENDING`, and nothing compared
+  the file with the live `:prod` digest, which is how it sat out of date while
+  `:prod` had moved. The main build now reads the pushed digest bare, compares it
+  with the record through `image/check-prod-digest.sh`, and fails the run when
+  they differ. It repairs the record with `image/write-prod-digest.sh`, which
+  keeps the comment header, pushes a `chore/prod-digest` branch and opens a PR,
+  because a workflow token cannot push to `main`. `PENDING` stays a valid shape
+  only before the first build. `image/tests/test_prod_digest.sh` drives both
+  scripts against fixtures, and `tests/ci_shape.sh` holds the workflow shape.
 - The rollback procedure did not move the image the host runs. `docs/runbook.md`
   told the operator to re-point `:prod` and restart, but neither quadlet sets
   `Pull=`, so a restart reused the local image and the rollback changed nothing

@@ -3,9 +3,10 @@ name: image
 # Build the container image, smoke-gate it, then push it to GHCR. The smoke test
 # runs before any push, so a broken image never reaches the registry.
 #
-# The workflow cannot update image/prod-digest.txt: main is protected and a
-# workflow token must not push to it. It prints the digest in the job summary
-# instead, and the promotion PR records it in that file.
+# The workflow cannot push to protected main. After promoting :prod it compares
+# the pushed digest with image/prod-digest.txt, opens a chore/prod-digest branch
+# when the record is stale, and fails the run so the drift is never silent. A
+# workflow token does not trigger workflows, so that PR arrives without CI.
 on:
   push:
     branches: [main]
@@ -17,8 +18,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  pull-requests: write
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/devbox
@@ -81,6 +83,28 @@ jobs:
 
       - name: Record the digest
         if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE_NAME}:prod")"
+          set -euo pipefail
+          repo_digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE_NAME}:prod")"
+          # The file wants the bare digest; the RepoDigest form is repo@sha256:...
+          digest="${repo_digest##*@}"
           echo "Promoted ${digest}" >> "$GITHUB_STEP_SUMMARY"
+          if ./image/check-prod-digest.sh "$digest"; then
+            exit 0
+          fi
+          # The record is stale. Repair it on a branch, open a PR, then fail this
+          # run: if the PR cannot be opened, the red run is the only signal.
+          ./image/write-prod-digest.sh "$digest"
+          branch="chore/prod-digest-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add image/prod-digest.txt
+          git commit -m "chore: record the promoted prod digest"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore: record the promoted prod digest" \
+            --body "The main build promoted ${digest} while image/prod-digest.txt was stale. This PR updates the rollback record. The build run that opened it failed on purpose, and a workflow token does not run CI, so check it before merging."
+          exit 1

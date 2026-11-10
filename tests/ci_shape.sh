@@ -42,4 +42,15 @@ if [ "$smoke_line" -ge "$push_line" ]; then
   fail "the image is pushed before it is smoke-tested"
 fi
 
+# A promoted digest that differs from the record is a silent rollback fault, so
+# the build compares them, and it can push a repair branch and open a PR.
+grep -q 'check-prod-digest.sh' "$image" \
+  || fail "the build does not compare the pushed digest with the record"
+grep -qF 'repo_digest##*@' "$image" \
+  || fail "the summary does not print the bare digest"
+grep -q 'contents: write' "$image" \
+  || fail "the build cannot push a digest repair branch"
+grep -q 'pull-requests: write' "$image" \
+  || fail "the build cannot open a digest repair PR"
+
 echo "CI publishes to GHCR behind a smoke gate"
