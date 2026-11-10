@@ -59,6 +59,9 @@ esac
 [ "$(sed -n '1p' "$PROD_DIGEST_FILE")" = "# header stays" ] || fail "the header was lost"
 grep -qx "$b" "$PROD_DIGEST_FILE" || fail "the record was not updated to the promoted digest"
 grep -qx 'git switch -c chore/prod-digest-424242' "$CALLS" || fail "no repair branch was created"
+grep -qx "git add $PROD_DIGEST_FILE" "$CALLS" || fail "the record was not staged"
+grep -qx 'git commit -m chore: record the promoted prod digest' "$CALLS" \
+  || fail "the repair was not committed"
 grep -qx 'git push origin chore/prod-digest-424242' "$CALLS" || fail "the repair branch was not pushed"
 grep -q '^gh pr create --base main --head chore/prod-digest-424242' "$CALLS" \
   || fail "no repair PR was opened for the branch"

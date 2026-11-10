@@ -62,7 +62,14 @@ def scopes(block):
 
 
 def runs_in(job):
-    return "\n".join(str(step.get("run", "")) for step in job.get("steps", []))
+    # A shebang-style run block can carry comments, and a commented-out command
+    # still matches a substring. Drop those lines before matching.
+    lines = []
+    for step in job.get("steps", []):
+        for line in str(step.get("run", "")).splitlines():
+            if not line.lstrip().startswith("#"):
+                lines.append(line)
+    return "\n".join(lines)
 
 
 build = doc["jobs"].get("build")
@@ -79,6 +86,9 @@ if "digest" not in (build.get("outputs") or {}):
     fail("the build job does not publish the promoted digest")
 if record.get("needs") != "build":
     fail("the record job does not depend on the build job")
+# Without this condition the write token would sit on pull_request runs too.
+if "refs/heads/main" not in str(record.get("if", "")):
+    fail("the record job is not limited to main")
 
 for scope in ("contents", "pull-requests"):
     if scopes(record.get("permissions")).get(scope) != "write":
