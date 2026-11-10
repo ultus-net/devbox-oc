@@ -66,6 +66,7 @@ run "vm guest data"          ./vm/tests/test_guest_data.sh
 run "vm report agent"        ./vm/tests/test_report_agent.sh
 run "vm report verdict"      ./vm/tests/test_report_verdict.sh
 run "docs complete"          ./tests/docs_complete.sh
+run "docs suite table"       ./tests/docs_suite_table.sh
 run "CI shape"               ./tests/ci_shape.sh
 
 # Lint every shell script we own. Prefer a shellcheck on PATH so this works on a

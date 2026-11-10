@@ -8,8 +8,8 @@
 # The toolbox image already provides git, curl, python3, gcc, make and a
 # broad dev set. Add only what your projects need.
 #
-# nodejs and npm are installed by the Dockerfile itself, because the OpenCode
-# platform artifact is fetched with npm at build time. Do not list them twice.
+# nodejs and npm are not needed. The OpenCode platform artifact is a tarball
+# fetched with curl and verified by sha512, so no npm client runs here.
 
 # restic runs inside this image, so the backup needs no Alpine sidecar.
 restic
