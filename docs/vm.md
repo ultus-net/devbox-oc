@@ -88,6 +88,11 @@ Useful flags:
 | `--dry-run` | print the disk plan (each step it would write or reuse) and the exact qemu command, then exit; touches nothing |
 | `--disks-only` | create or reuse the two disks, then exit before QEMU; the gate's disk write test uses it |
 
+`vm/fetch-fcos.sh` owns the base image pin in `vm/fcos.json`. `--print-base`
+names the verified cache path without downloading it, and `run-vm.sh` uses it for
+the disk plan. `--update` refreshes the pin from the stable stream and is the only
+path that moves the base image.
+
 Environment overrides: `VM_CACHE`, `VM_MEM` (default 4096), `VM_CPUS` (4),
 `VM_DISK_SIZE` (32G), `VM_DATA_SIZE` (8G), `VM_AGENT_PORT` (8123), `VM_TIMEOUT`
 (2400), `VM_HOSTNAME` (`devbox-vm`), `VM_AGENT_URL` (baked into the Ignition),
