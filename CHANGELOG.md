@@ -126,6 +126,20 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The disk write path had no test. `vm/tests/test_run_args.sh` proved the plan
+  matched the command, but nothing ran the create steps, so deleting either `mv`
+  in `run-vm.sh` kept every suite green and an aborted create could leave a
+  `*.new.*` disk that a later run silently ignored. `vm/tests/test_disk_write.sh`
+  runs `run-vm.sh --disks-only` with stub `qemu-img` and `truncate` on `PATH`. It
+  asserts the exact overlay and truncate argv at non-default sizes, that both
+  disks land under their final names, that no temporary name survives, that a
+  second run reuses them without calling either stub, and that `--rebuild`
+  recreates both. A failed create now removes its temporary, and the test drives
+  that with a stub that fails after writing, so the leftover cannot come back.
+  Dropping either `mv`, or the cleanup, fails it. `VM_BASE_IMAGE` skips the pinned
+  base download for that test, and `--disks-only` stops before QEMU and needs
+  neither Butane, KVM nor the QEMU binary. `--help` now prints the whole header,
+  and `vm/tests/test_run_args.sh` T4d guards that range.
 - The image gate could pass an image that never serves. `image/smoke.sh` accepted
   any semver from `opencode --version` and never started the server, so an image
   that booted but served nothing passed the gate. The image now ships

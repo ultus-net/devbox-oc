@@ -8,7 +8,9 @@
 # the LAN and no shared filesystem is needed.
 #
 # Ignition runs on first boot only. Use --rebuild to discard the OS overlay and
-# repeat the whole path.
+# repeat the whole path. --disks-only stops after the disk steps, so the gate can
+# exercise the write path without QEMU. VM_BASE_IMAGE replaces the pinned base
+# image with a path of your own; the disk test uses it to skip the download.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -22,10 +24,12 @@ port="${VM_AGENT_PORT:-8123}"
 timeout="${VM_TIMEOUT:-2400}"
 kvm_device="${KVM_DEVICE:-/dev/kvm}"
 qemu="${QEMU:-qemu-system-x86_64}"
+base_image="${VM_BASE_IMAGE:-}"
 
 rebuild=0
 console=0
 dry_run=0
+disks_only=0
 stop_after=0
 stop_only=0
 while [ "$#" -gt 0 ]; do
@@ -33,6 +37,7 @@ while [ "$#" -gt 0 ]; do
     --rebuild) rebuild=1 ;;
     --console) console=1 ;;
     --dry-run) dry_run=1 ;;
+    --disks-only) disks_only=1 ;;
     --stop-after-check) stop_after=1 ;;
     --stop) stop_only=1 ;;
     --timeout)
@@ -45,7 +50,7 @@ while [ "$#" -gt 0 ]; do
       esac
       timeout="$1"
       ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -100,7 +105,14 @@ if [ "$stop_only" = 1 ]; then
   exit 0
 fi
 
-for tool in "$qemu" qemu-img jq curl python3; do
+# --disks-only stops before QEMU, so it must not demand the QEMU toolchain. Both
+# paths create the data disk with truncate, so both check it.
+if [ "$disks_only" = 1 ]; then
+  tools=(qemu-img truncate)
+else
+  tools=("$qemu" qemu-img truncate jq curl python3)
+fi
+for tool in "${tools[@]}"; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }
 done
 
@@ -129,23 +141,33 @@ run_step() {
 create_os_disk() {
   local dest="$disk"
   [ "$dry_run" = 1 ] || dest="$disk.new.$$"
-  run_step qemu-img create -f qcow2 -F qcow2 -b "$base" "$dest" "$disk_size" >/dev/null
+  # A failed create must not leave the temporary behind, because nothing else
+  # ever removes it.
+  if ! run_step qemu-img create -f qcow2 -F qcow2 -b "$base" "$dest" "$disk_size" >/dev/null; then
+    [ "$dry_run" = 1 ] || rm -f "$dest"
+    return 1
+  fi
   [ "$dry_run" = 1 ] || mv "$dest" "$disk"
 }
 
 create_data_disk() {
   local dest="$data"
   [ "$dry_run" = 1 ] || dest="$data.new.$$"
-  run_step truncate -s "$data_size" "$dest"
+  if ! run_step truncate -s "$data_size" "$dest"; then
+    [ "$dry_run" = 1 ] || rm -f "$dest"
+    return 1
+  fi
   [ "$dry_run" = 1 ] || mv "$dest" "$data"
 }
 
 if [ "$dry_run" = 1 ]; then
-  base="$("$here/fetch-fcos.sh" --print-base)"
+  base="${base_image:-$("$here/fetch-fcos.sh" --print-base)}"
 else
-  base="$("$here/fetch-fcos.sh")"
-  # Keep the guest's report URL on the same port the agent below binds.
-  ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
+  base="${base_image:-$("$here/fetch-fcos.sh")}"
+  if [ "$disks_only" = 0 ]; then
+    # Keep the guest's report URL on the same port the agent below binds.
+    ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
+  fi
 fi
 
 if [ "$rebuild" = 1 ] || [ ! -s "$disk" ]; then
@@ -158,6 +180,11 @@ if [ "$rebuild" = 1 ] || [ ! -s "$data" ]; then
   create_data_disk
 elif [ "$dry_run" = 1 ]; then
   echo "plan: reuse $data" >&2
+fi
+
+if [ "$disks_only" = 1 ]; then
+  echo "disks ready: $disk $data"
+  exit 0
 fi
 
 if [ -r "$kvm_device" ]; then

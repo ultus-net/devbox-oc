@@ -71,6 +71,14 @@ if "$vm/run-vm.sh" --help | grep -q 'set -euo pipefail'; then
   fail "T4c: --help ran past the header comment"
 fi
 
+# T4d: --help prints the whole header, so a flag documented there is visible. The
+# printed range drifted once and nothing failed, because the flag's name happened
+# to sit inside the truncated range. The last header line is the real guard.
+help="$("$vm/run-vm.sh" --help)"
+printf '%s\n' "$help" | grep -q -- '--disks-only' || fail "T4d: --help does not list --disks-only"
+printf '%s\n' "$help" | grep -q 'VM_BASE_IMAGE' || fail "T4d: --help omits VM_BASE_IMAGE"
+printf '%s\n' "$help" | grep -q 'skip the download' || fail "T4d: --help stops before the last header line"
+
 # T5: --stop with no pidfile reports that and exits cleanly.
 "$vm/run-vm.sh" --stop >"$tmp/stop.out" 2>"$tmp/stop.err" || fail "T5: --stop failed with no VM"
 grep -q 'no VM pidfile' "$tmp/stop.err" || fail "T5: --stop did not say why it did nothing"

@@ -86,11 +86,13 @@ Useful flags:
 | `--stop-after-check` | power down as soon as the report arrives |
 | `--timeout SECONDS` | how long to wait for the report (default 2400) |
 | `--dry-run` | print the disk plan (each step it would write or reuse) and the exact qemu command, then exit; touches nothing |
+| `--disks-only` | create or reuse the two disks, then exit before QEMU; the gate's disk write test uses it |
 
 Environment overrides: `VM_CACHE`, `VM_MEM` (default 4096), `VM_CPUS` (4),
 `VM_DISK_SIZE` (32G), `VM_DATA_SIZE` (8G), `VM_AGENT_PORT` (8123), `VM_TIMEOUT`
 (2400), `VM_HOSTNAME` (`devbox-vm`), `VM_AGENT_URL` (baked into the Ignition),
-`VM_IMAGE` (default `ghcr.io/ultus-net/devbox:prod`), `KVM_DEVICE`, `QEMU`.
+`VM_IMAGE` (default `ghcr.io/ultus-net/devbox:prod`), `VM_BASE_IMAGE` (a base
+image path, used to skip the download), `KVM_DEVICE`, `QEMU`.
 
 ## Ignition runs once
 
@@ -160,11 +162,12 @@ target the box comes up serving nothing, so the check fails rather than noting i
 
 `vm/tests/` holds the host-side guards: the overlay merge keeps every base file,
 link, directory and unit and is idempotent, the boot command carries both disks
-and no inbound forward, the guest check defines every helper it calls, the
-booted-deployment parse and the parent-device comparison are driven from
-fixtures, the report agent refuses a truncated post, the report verdict demands
-the summary line, and the data-disk script refuses the device that backs `/`
-including its `[/ostree/...]` spelling.
+and no inbound forward, the disk write path creates both disks, renames them into
+place and cleans up a failed create, the guest check defines every helper it
+calls, the booted-deployment parse and the parent-device comparison are driven
+from fixtures, the report agent refuses a truncated post, the report verdict
+demands the summary line, and the data-disk script refuses the device that backs
+`/` including its `[/ostree/...]` spelling.
 
 ## The run that proved it
 
