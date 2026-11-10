@@ -129,6 +129,14 @@ if "!image/prod-digest.txt" not in paths:
 # matched before it. Listing the exclusion first re-includes the record.
 if paths.index("!image/prod-digest.txt") < paths.index("image/**"):
     fail("the record exclusion comes before the image paths, so it does not exclude")
+
+# The repair PR changes only the record, so its build is the only CI it gets.
+# Copying the push exclusion here would leave that PR unchecked.
+pr_paths = ((triggers.get("pull_request") or {}).get("paths")) or []
+if "image/**" not in pr_paths:
+    fail("a pull request no longer builds the image paths")
+if "!image/prod-digest.txt" in pr_paths:
+    fail("a repair pull request excludes the digest record, so it has no CI")
 PY
 
 echo "CI publishes to GHCR behind a smoke gate"
