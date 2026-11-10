@@ -28,9 +28,8 @@ if [ "$print_base" = 0 ]; then
   command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 fi
 
-mkdir -p "$cache"
-
 if [ "$update" = 1 ]; then
+  mkdir -p "$cache"
   stream="$(jq -r '.stream' "$pin")"
   arch="$(jq -r '.arch' "$pin")"
   meta="$cache/fcos-stream-$stream.json"
@@ -55,18 +54,21 @@ if [ "$update" = 1 ]; then
 fi
 
 release="$(jq -r '.release' "$pin")"
-url="$(jq -r '.qcow2.url' "$pin")"
-want="$(jq -r '.qcow2.sha256' "$pin")"
-want_raw="$(jq -r '.qcow2.uncompressed_sha256' "$pin")"
-compressed="$cache/fcos-$release.qcow2.xz"
 base="$cache/fcos-$release.qcow2"
 
-# Name the base without downloading it, so a dry run can plan against the file a
-# real run would use.
+# Name the base without downloading or creating anything, so a dry run can plan
+# against the file a real run would use.
 if [ "$print_base" = 1 ]; then
   printf '%s\n' "$base"
   exit 0
 fi
+
+mkdir -p "$cache"
+
+url="$(jq -r '.qcow2.url' "$pin")"
+want="$(jq -r '.qcow2.sha256' "$pin")"
+want_raw="$(jq -r '.qcow2.uncompressed_sha256' "$pin")"
+compressed="$cache/fcos-$release.qcow2.xz"
 
 if [ ! -s "$base" ]; then
   if [ ! -s "$compressed" ]; then

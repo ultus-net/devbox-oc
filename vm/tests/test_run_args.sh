@@ -78,11 +78,12 @@ grep -q 'no VM pidfile' "$tmp/stop.err" || fail "T5: --stop did not say why it d
 # T6: on an empty cache the plan names the two writes a real run would make: an
 #     OS overlay on the pinned base and a blank data disk. The guest prepares the
 #     data disk before var-srv.mount, so the plan must not reach past a blank file.
-export VM_DISK_SIZE=32G VM_DATA_SIZE=8G
+#     The sizes are not the defaults, so a size baked into the script cannot pass.
+export VM_DISK_SIZE=48G VM_DATA_SIZE=12G
 release="$(jq -r '.release' "$vm/fcos.json")"
 plan="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" || fail "T6: --dry-run failed"
 printf '%s\n' "$plan" | grep -F 'plan: ' > "$tmp/plan.actual" || fail "T6: --dry-run printed no disk plan"
-printf 'plan: qemu-img create -f qcow2 -F qcow2 -b %s %s 32G\nplan: truncate -s 8G %s\n' \
+printf 'plan: qemu-img create -f qcow2 -F qcow2 -b %s %s 48G\nplan: truncate -s 12G %s\n' \
   "$tmp/cache/fcos-$release.qcow2" "$tmp/cache/vm-disk.qcow2" "$tmp/cache/data.img" \
   > "$tmp/plan.expected"
 if ! diff -u "$tmp/plan.expected" "$tmp/plan.actual"; then
@@ -93,11 +94,21 @@ fi
 printf 'x' > "$tmp/cache/vm-disk.qcow2"
 printf 'x' > "$tmp/cache/data.img"
 reuse="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" || fail "T6b: --dry-run failed"
-printf '%s\n' "$reuse" | grep -F 'plan: ' > "$tmp/reuse.actual"
+printf '%s\n' "$reuse" | grep -F 'plan: ' > "$tmp/reuse.actual" \
+  || fail "T6b: --dry-run printed no disk plan"
 printf 'plan: reuse %s\nplan: reuse %s\n' "$tmp/cache/vm-disk.qcow2" "$tmp/cache/data.img" \
   > "$tmp/reuse.expected"
 if ! diff -u "$tmp/reuse.expected" "$tmp/reuse.actual"; then
   fail "T6b: a populated cache is still planned as a write"
+fi
+
+# T6c: --rebuild plans both writes even when both disks already exist.
+rebuild="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run --rebuild 2>&1 >/dev/null)" \
+  || fail "T6c: --dry-run --rebuild failed"
+printf '%s\n' "$rebuild" | grep -F 'plan: ' > "$tmp/rebuild.actual" \
+  || fail "T6c: --dry-run printed no disk plan"
+if ! diff -u "$tmp/plan.expected" "$tmp/rebuild.actual"; then
+  fail "T6c: --rebuild did not plan both writes"
 fi
 
 echo "vm run command uses the harness Ignition, two disks, and no inbound forward"
