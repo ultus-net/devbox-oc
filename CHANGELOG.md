@@ -126,6 +126,14 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The quadlet health command only proved the binary ran. `HealthCmd` was
+  `opencode --version`, so a build that booted but never served still reported
+  healthy, and `podman auto-update` would have kept it. It now runs
+  `/usr/local/bin/devbox-health`, which probes `/api/info` and accepts the `401`
+  the runbook calls healthy. `host/tests/test_quadlet_health.sh` ties the
+  quadlet to the Dockerfile COPY target, so a path drift or a return to a version
+  probe fails the gate. The generated `os/butane/ucore.ign` is rebuilt from the
+  new quadlet.
 - The disk write path had no test. `vm/tests/test_run_args.sh` proved the plan
   matched the command, but nothing ran the create steps, so deleting either `mv`
   in `run-vm.sh` kept every suite green and an aborted create could leave a
@@ -151,14 +159,15 @@ All notable changes to this project. One entry per landed change, newest first.
   loopback, requires `401` on `/api/info`, requires the health command to pass,
   and requires it to fail against a URL that serves nothing. A missing pin now
   fails the gate, and `image/tests/test_smoke_requires_pin.sh` holds that, so the
-  pin cannot revert to optional unnoticed. The quadlet still runs
-  `opencode --version` as its health check: switching it to `devbox-health` is
-  #23, because the published `:prod` image does not carry the script yet and the
-  VM dogfood run pulls `:prod`.
+  pin cannot revert to optional unnoticed. At that point the quadlet still ran
+  `opencode --version` as its health check, because the published `:prod` image
+  did not carry `devbox-health` yet and the VM dogfood run pulls `:prod`; the
+  switch landed once `:prod` carried the script.
   `image/prod-digest.txt` held `PENDING-FIRST-BUILD` while `:prod` had been live
-  since 2026-11-04, so the rollback record named no image; it now records the
-  digest `sha256:fa87259b…` of the last successful `main` build (run
-  42899375906).
+  since 2026-11-04, so the rollback record named no image; it recorded the digest
+  `sha256:fa87259b…` of the last successful `main` build (run 42899375906) and
+  now holds `sha256:a158e9c1…` from run 42907276884, after this gate and the disk
+  write path test landed.
 - `vm/tests/test_run_args.sh` T6 read `run-vm.sh` for `qemu-img` and `truncate`
   instead of running it, the text-reading defect this repo's test rules forbid.
   The disk steps now go through `run_step`, which prints the argv under

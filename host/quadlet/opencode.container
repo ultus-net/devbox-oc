@@ -30,8 +30,11 @@ Volume=/srv/opencode/state:/home/dev/.local/state/opencode:Z
 AutoUpdate=registry
 
 # `podman auto-update` only keeps a new image if the container reports healthy,
-# so this is what makes the update path safe rather than optimistic.
-HealthCmd=/usr/local/bin/opencode --version
+# so this is what makes the update path safe rather than optimistic. The command
+# probes /api/info and treats 401 as healthy, which is the server up and asking
+# for the password. `opencode --version` only proved the binary ran, so a build
+# that booted without serving would have been kept.
+HealthCmd=/usr/local/bin/devbox-health
 HealthInterval=30s
 HealthTimeout=10s
 HealthRetries=3
