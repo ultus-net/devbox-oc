@@ -126,6 +126,12 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- `vm/tests/test_run_args.sh` T6 read `run-vm.sh` for `qemu-img` and `truncate`
+  instead of running it, the text-reading defect this repo's test rules forbid.
+  `run-vm.sh --dry-run` now prints the disk plan on stderr, and T6 asserts that
+  plan: one OS overlay on the pinned base, one blank data disk, and no third step.
+  A mutation that points `qemu-img` at the data disk, one that drops the truncate,
+  and one that adds a step each fail the test.
 - The docs claimed ucore ships and enables Cockpit. ucore-minimal installs the
   Cockpit packages but not `cockpit-ws`, so `cockpit.socket` does not exist and
   nothing listens on 9090. The Ignition drop-in stays as a guard for an image

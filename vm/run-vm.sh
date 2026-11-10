@@ -112,23 +112,43 @@ if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && [ "$dry_run" 
   exit 1
 fi
 
+# The OS disk is a qcow2 overlay on the pinned base. The data disk is a blank
+# file: the host never partitions or formats it, because the guest prepares the
+# partition table and filesystem before var-srv.mount, mirroring the live-media
+# step in docs/install.md. --dry-run prints the plan instead of touching a disk.
+create_os_disk() {
+  if [ "$dry_run" = 1 ]; then
+    echo "plan: qemu-img create -f qcow2 -F qcow2 -b $base $disk $disk_size" >&2
+    return 0
+  fi
+  qemu-img create -f qcow2 -F qcow2 -b "$base" "$disk.new.$$" "$disk_size" >/dev/null
+  mv "$disk.new.$$" "$disk"
+}
+
+create_data_disk() {
+  if [ "$dry_run" = 1 ]; then
+    echo "plan: truncate -s $data_size $data" >&2
+    return 0
+  fi
+  truncate -s "$data_size" "$data.new.$$"
+  mv "$data.new.$$" "$data"
+}
+
 if [ "$dry_run" = 1 ]; then
   base="$cache/fcos-$(jq -r '.release' "$here/fcos.json").qcow2"
+  create_os_disk
+  create_data_disk
 else
   base="$("$here/fetch-fcos.sh")"
   # Keep the guest's report URL on the same port the agent below binds.
   ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
 
   if [ "$rebuild" = 1 ] || [ ! -s "$disk" ]; then
-    qemu-img create -f qcow2 -F qcow2 -b "$base" "$disk.new.$$" "$disk_size" >/dev/null
-    mv "$disk.new.$$" "$disk"
+    create_os_disk
   fi
 
-  # A blank disk. The guest prepares the partition table and filesystem before
-  # var-srv.mount, mirroring the live-media step in docs/install.md.
   if [ "$rebuild" = 1 ] || [ ! -s "$data" ]; then
-    truncate -s "$data_size" "$data.new.$$"
-    mv "$data.new.$$" "$data"
+    create_data_disk
   fi
 fi
 

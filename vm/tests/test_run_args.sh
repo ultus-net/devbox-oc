@@ -26,7 +26,7 @@ export QEMU=true
 
 # T1: --dry-run prints one argument per line, with both disks and the fw_cfg
 #     Ignition.
-cmd="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run)" || fail "T1: --dry-run failed"
+cmd="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>/dev/null)" || fail "T1: --dry-run failed"
 grep -Fqx -- "-fw_cfg" <<<"$cmd" || fail "T1: no -fw_cfg"
 grep -Fqx -- "name=opt/com.coreos/config,file=$tmp/cache/devbox-vm.ign" <<<"$cmd" \
   || fail "T1: no fw_cfg pointing at the harness Ignition"
@@ -46,7 +46,7 @@ if ! grep -Fqx -- "tcg" <<<"$cmd"; then
   fail "T3: a missing KVM device did not fall back to tcg"
 fi
 touch "$tmp/kvm"
-kvm_cmd="$(KVM_DEVICE="$tmp/kvm" "$vm/run-vm.sh" --dry-run)" || fail "T3: --dry-run with KVM failed"
+kvm_cmd="$(KVM_DEVICE="$tmp/kvm" "$vm/run-vm.sh" --dry-run 2>/dev/null)" || fail "T3: --dry-run with KVM failed"
 if ! grep -Fqx -- "kvm" <<<"$kvm_cmd"; then
   fail "T3: a readable KVM device did not select kvm"
 fi
@@ -75,16 +75,21 @@ fi
 "$vm/run-vm.sh" --stop >"$tmp/stop.out" 2>"$tmp/stop.err" || fail "T5: --stop failed with no VM"
 grep -q 'no VM pidfile' "$tmp/stop.err" || fail "T5: --stop did not say why it did nothing"
 
-# T6: the host creates the data disk as a blank file. Partitioning and
-#     formatting belong to the guest, where a separate device is the invariant
-#     under test. The only host-side disk image tool creates the OS overlay, and
-#     the data disk is a truncate.
-qemu_img_lines="$(grep -n 'qemu-img' "$vm/run-vm.sh" || true)"
-[ -n "$qemu_img_lines" ] || fail "T6: no qemu-img call, so the OS overlay is not created"
-if printf '%s\n' "$qemu_img_lines" | grep -qF "\$data"; then
+# T6: the plan makes an OS overlay with qemu-img and a blank data disk with
+#     truncate, and nothing else. The guest prepares the data disk before
+#     var-srv.mount, so the host plan must not reach past a blank file.
+plan="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" || fail "T6: --dry-run failed"
+steps="$(printf '%s\n' "$plan" | grep -F 'plan: ' || true)"
+[ -n "$steps" ] || fail "T6: --dry-run printed no disk plan"
+if printf '%s\n' "$steps" | grep -Fv -e 'plan: qemu-img create' -e 'plan: truncate -s' | grep -q .; then
+  fail "T6: the plan holds a step beyond an overlay and a blank file"
+fi
+os_lines="$(printf '%s\n' "$steps" | grep -F 'plan: qemu-img create' || true)"
+[ -n "$os_lines" ] || fail "T6: the plan makes no OS overlay, so the base is never layered"
+if printf '%s\n' "$os_lines" | grep -Fq -- "$tmp/cache/data.img"; then
   fail "T6: qemu-img is applied to the data disk"
 fi
-grep -qF "truncate -s \"\$data_size\" \"\$data.new" "$vm/run-vm.sh" \
-  || fail "T6: the data disk is not created as a blank file"
+grep -Fq -- "plan: truncate -s 8G $tmp/cache/data.img" <<<"$steps" \
+  || fail "T6: the plan does not create the data disk as a blank file"
 
 echo "vm run command uses the harness Ignition, two disks, and no inbound forward"
