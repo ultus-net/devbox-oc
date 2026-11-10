@@ -41,7 +41,7 @@ flowchart LR
     OC["opencode serve<br/>0.0.0.0:4096 in podman"]
     HD["hermes dashboard<br/>127.0.0.1:9119"]
     HA["hermes gateway API<br/>127.0.0.1:8642"]
-    CP["cockpit.socket<br/>127.0.0.1:9090"]
+    CP["cockpit.socket<br/>127.0.0.1:9090 if shipped"]
     TS -->|"http://127.0.0.1:4096"| OC
     TS -->|"http://127.0.0.1:9119"| HD
     TS -->|"http://127.0.0.1:8642"| HA
@@ -55,7 +55,7 @@ flowchart LR
 | OpenCode, box to container | `http://127.0.0.1:4096` | nobody, loopback only |
 | Hermes dashboard | `https://<host>.<tailnet>.ts.net:8443` → `http://127.0.0.1:9119` | `tailscaled` |
 | Hermes gateway API | `https://<host>.<tailnet>.ts.net:10000` → `http://127.0.0.1:8642` | `tailscaled` |
-| Cockpit | `http://127.0.0.1:9090` | not published, by design |
+| Cockpit, if the image ships its socket | `http://127.0.0.1:9090` | not published, by design |
 
 The pieces that produce this:
 
@@ -347,9 +347,12 @@ never configures it.
 
 ## Cockpit stays loopback-only
 
-Cockpit is not published, and this file does not publish it. It runs privileged
-with `/` mounted, so a serve mount would hand root-equivalent control to anyone
-the tailnet ACL admits. `docs/design.md` decision 9 keeps it off the tailnet, and
+ucore-minimal installs the Cockpit packages but not `cockpit-ws`, so there is no
+`cockpit.socket` and nothing listens on 9090. If an image ships the socket, the
+Ignition drop-in binds it to loopback. Either way Cockpit is not published, and
+this file does not publish it. The service runs privileged with `/` mounted, so a
+serve mount would hand root-equivalent control to anyone the tailnet ACL admits.
+`docs/design.md` decision 9 keeps it off the tailnet, and
 `host/tests/test_cockpit_loopback.sh` fails if `oc-tailnet` serves any target
 other than the OpenCode loopback port.
 

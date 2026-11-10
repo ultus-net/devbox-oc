@@ -116,7 +116,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `host/tests/test_hermes_quadlet.sh` | the Hermes quadlet persists on `/srv`, stays on loopback, and the backup orders both workloads |
 | `host/tests/test_oc_backup.sh` | the backup runs the Fedora image, mounts data read-only, and never prunes |
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent, durable, and needs a real key |
-| `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is not published |
+| `host/tests/test_cockpit_loopback.sh` | a shipped Cockpit socket is bound to loopback and is not published |
 | `host/tests/test_no_lan_listener.sh` | sshd is masked and no unit declares a non-loopback listener |
 | `host/tests/test_nosleep.sh` | sleep targets are masked and `IdleAction=ignore` is set |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk and the workload fails closed |

@@ -30,9 +30,11 @@ preference.
 - **No public listener and no inbound port forward.** Reachability is Tailscale.
   `tailscale serve` publishes loopback with real TLS.
   `os/butane/tests/test_no_azure.sh` keeps the Azure network path deleted.
-- **Everything that listens, listens on loopback.** ucore ships Cockpit and
-  enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in, and
-  `sshd` is masked because the server firewall profile would expose it on the LAN.
+- **Everything that listens, listens on loopback.** ucore-minimal installs the
+  Cockpit packages but not `cockpit-ws`, so `cockpit.socket` does not exist and
+  nothing answers on 9090. An Ignition drop-in rebinds it to `127.0.0.1` if a
+  future image ships it, and `sshd` is masked because the server firewall profile
+  would expose it on the LAN.
   `host/tests/test_cockpit_loopback.sh` and `host/tests/test_no_lan_listener.sh`
   guard both. The OpenCode port is published as `127.0.0.1:4096:4096`.
 - **Always on. No scheduled stop and no idle deallocation.** Sleep targets are

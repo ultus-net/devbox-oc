@@ -112,6 +112,12 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The docs claimed ucore ships and enables Cockpit. ucore-minimal installs the
+  Cockpit packages but not `cockpit-ws`, so `cockpit.socket` does not exist and
+  nothing listens on 9090. The Ignition drop-in stays as a guard for an image
+  that does ship the socket, and `AGENTS.md`, design decision 9, the web-access
+  diagram and the test docstring now say so. Found by the QEMU harness, which
+  skips the Cockpit assertion when the socket is absent.
 - systemd-resolved answered LLMNR on 5355 and mDNS on 5353 on every interface.
   Neither is a systemd socket, so the sshd mask and the Cockpit rebind could not
   close them. An Ignition drop-in sets `LLMNR=no` and `MulticastDNS=no`.

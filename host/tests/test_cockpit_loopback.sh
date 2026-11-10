@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # host/tests/test_cockpit_loopback.sh
 #
-# ucore-minimal ships Cockpit and switches firewalld to the server profile so it
-# is reachable. The shipped cockpit.socket listens on 9090 across every
-# interface, and the service behind it runs privileged with / mounted. This box
-# has one door, the tailnet, so the socket must be rebound to loopback and must
-# not be published by oc-tailnet.
+# ucore-minimal installs the Cockpit packages but not cockpit-ws, so
+# cockpit.socket is absent and nothing listens on 9090. If an image ships the
+# socket, it listens on 9090 across every interface, and the service behind it
+# runs privileged with / mounted. This box has one door, the tailnet, so a
+# shipped socket must be rebound to loopback and must not be published by
+# oc-tailnet.
 #
 # Configuration is read with a YAML parser, so a comment mentioning 9090 is not a
 # definition.
