@@ -186,11 +186,13 @@ the step that moves the host.
 image, so the previous digest comes from git, which logged every move:
 
 ```sh
-git log -p -- image/prod-digest.txt
+git log --oneline -- image/prod-digest.txt
+git show <previous-commit>:image/prod-digest.txt
 ```
 
-Copy the full line from the commit before the current one. The value already
-carries the `sha256:` prefix.
+The first line names the commit that set the current value. The line after it
+names the move before that: use its commit in the second command, whose last
+line is the previous digest. The value already carries the `sha256:` prefix.
 
 Re-point `:prod` at it from a workstation logged in to GHCR:
 
@@ -198,12 +200,13 @@ Re-point `:prod` at it from a workstation logged in to GHCR:
 digest=<the full recorded digest>
 podman pull ghcr.io/ultus-net/devbox@$digest
 podman tag ghcr.io/ultus-net/devbox@$digest ghcr.io/ultus-net/devbox:prod
-podman push ghcr.io/ultus-net/devbox:prod
+podman push --digestfile /tmp/prod-digest.txt ghcr.io/ultus-net/devbox:prod
+cat /tmp/prod-digest.txt
 ```
 
-The push prints the digest GHCR now stores for the tag. Keep it for the check
-below: a re-tagged local image is pushed as a single manifest, so its digest can
-differ from a recorded index digest.
+The digestfile holds the digest GHCR now stores for the tag. Keep it for the
+check below: a re-tagged local image is pushed as a single manifest, so its
+digest can differ from a recorded index digest.
 
 Pull the re-pointed tag on the host, then restart:
 
@@ -235,9 +238,11 @@ ssh core@devbox 'sudo podman auto-update'
 ```
 
 Record the digest that is now live in `image/prod-digest.txt` in a PR, so the
-next rollback reads the image the host actually runs. `image.yml` prints the
-promoted digest in its job summary, because a workflow token cannot push to the
-protected `main`; after a production build, copy that digest in the same way.
+next rollback reads the image the host actually runs. Rollback is an undo, not a
+forward fix, so that record makes the next rollback return to the build you have
+just left. `image.yml` prints the promoted digest in its job summary, because a
+workflow token cannot push to the protected `main`; after a production build,
+copy that digest in the same way.
 
 If GHCR is unreachable, the host keeps running the local image. Do not delete the
 local image until the rollback is confirmed.

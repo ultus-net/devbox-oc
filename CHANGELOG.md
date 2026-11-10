@@ -133,9 +133,10 @@ All notable changes to this project. One entry per landed change, newest first.
   `podman pull`/`tag`/`push`, pulls `:prod` on the host, restarts, and proves the
   result with `podman image inspect --format '{{.RepoDigests}}'`, which can hold
   both the index and the per-architecture digest. The previous digest comes from
-  `git log -p -- image/prod-digest.txt`, and the rollback ends by recording the
-  digest that is now live. `podman auto-update` is documented as the one-step
-  alternative, not as a repair for a tag that did not move.
+  the git history of `image/prod-digest.txt`, the push writes its digest to a
+  file, and the rollback ends by recording the digest that is now live.
+  `podman auto-update` is documented as the one-step alternative, not as a repair
+  for a tag that did not move.
 - The quadlet health command only proved the binary ran. `HealthCmd` was
   `opencode --version`, so a build that booted but never served still reported
   healthy, and `podman auto-update` would have kept it. It now runs
