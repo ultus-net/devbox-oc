@@ -131,6 +131,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `image/tests/test_healthcheck.sh` | the health command accepts a serving API and rejects anything else |
 | `image/tests/test_smoke_requires_pin.sh` | the smoke gate refuses to run without a version pin |
 | `image/tests/test_prod_digest.sh` | a stale digest record fails and the repair keeps the header |
+| `image/tests/test_promote_digest.sh` | a stale record fails, is repaired, and opens exactly one repair PR |
 | `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
 | `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |

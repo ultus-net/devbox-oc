@@ -18,9 +18,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   packages: write
-  pull-requests: write
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/devbox
@@ -28,6 +27,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.promote.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,30 +82,33 @@ jobs:
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: docker image push --all-tags "${IMAGE_NAME}"
 
-      - name: Record the digest
+      - name: Read the promoted digest
+        id: promote
         if: github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           repo_digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE_NAME}:prod")"
-          # The file wants the bare digest; the RepoDigest form is repo@sha256:...
-          digest="${repo_digest##*@}"
-          echo "Promoted ${digest}" >> "$GITHUB_STEP_SUMMARY"
-          if ./image/check-prod-digest.sh "$digest"; then
-            exit 0
-          fi
-          # The record is stale. Repair it on a branch, open a PR, then fail this
-          # run: if the PR cannot be opened, the red run is the only signal.
-          ./image/write-prod-digest.sh "$digest"
-          branch="chore/prod-digest-${GITHUB_RUN_ID}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
-          git add image/prod-digest.txt
-          git commit -m "chore: record the promoted prod digest"
-          git push origin "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "chore: record the promoted prod digest" \
-            --body "The main build promoted ${digest} while image/prod-digest.txt was stale. This PR updates the rollback record. The build run that opened it failed on purpose, and a workflow token does not run CI, so check it before merging."
-          exit 1
+          # The record wants the bare digest; the RepoDigest form is repo@sha256:...
+          echo "digest=${repo_digest##*@}" >> "$GITHUB_OUTPUT"
+
+  record-digest:
+    # A separate job, because GitHub has no step-level permissions: this is the
+    # only place that holds a write token, and it never runs PR-controlled code.
+    # The build job above executes image/smoke.sh from the checked-out ref.
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record the digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          echo "Promoted ${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          ./image/promote-digest.sh "$DIGEST"

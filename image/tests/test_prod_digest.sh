@@ -54,6 +54,22 @@ if PROD_DIGEST_FILE="$tmp/absent.txt" "$check" "$a" >/dev/null 2>&1; then
   fail "accepted a missing record"
 fi
 
+# Two digest lines make the record ambiguous for a rollback, so it fails even
+# when one of them matches the pushed digest.
+printf '%s\n%s\n' "$a" "$b" > "$record"
+if out="$("$check" "$a" 2>&1)"; then
+  fail "a record with two digests passed: $out"
+fi
+
+# write-prod-digest.sh enforces the same input shape, and it never invents a
+# record that does not exist.
+for bad in "sha256:abc" "not-a-digest"; do
+  if "$write" "$bad" >/dev/null 2>&1; then fail "wrote a malformed digest: $bad"; fi
+done
+if PROD_DIGEST_FILE="$tmp/absent.txt" "$write" "$a" >/dev/null 2>&1; then
+  fail "wrote to a record that does not exist"
+fi
+
 # write-prod-digest.sh repairs the record and keeps the comment header.
 printf '# header stays\n# never hand-edit\n%s\n%s\n' "$a" "$a" > "$record"
 "$write" "$b" >/dev/null || fail "could not write the digest"

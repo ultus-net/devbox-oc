@@ -42,15 +42,55 @@ if [ "$smoke_line" -ge "$push_line" ]; then
   fail "the image is pushed before it is smoke-tested"
 fi
 
-# A promoted digest that differs from the record is a silent rollback fault, so
-# the build compares them, and it can push a repair branch and open a PR.
-grep -q 'check-prod-digest.sh' "$image" \
-  || fail "the build does not compare the pushed digest with the record"
-grep -qF 'repo_digest##*@' "$image" \
-  || fail "the summary does not print the bare digest"
-grep -q 'contents: write' "$image" \
-  || fail "the build cannot push a digest repair branch"
-grep -q 'pull-requests: write' "$image" \
-  || fail "the build cannot open a digest repair PR"
+# A promoted digest that differs from the record is a silent rollback fault. The
+# repair runs in its own job so the write token never sits on the job that
+# executes PR-controlled code. Assert the parsed structure, because a grep for
+# "check-prod-digest.sh" still passes when the line is commented out.
+python3 - "$image" <<'PY'
+import sys, yaml
+
+doc = yaml.safe_load(open(sys.argv[1]))
+
+
+def fail(message):
+    print("FAIL: " + message, file=sys.stderr)
+    sys.exit(1)
+
+
+def scopes(block):
+    return block or {}
+
+
+def runs_in(job):
+    return "\n".join(str(step.get("run", "")) for step in job.get("steps", []))
+
+
+build = doc["jobs"].get("build")
+record = doc["jobs"].get("record-digest")
+if build is None or record is None:
+    fail("the image workflow needs a build job and a record-digest job")
+
+global_scopes = scopes(doc.get("permissions"))
+for scope in ("contents", "pull-requests"):
+    if "write" in str(global_scopes.get(scope, "")):
+        fail("the workflow grants write " + scope + " to every job")
+
+if "digest" not in (build.get("outputs") or {}):
+    fail("the build job does not publish the promoted digest")
+if record.get("needs") != "build":
+    fail("the record job does not depend on the build job")
+
+for scope in ("contents", "pull-requests"):
+    if scopes(record.get("permissions")).get(scope) != "write":
+        fail("the record job cannot write " + scope)
+for scope in ("contents", "pull-requests", "packages"):
+    if "write" in str(scopes(build.get("permissions")).get(scope, "")):
+        fail("the build job holds a write scope on the PR code path: " + scope)
+
+if "image/promote-digest.sh" not in runs_in(record):
+    fail("the record job does not run the digest repair script")
+if "promote-digest.sh" in runs_in(build):
+    fail("the digest repair still runs inside the build job")
+PY
 
 echo "CI publishes to GHCR behind a smoke gate"

@@ -28,6 +28,7 @@ run "quadlet persistence"    ./host/tests/test_quadlet_persistence.sh
 run "quadlet health"         ./host/tests/test_quadlet_health.sh
 run "container digest"       ./image/tests/test_digest_record.sh
 run "prod digest guard"      ./image/tests/test_prod_digest.sh
+run "promote digest"         ./image/tests/test_promote_digest.sh
 run "image healthcheck"      ./image/tests/test_healthcheck.sh
 run "image smoke pin"        ./image/tests/test_smoke_requires_pin.sh
 run "autorebase"             ./os/butane/tests/test_autorebase.sh

@@ -20,13 +20,14 @@ printf '%s' "${digest#sha256:}" | grep -qE '^[0-9a-f]{64}$' \
   || fail "not 64 hex characters: $1"
 [ -s "$record" ] || fail "no digest record at $record"
 
-# Build the new text in memory first, so a failed rewrite cannot truncate the
-# record. Every digest line after the first is dropped; the header is kept.
+# Build the new text in memory first, then replace the record atomically. Every
+# digest line after the first is dropped; the header is kept.
 new="$(awk -v d="$digest" '
   /^sha256:/ { if (!done) { print d; done = 1 }; next }
   { print }
   END { if (!done) print d }
 ' "$record")" || fail "could not rewrite $record"
-printf '%s\n' "$new" > "$record"
+printf '%s\n' "$new" > "$record.new"
+mv "$record.new" "$record"
 
 echo "recorded $digest"

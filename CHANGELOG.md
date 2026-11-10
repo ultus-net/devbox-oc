@@ -129,13 +129,19 @@ All notable changes to this project. One entry per landed change, newest first.
 - The rollback record could go stale without anything failing.
   `image/tests/test_digest_record.sh` accepted `PENDING`, and nothing compared
   the file with the live `:prod` digest, which is how it sat out of date while
-  `:prod` had moved. The main build now reads the pushed digest bare, compares it
-  with the record through `image/check-prod-digest.sh`, and fails the run when
-  they differ. It repairs the record with `image/write-prod-digest.sh`, which
-  keeps the comment header, pushes a `chore/prod-digest` branch and opens a PR,
-  because a workflow token cannot push to `main`. `PENDING` stays a valid shape
-  only before the first build. `image/tests/test_prod_digest.sh` drives both
-  scripts against fixtures, and `tests/ci_shape.sh` holds the workflow shape.
+  `:prod` had moved. The main build now reads the pushed digest bare and runs
+  `image/promote-digest.sh`, which compares it with the record through
+  `image/check-prod-digest.sh` and fails the run when they differ. On a stale
+  record it repairs the file with `image/write-prod-digest.sh`, proves the repair
+  passes its own check, pushes a `chore/prod-digest-<run-id>` branch and opens a
+  PR, because a workflow token cannot push to `main`. It opens one PR at a time
+  rather than a branch per run. The repair runs in a `record-digest` job that
+  depends on `build`, so the write token never sits on the job that executes
+  PR-controlled code. `PENDING` stays a valid shape only before the first build.
+  `image/tests/test_prod_digest.sh` drives the two helpers against fixtures,
+  `image/tests/test_promote_digest.sh` drives the repair against stub `git` and
+  `gh`, and `tests/ci_shape.sh` reads the parsed workflow to keep the permissions
+  in that job.
 - The rollback procedure did not move the image the host runs. `docs/runbook.md`
   told the operator to re-point `:prod` and restart, but neither quadlet sets
   `Pull=`, so a restart reused the local image and the rollback changed nothing
