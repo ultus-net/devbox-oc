@@ -144,7 +144,8 @@ All notable changes to this project. One entry per landed change, newest first.
   check compares the parent block devices behind `/srv` and `/var`, so a second
   partition on the OS disk cannot pass as a separate device.
   `os/butane/tests/test_data_mount.sh` covers the unit name, the mount path and
-  every dependency.
+  every dependency. It reads `Where=` and `What=` from `[Mount]`, and a mutation
+  that moves them to `[Unit]` proves a section-blind grep cannot pass.
 - `host/tests/test_nosleep.sh` requires `IdleAction=ignore` under `[Login]`, so a
   commented-out or mis-sectioned setting no longer passes the guard.
 - `os/butane/build.sh` stages Butane's output and moves it into place only after

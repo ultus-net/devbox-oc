@@ -36,10 +36,31 @@ if len(mounts) != 1:
 mount = mounts[0]
 name = mount["name"]
 contents = mount.get("contents") or ""
-match = re.search(r"^Where=(.+)$", contents, re.M)
-if not match:
-    raise SystemExit(f"FAIL: {name} has no Where=")
-where = match.group(1).strip()
+
+
+# Read a directive from the section it belongs to. Searching the whole unit body
+# accepts `Where=` under `[Unit]`, which systemd ignores, so the mount would fail
+# on a config this check called good.
+def section_value(text, section, key):
+    current = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line[0] in "#;":
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line[1:-1].strip()
+            continue
+        if current != section:
+            continue
+        found, sep, value = line.partition("=")
+        if sep and found.strip() == key:
+            return value.strip()
+    return None
+
+
+where = section_value(contents, "Mount", "Where")
+if not where:
+    raise SystemExit(f"FAIL: {name} has no Where= under [Mount]")
 
 if where == "/srv":
     raise SystemExit(
@@ -51,7 +72,7 @@ if name != expected_name:
     raise SystemExit(
         f"FAIL: unit name {name} does not match Where={where}; expected {expected_name}")
 
-if "What=/dev/disk/by-label/data" not in contents:
+if section_value(contents, "Mount", "What") != "/dev/disk/by-label/data":
     raise SystemExit(f"FAIL: {name} does not mount the data filesystem by label")
 
 if not mount.get("enabled"):
@@ -94,27 +115,47 @@ if dependents == 0:
 print(f"data disk mounts at {where} via {name} ({dependents} dependents)")
 PY
 
-# Teeth: a drop-in that reintroduces srv.mount must fail. Without this, a check
-# that only reads units[].contents would pass the shipped file and miss the
-# regression exactly where it comes back.
+# Teeth: one mutation reintroduces srv.mount through a drop-in, the other moves
+# Where= into [Unit], where systemd ignores it. Without these, a check that reads
+# units[].contents, or greps the unit for any Where=, passes the regression it
+# exists to catch.
 if [ "$#" -eq 0 ]; then
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
-  python3 - "$bu" "$tmp/mutated.bu" <<'PY'
+  for mode in dropin wrong-section; do
+    python3 - "$bu" "$tmp/mutated.bu" "$mode" <<'PY'
+import re
 import sys
 
 import yaml
 
+mode = sys.argv[3]
 with open(sys.argv[1]) as handle:
     config = yaml.safe_load(handle)
 units = config["systemd"]["units"]
-units[0].setdefault("dropins", []).append(
-    {"name": "10-legacy.conf", "contents": "[Unit]\nAfter=srv.mount\n"})
+
+if mode == "dropin":
+    units[0].setdefault("dropins", []).append(
+        {"name": "10-legacy.conf", "contents": "[Unit]\nAfter=srv.mount\n"})
+elif mode == "wrong-section":
+    mount = next(u for u in units if str(u.get("name", "")).endswith(".mount"))
+    body = mount["contents"]
+    found = re.search(r"^Where=(.+)\n?", body, re.M)
+    if not found:
+        raise SystemExit("mutation: no Where= line")
+    value = found.group(1).strip()
+    body = body[:found.start()] + body[found.end():]
+    body = body.replace("[Unit]", "[Unit]\nWhere=" + value + "\n", 1)
+    mount["contents"] = body
+else:
+    raise SystemExit("unknown mutation: " + mode)
+
 with open(sys.argv[2], "w") as handle:
     yaml.safe_dump(config, handle, sort_keys=False)
 PY
-  cmp -s "$bu" "$tmp/mutated.bu" && fail "mutation did not land"
-  if "$0" "$tmp/mutated.bu" >/dev/null 2>&1; then
-    fail "the guard accepted a drop-in that reintroduces srv.mount"
-  fi
+    cmp -s "$bu" "$tmp/mutated.bu" && fail "mutation did not land: $mode"
+    if "$0" "$tmp/mutated.bu" >/dev/null 2>&1; then
+      fail "the guard accepted a config with no effective Where= ($mode)"
+    fi
+  done
 fi
