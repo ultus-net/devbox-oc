@@ -154,6 +154,9 @@ These were found by running the harness, not by reading the config:
 | a pre-`local-fs` unit cannot exec `/usr/local/sbin/...` | `devbox-vm-data.service` fails `203/EXEC`; `/var` is a separate mount and `/usr/local` is a symlink into it | the data script lives in `/etc/devbox-vm/` |
 | `loginctl show -p IdleAction` is the wrong property | the per-session value is empty even when the manager ignores idle | the check reads the logind Manager property over the bus |
 | `srv.mount` can never mount on Fedora CoreOS | `srv.mount: Mount path /srv is not canonical (contains a symlink)`; `/srv` is a symlink to `var/srv` | the unit is `var-srv.mount` with `Where=/var/srv`, and the check proves `/srv` is not on the OS disk |
+| systemd-resolved answered on the LAN | the wildcard scan reported `0.0.0.0:5355` and `[::]:5355`; LLMNR and mDNS are responders and are not systemd sockets | Ignition sets `LLMNR=no` and `MulticastDNS=no` in a `resolved.conf.d` drop-in |
+| the quadlet boot check looked in the wrong place | it scanned `/etc/systemd/system/*.wants`, but quadlets cannot be enabled and the generator applies `[Install]` in `/run` | the check reads systemd's `WantedBy` property, which is the same data systemd starts from |
+| ucore-minimal ships no Cockpit socket | `cockpit.socket` is `not-found`; the image installs `cockpit-bridge` and `cockpit-system` but not `cockpit-ws` | the documentation now calls the loopback rebind conditional, and the drop-in stays as a guard |
 
 ## How the host sees the result
 
