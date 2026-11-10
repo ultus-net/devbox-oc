@@ -191,8 +191,8 @@ git show <previous-commit>:image/prod-digest.txt
 ```
 
 The first line names the commit that set the current value. The line after it
-names the move before that: use its commit in the second command, whose last
-line is the previous digest. The value already carries the `sha256:` prefix.
+names the move before that: use its commit in the second command, whose line
+starting `sha256:` is the previous digest. The value already carries the prefix.
 
 Re-point `:prod` at it from a workstation logged in to GHCR:
 
@@ -200,13 +200,14 @@ Re-point `:prod` at it from a workstation logged in to GHCR:
 digest=<the full recorded digest>
 podman pull ghcr.io/ultus-net/devbox@$digest
 podman tag ghcr.io/ultus-net/devbox@$digest ghcr.io/ultus-net/devbox:prod
-podman push --digestfile /tmp/prod-digest.txt ghcr.io/ultus-net/devbox:prod
+podman push --digestfile /tmp/prod-digest.txt ghcr.io/ultus-net/devbox:prod || exit 1
 cat /tmp/prod-digest.txt
 ```
 
-The digestfile holds the digest GHCR now stores for the tag. Keep it for the
-check below: a re-tagged local image is pushed as a single manifest, so its
-digest can differ from a recorded index digest.
+The digestfile holds the digest GHCR now stores for the tag. The push stops the
+procedure when it fails, so an earlier attempt's file cannot be read as this
+one's. Keep the value for the check below: a re-tagged local image is pushed as
+a single manifest, so its digest can differ from a recorded index digest.
 
 Pull the re-pointed tag on the host, then restart:
 
@@ -222,11 +223,12 @@ ssh core@devbox 'sudo podman image inspect \
   --format "{{.RepoDigests}}" ghcr.io/ultus-net/devbox:prod'
 ```
 
-The output must contain the digest the push printed for this platform. The list
-can hold both the index and the per-architecture digest, so check for the
-expected name rather than the last entry. If it is absent, the pull did not
-replace the tag: read the pull output, run `sudo podman login ghcr.io` if it
-asked for credentials, and confirm in GHCR that the re-pointed tag exists.
+The output must contain the digest the push wrote to `/tmp/prod-digest.txt` for
+this platform. The list can hold both the index and the per-architecture digest,
+so check for the expected name rather than the last entry. If it is absent, the
+pull did not replace the tag: read the pull output, run
+`sudo podman login ghcr.io` if it asked for credentials, and confirm in GHCR that
+the re-pointed tag exists.
 `podman auto-update` runs the same pull, so it cannot repair a tag that did not
 move.
 
