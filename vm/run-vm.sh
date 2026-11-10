@@ -49,7 +49,7 @@ while [ "$#" -gt 0 ]; do
       esac
       timeout="$1"
       ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
