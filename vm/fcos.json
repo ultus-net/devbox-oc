@@ -1,0 +1,11 @@
+{
+  "_comment": "Pinned Fedora CoreOS base for the dogfood VM. Refresh with vm/fetch-fcos.sh --update, which rewrites this file from the stream metadata.",
+  "stream": "stable",
+  "release": "44.20261023.3.1",
+  "arch": "x86_64",
+  "qcow2": {
+    "url": "https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/44.20261023.3.1/x86_64/fedora-coreos-44.20261023.3.1-qemu.x86_64.qcow2.xz",
+    "sha256": "c759290b2c7f25dd304d55bfc67077e1bcc44ed82681d7db81c3abf53e873b0f",
+    "uncompressed_sha256": "d7f0a53e861968de47595d28a6e1b98b3cd288a6dd9bb9fe7f0c16ffa3b458f9"
+  }
+}

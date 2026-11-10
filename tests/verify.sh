@@ -51,6 +51,10 @@ run "keyless build"          ./os/butane/tests/test_keyless_build.sh
 # an offline machine; CI sets it to "0" so a download failure is a real failure.
 run "image integrity"        ./image/tests/test_integrity_logic.sh
 
+run "vm overlay merge"       ./vm/tests/test_overlay_merge.sh
+run "vm run command"         ./vm/tests/test_run_args.sh
+run "vm guest helpers"       ./vm/tests/test_guest_helpers.sh
+run "vm guest data"          ./vm/tests/test_guest_data.sh
 run "docs complete"          ./tests/docs_complete.sh
 run "CI shape"               ./tests/ci_shape.sh
 
@@ -59,7 +63,7 @@ run "CI shape"               ./tests/ci_shape.sh
 # SKIP_LINT=1 is set explicitly: a lint gate that can quietly pass having linted
 # nothing is worse than no lint gate, because it buys false confidence.
 mapfile -t scripts < <(
-  find host os image tests -name '*.sh' -type f 2>/dev/null
+  find host os image tests vm -name '*.sh' -type f 2>/dev/null
   find host/bin -maxdepth 1 -type f 2>/dev/null
 )
 

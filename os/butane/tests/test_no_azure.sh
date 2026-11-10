@@ -19,7 +19,7 @@ done
 
 # Scan code, images and CI. test_no_azure.sh is excluded because the pattern is
 # the assertion, not a finding.
-scan_dirs=(host os image .github)
+scan_dirs=(host os image vm .github)
 [ -d .github ] || fail "no .github directory, so there is no CI to check"
 
 matches="$(grep -rInE 'azurecr\.io|vault\.azure\.net|169\.254\.169\.254|lib-imds|oc-idle|oc-snapshot|az vm ' \

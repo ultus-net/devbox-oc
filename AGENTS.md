@@ -101,7 +101,8 @@ The pinned version and its sha256 are in `.github/workflows/verify.yml`.
 | `image/` | toolbox container: Dockerfile, toolchains, smoke test, digest record |
 | `.github/workflows/` | verify gate and the GHCR image build |
 | `tests/` | the one verification gate and the docs/CI guards |
-| `docs/` | design, first install, and the runbook |
+| `vm/` | QEMU dogfood harness: pinned FCOS base, Ignition overlay, guest checks (`docs/vm.md`) |
+| `docs/` | design, first install, the runbook, and the VM harness procedure |
 
 `os/butane/ucore.ign` is a compiled artifact and must stay byte-identical to what
 `os/butane/build-placeholder.sh` produces. Never hand-edit it.
@@ -117,8 +118,10 @@ in the PR that lands the work.
 
 ## What is not verified here
 
-No install has run on the target Mini, no live boot has been tested, the
-container image has not been built by the workflow, the restic restore drill has
-not been executed, and the ucore rebase path is unexercised on this hardware. Do
-not describe anything as working until it has run against real hardware.
-`README.md` lists the same gaps; keep them in step.
+No install has run on the target Mini and no live boot has been tested there.
+`vm/run-vm.sh` exercises the same Ignition under QEMU, including the ucore
+rebase and the container start path, but it cannot verify the firmware, the two
+physical disk ids, the tailnet join, the UPS, or the thermals. The container
+image has been built by the workflow and pulled in the VM. The restic restore
+drill has not been executed. Do not describe anything as working until it has
+run against real hardware. `README.md` lists the same gaps; keep them in step.

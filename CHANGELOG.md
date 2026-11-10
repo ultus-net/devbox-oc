@@ -6,6 +6,19 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- QEMU dogfood harness. `vm/run-vm.sh` boots a pinned Fedora CoreOS QEMU
+  image, applies the Ignition compiled from `os/butane/ucore.bu`, waits for the
+  one-shot ucore rebase, then runs a check suite inside the guest. The guest
+  posts its report to `vm/report-agent.py` bound to `127.0.0.1`, reached at
+  `10.0.2.2` over qemu's user network, so the harness adds no inbound listener.
+  The overlay appends a serial console, the data-disk preparation and the check
+  unit; it never edits the shipped Ignition. The guest check fails, rather than
+  notes, when no boot target wants a quadlet unit. It reads port bindings from
+  `podman port` and probes each loopback port, inspects logind's Manager property
+  for `IdleAction`, and writes the fallback report only when `/srv` is a real
+  mountpoint. `vm/tests/` guards the merge, the boot command, the guest check's
+  helper definitions, and the data-disk root-device refusal, and `docs/vm.md` is
+  the procedure. Both are wired into `tests/verify.sh`.
 - Hermes control plane alongside OpenCode. A second podman quadlet
   (`host/quadlet/hermes.container`) runs the official `nousresearch/hermes-agent`
   image as the assistant that schedules and delegates work to the OpenCode
