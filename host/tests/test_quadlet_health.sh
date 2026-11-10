@@ -37,8 +37,8 @@ esac
 
 # The COPY must be a real instruction, install the executable bit, and come from
 # the health script. A commented-out line or a 0644 install would leave the probe
-# failing or absent.
-grep -qx "COPY --chmod=0755 healthcheck.sh $bin" "$dockerfile" \
+# failing or absent. -F keeps the dots in /usr/local literal.
+grep -qxF "COPY --chmod=0755 healthcheck.sh $bin" "$dockerfile" \
   || fail "the image does not install $bin as an executable from healthcheck.sh"
 
 echo "the quadlet health command is the API probe the image installs"
