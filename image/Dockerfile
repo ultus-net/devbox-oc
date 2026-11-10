@@ -80,6 +80,10 @@ RUN set -eux; \
     dnf clean all; \
     rm /tmp/toolchains.txt
 
+# The quadlet's HealthCmd runs this, so a build that boots but does not serve
+# reports unhealthy instead of being kept by podman auto-update.
+COPY --chmod=0755 healthcheck.sh /usr/local/bin/devbox-health
+
 # Unprivileged user with a fixed uid so host bind mounts line up.
 RUN set -eux; \
     groupadd -g ${DEV_GID} dev; \
