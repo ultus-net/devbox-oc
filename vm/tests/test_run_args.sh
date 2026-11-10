@@ -75,21 +75,29 @@ fi
 "$vm/run-vm.sh" --stop >"$tmp/stop.out" 2>"$tmp/stop.err" || fail "T5: --stop failed with no VM"
 grep -q 'no VM pidfile' "$tmp/stop.err" || fail "T5: --stop did not say why it did nothing"
 
-# T6: the plan makes an OS overlay with qemu-img and a blank data disk with
-#     truncate, and nothing else. The guest prepares the data disk before
-#     var-srv.mount, so the host plan must not reach past a blank file.
+# T6: on an empty cache the plan names the two writes a real run would make: an
+#     OS overlay on the pinned base and a blank data disk. The guest prepares the
+#     data disk before var-srv.mount, so the plan must not reach past a blank file.
+export VM_DISK_SIZE=32G VM_DATA_SIZE=8G
+release="$(jq -r '.release' "$vm/fcos.json")"
 plan="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" || fail "T6: --dry-run failed"
-steps="$(printf '%s\n' "$plan" | grep -F 'plan: ' || true)"
-[ -n "$steps" ] || fail "T6: --dry-run printed no disk plan"
-if printf '%s\n' "$steps" | grep -Fv -e 'plan: qemu-img create' -e 'plan: truncate -s' | grep -q .; then
-  fail "T6: the plan holds a step beyond an overlay and a blank file"
+printf '%s\n' "$plan" | grep -F 'plan: ' > "$tmp/plan.actual" || fail "T6: --dry-run printed no disk plan"
+printf 'plan: qemu-img create -f qcow2 -F qcow2 -b %s %s 32G\nplan: truncate -s 8G %s\n' \
+  "$tmp/cache/fcos-$release.qcow2" "$tmp/cache/vm-disk.qcow2" "$tmp/cache/data.img" \
+  > "$tmp/plan.expected"
+if ! diff -u "$tmp/plan.expected" "$tmp/plan.actual"; then
+  fail "T6: the disk plan is not the two writes an empty cache needs"
 fi
-os_lines="$(printf '%s\n' "$steps" | grep -F 'plan: qemu-img create' || true)"
-[ -n "$os_lines" ] || fail "T6: the plan makes no OS overlay, so the base is never layered"
-if printf '%s\n' "$os_lines" | grep -Fq -- "$tmp/cache/data.img"; then
-  fail "T6: qemu-img is applied to the data disk"
+
+# T6b: a populated cache is planned as reuse, not as a write it would not make.
+printf 'x' > "$tmp/cache/vm-disk.qcow2"
+printf 'x' > "$tmp/cache/data.img"
+reuse="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" || fail "T6b: --dry-run failed"
+printf '%s\n' "$reuse" | grep -F 'plan: ' > "$tmp/reuse.actual"
+printf 'plan: reuse %s\nplan: reuse %s\n' "$tmp/cache/vm-disk.qcow2" "$tmp/cache/data.img" \
+  > "$tmp/reuse.expected"
+if ! diff -u "$tmp/reuse.expected" "$tmp/reuse.actual"; then
+  fail "T6b: a populated cache is still planned as a write"
 fi
-grep -Fq -- "plan: truncate -s 8G $tmp/cache/data.img" <<<"$steps" \
-  || fail "T6: the plan does not create the data disk as a blank file"
 
 echo "vm run command uses the harness Ignition, two disks, and no inbound forward"

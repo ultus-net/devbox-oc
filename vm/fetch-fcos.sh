@@ -11,10 +11,12 @@ repo_root="$(cd "$here/.." && pwd)"
 cache="${VM_CACHE:-$repo_root/.vm-cache}"
 pin="$here/fcos.json"
 update=0
+print_base=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --update) update=1 ;;
+    --print-base) print_base=1 ;;
     -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -22,7 +24,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
-command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
+if [ "$print_base" = 0 ]; then
+  command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
+fi
 
 mkdir -p "$cache"
 
@@ -56,6 +60,13 @@ want="$(jq -r '.qcow2.sha256' "$pin")"
 want_raw="$(jq -r '.qcow2.uncompressed_sha256' "$pin")"
 compressed="$cache/fcos-$release.qcow2.xz"
 base="$cache/fcos-$release.qcow2"
+
+# Name the base without downloading it, so a dry run can plan against the file a
+# real run would use.
+if [ "$print_base" = 1 ]; then
+  printf '%s\n' "$base"
+  exit 0
+fi
 
 if [ ! -s "$base" ]; then
   if [ ! -s "$compressed" ]; then

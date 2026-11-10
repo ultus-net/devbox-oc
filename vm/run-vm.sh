@@ -112,44 +112,52 @@ if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && [ "$dry_run" 
   exit 1
 fi
 
-# The OS disk is a qcow2 overlay on the pinned base. The data disk is a blank
-# file: the host never partitions or formats it, because the guest prepares the
-# partition table and filesystem before var-srv.mount, mirroring the live-media
-# step in docs/install.md. --dry-run prints the plan instead of touching a disk.
-create_os_disk() {
+# One argv per disk step. --dry-run prints it on stderr instead of running it, so
+# the plan and the real path cannot drift. The write lands on a temporary name
+# and is renamed, so a failed create never leaves a disk a later run trusts. The
+# OS disk is a qcow2 overlay on the pinned base. The data disk stays blank: the
+# guest prepares it before var-srv.mount, mirroring the live-media step in
+# docs/install.md.
+run_step() {
   if [ "$dry_run" = 1 ]; then
-    echo "plan: qemu-img create -f qcow2 -F qcow2 -b $base $disk $disk_size" >&2
+    printf 'plan: %s\n' "$*" >&2
     return 0
   fi
-  qemu-img create -f qcow2 -F qcow2 -b "$base" "$disk.new.$$" "$disk_size" >/dev/null
-  mv "$disk.new.$$" "$disk"
+  "$@"
+}
+
+create_os_disk() {
+  local dest="$disk"
+  [ "$dry_run" = 1 ] || dest="$disk.new.$$"
+  run_step qemu-img create -f qcow2 -F qcow2 -b "$base" "$dest" "$disk_size" >/dev/null
+  [ "$dry_run" = 1 ] || mv "$dest" "$disk"
 }
 
 create_data_disk() {
-  if [ "$dry_run" = 1 ]; then
-    echo "plan: truncate -s $data_size $data" >&2
-    return 0
-  fi
-  truncate -s "$data_size" "$data.new.$$"
-  mv "$data.new.$$" "$data"
+  local dest="$data"
+  [ "$dry_run" = 1 ] || dest="$data.new.$$"
+  run_step truncate -s "$data_size" "$dest"
+  [ "$dry_run" = 1 ] || mv "$dest" "$data"
 }
 
 if [ "$dry_run" = 1 ]; then
-  base="$cache/fcos-$(jq -r '.release' "$here/fcos.json").qcow2"
-  create_os_disk
-  create_data_disk
+  base="$("$here/fetch-fcos.sh" --print-base)"
 else
   base="$("$here/fetch-fcos.sh")"
   # Keep the guest's report URL on the same port the agent below binds.
   ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
+fi
 
-  if [ "$rebuild" = 1 ] || [ ! -s "$disk" ]; then
-    create_os_disk
-  fi
+if [ "$rebuild" = 1 ] || [ ! -s "$disk" ]; then
+  create_os_disk
+elif [ "$dry_run" = 1 ]; then
+  echo "plan: reuse $disk" >&2
+fi
 
-  if [ "$rebuild" = 1 ] || [ ! -s "$data" ]; then
-    create_data_disk
-  fi
+if [ "$rebuild" = 1 ] || [ ! -s "$data" ]; then
+  create_data_disk
+elif [ "$dry_run" = 1 ]; then
+  echo "plan: reuse $data" >&2
 fi
 
 if [ -r "$kvm_device" ]; then

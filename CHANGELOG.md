@@ -128,10 +128,13 @@ All notable changes to this project. One entry per landed change, newest first.
 
 - `vm/tests/test_run_args.sh` T6 read `run-vm.sh` for `qemu-img` and `truncate`
   instead of running it, the text-reading defect this repo's test rules forbid.
-  `run-vm.sh --dry-run` now prints the disk plan on stderr, and T6 asserts that
-  plan: one OS overlay on the pinned base, one blank data disk, and no third step.
-  A mutation that points `qemu-img` at the data disk, one that drops the truncate,
-  and one that adds a step each fail the test.
+  The disk steps now go through `run_step`, which prints the argv under
+  `--dry-run` and runs it otherwise, so the plan cannot drift from the write. The
+  dry run also reports `plan: reuse <path>` for a disk it would keep, and
+  `vm/fetch-fcos.sh --print-base` names the base without downloading it. T6
+  asserts the two exact writes on an empty cache and two reuse lines on a
+  populated one; a mutation pointing the overlay at the data disk, one dropping
+  the truncate, and one dropping the reuse line each fail it.
 - The docs claimed ucore ships and enables Cockpit. ucore-minimal installs the
   Cockpit packages but not `cockpit-ws`, so `cockpit.socket` does not exist and
   nothing listens on 9090. The Ignition drop-in stays as a guard for an image

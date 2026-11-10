@@ -85,7 +85,7 @@ Useful flags:
 | `--stop` | power down the running VM |
 | `--stop-after-check` | power down as soon as the report arrives |
 | `--timeout SECONDS` | how long to wait for the report (default 2400) |
-| `--dry-run` | print the disk plan and the exact qemu command, then exit; touches nothing |
+| `--dry-run` | print the disk plan (each step it would write or reuse) and the exact qemu command, then exit; touches nothing |
 
 Environment overrides: `VM_CACHE`, `VM_MEM` (default 4096), `VM_CPUS` (4),
 `VM_DISK_SIZE` (32G), `VM_DATA_SIZE` (8G), `VM_AGENT_PORT` (8123), `VM_TIMEOUT`
