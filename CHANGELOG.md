@@ -126,6 +126,17 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The rollback procedure did not move the image the host runs. `docs/runbook.md`
+  told the operator to re-point `:prod` and restart, but neither quadlet sets
+  `Pull=`, so a restart reused the local image and the rollback changed nothing
+  until the auto-update timer fired. The procedure now re-points the tag with
+  `podman pull`/`tag`/`push`, pulls `:prod` on the host, restarts, and proves the
+  result with `podman image inspect --format '{{.RepoDigests}}'`, which can hold
+  both the index and the per-architecture digest. The previous digest comes from
+  the git history of `image/prod-digest.txt`, the push writes its digest to a
+  file, and the rollback ends by recording the digest that is now live.
+  `podman auto-update` is documented as the one-step alternative, not as a repair
+  for a tag that did not move.
 - The quadlet health command only proved the binary ran. `HealthCmd` was
   `opencode --version`, so a build that booted but never served still reported
   healthy, and `podman auto-update` would have kept it. It now runs
