@@ -41,6 +41,9 @@ break without a commit here.
 
 - `qemu-system-x86_64` and `qemu-img` (QEMU 8 or newer; tested on 11).
 - `jq`, `curl`, `python3`, `ssh-keygen`, `xz`, `sha256sum`.
+- Butane 0.29.0, as `BUTANE` or `butane` on `PATH`, to compile the Ignition.
+- `socat` is optional. Without it the harness still runs, and only the serial
+  console attach and the graceful shutdown are unavailable.
 - No root. The base image is downloaded and verified as the calling user, and
   the data disk is a plain file under `.vm-cache/`.
 - KVM is optional. Without a readable `/dev/kvm` the harness falls back to TCG
@@ -85,8 +88,9 @@ Useful flags:
 | `--dry-run` | print the exact qemu command and exit; touches nothing |
 
 Environment overrides: `VM_CACHE`, `VM_MEM` (default 4096), `VM_CPUS` (4),
-`VM_DISK_SIZE` (32G), `VM_DATA_SIZE` (8G), `VM_AGENT_PORT` (8123), `VM_IMAGE`
-(default `ghcr.io/ultus-net/devbox:prod`), `KVM_DEVICE`, `QEMU`.
+`VM_DISK_SIZE` (32G), `VM_DATA_SIZE` (8G), `VM_AGENT_PORT` (8123), `VM_TIMEOUT`
+(2400), `VM_HOSTNAME` (`devbox-vm`), `VM_AGENT_URL` (baked into the Ignition),
+`VM_IMAGE` (default `ghcr.io/ultus-net/devbox:prod`), `KVM_DEVICE`, `QEMU`.
 
 ## Ignition runs once
 
@@ -145,8 +149,8 @@ The guest check asserts, in order:
 | invariant | no TCP listener is on `0.0.0.0` or `[::]`; the scan names the owning process |
 
 The dummy secrets are `vm-dogfood-not-a-secret` values written inside the
-throwaway VM. They are never a real credential and never touch the host or the
-repository.
+throwaway VM. The strings themselves are committed in `vm/guest-check.sh`, and no
+real credential ever reaches the host or the repository.
 
 Podman generates `opencode.service` and `hermes.service` from the quadlet files,
 and those units cannot be `systemctl enable`d. The generator applies each
@@ -185,6 +189,10 @@ These were found by running the harness, not by reading the config:
 | systemd-resolved answered on the LAN | the wildcard scan reported `0.0.0.0:5355` and `[::]:5355`; LLMNR and mDNS are responders and are not systemd sockets | Ignition sets `LLMNR=no` and `MulticastDNS=no` in a `resolved.conf.d` drop-in |
 | the quadlet boot check looked in the wrong place | it scanned `/etc/systemd/system/*.wants`, but quadlets cannot be enabled and the generator applies `[Install]` in `/run` | the check reads systemd's `WantedBy` property, which is the same data systemd starts from |
 | ucore-minimal ships no Cockpit socket | `cockpit.socket` is `not-found`; the image installs `cockpit-bridge` and `cockpit-system` but not `cockpit-ws` | the documentation now calls the loopback rebind conditional, and the drop-in stays as a guard |
+| the mount check asked for the wrong state | `systemctl is-active` prints `active` for a mount; `mounted` is the SUB state and never appears | the check asserts `active`, and the comment records why |
+| the version check rejected the real output | `opencode --version` prints `opencode v2.1.4`, and an anchored regex failed it | the regex accepts a semver token anywhere in the line |
+| `podman port` takes one container | passing two names made the second a port and printed nothing | the check calls it once per container |
+| the Hermes dashboard answers 404 to a bare GET | a reachability probe read 404 as down | the check opens a TCP connection, with a retry until the port binds |
 
 ## How the host sees the result
 

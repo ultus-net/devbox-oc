@@ -16,11 +16,15 @@ All notable changes to this project. One entry per landed change, newest first.
   notes, when no boot target wants a quadlet unit. It reads port bindings from
   `podman port` and probes each loopback port, inspects logind's Manager property
   for `IdleAction`, and writes the fallback report only when `/srv` is a real
-  mountpoint. `vm/tests/` guards the merge, the boot command, the guest check's
-  helper definitions, and the data-disk root-device refusal, and `docs/vm.md` is
-  the procedure. Both are wired into `tests/verify.sh`. A full `--rebuild` run at
-  the tip passed on 2026-11-11: `VM DOGFOOD: pass`, zero failures, one `SKIP` for
-  the absent Cockpit socket.
+  mountpoint. It reads the booted deployment only, so a staged ucore that has not
+  booted cannot pass the rebase assertion. The report agent refuses a truncated
+  post, and the run script requires `SUMMARY failures=0` before it prints a pass.
+  `vm/tests/` guards the merge, the boot command, the guest check's helper
+  definitions, the booted-deployment parse and the data-disk root-device
+  refusal. Those suites are wired into `tests/verify.sh`, and `docs/vm.md` is
+  checked by `tests/docs_complete.sh`. A full `--rebuild` run at the tip passed on
+  2026-11-11: `VM DOGFOOD: pass`, zero failures, one `SKIP` for the absent Cockpit
+  socket.
 - Hermes control plane alongside OpenCode. A second podman quadlet
   (`host/quadlet/hermes.container`) runs the official `nousresearch/hermes-agent`
   image as the assistant that schedules and delegates work to the OpenCode
@@ -128,16 +132,19 @@ All notable changes to this project. One entry per landed change, newest first.
   skips the Cockpit assertion when the socket is absent.
 - systemd-resolved answered LLMNR on 5355 and mDNS on 5353 on every interface.
   Neither is a systemd socket, so the sshd mask and the Cockpit rebind could not
-  close them. An Ignition drop-in sets `LLMNR=no` and `MulticastDNS=no`.
-  `host/tests/test_no_lan_listener.sh` now requires that drop-in and fails on a
-  config that drops it. Found by the QEMU harness's wildcard-listener scan.
+  close them. An Ignition drop-in sets `LLMNR=no` and `MulticastDNS=no`. The
+  harness's TCP scan reported the LLMNR listener; mDNS is UDP, so the config guard
+  is what keeps both off. `host/tests/test_no_lan_listener.sh` now reads the
+  effective `[Resolve]` values in drop-in order and fails on a commented-out
+  switch, a wrong section or a later override, with a mutation for each.
 - The data disk mounts at `/var/srv`, not `/srv`. On Fedora CoreOS and ucore
   `/srv` is a symlink to `var/srv`, and systemd refuses a mount on a path that
   contains a symlink, so `srv.mount` failed on every boot and `/srv` stayed a
   plain directory on the OS disk. The unit is now `var-srv.mount`, and the VM
-  check compares the device behind `/srv` with the device behind `/var` so a
-  silent regression cannot pass. `os/butane/tests/test_data_mount.sh` guards the
-  unit name, the mount path and every dependency.
+  check compares the parent block devices behind `/srv` and `/var`, so a second
+  partition on the OS disk cannot pass as a separate device.
+  `os/butane/tests/test_data_mount.sh` covers the unit name, the mount path and
+  every dependency.
 - `host/tests/test_nosleep.sh` requires `IdleAction=ignore` under `[Login]`, so a
   commented-out or mis-sectioned setting no longer passes the guard.
 - `os/butane/build.sh` stages Butane's output and moves it into place only after

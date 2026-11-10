@@ -220,7 +220,7 @@ below means much.
 ```sh
 ssh core@devbox 'tailscale serve status'
 ssh core@devbox 'tailscale funnel status'
-ssh core@devbox 'ss -ltn | grep -E "127\.0\.0\.1:(4096|9090)"'
+ssh core@devbox 'ss -ltn | grep -E "127\.0\.0\.1:4096"'
 ssh core@devbox 'sudo podman ps --format "{{.Names}} {{.Status}}"'
 ssh core@devbox 'sudo systemctl is-active oc-env opencode oc-tailnet'
 ```
@@ -229,7 +229,7 @@ ssh core@devbox 'sudo systemctl is-active oc-env opencode oc-tailnet'
 |---|---|
 | `serve status` | Names `https://devbox.<tailnet>.ts.net` and proxies `/` to `http://127.0.0.1:4096` |
 | `funnel status` | Shows no `Available on the internet` block |
-| `ss -ltn` | Shows `127.0.0.1:4096` and `127.0.0.1:9090`, and no `0.0.0.0` or `*:4096` |
+| `ss -ltn` | Shows `127.0.0.1:4096`, and no `0.0.0.0` or `*:4096`. Add `127.0.0.1:9090` only when the image ships `cockpit.socket` |
 | `podman ps` | The container reads `healthy` |
 | `is-active` | Prints `active` three times |
 
