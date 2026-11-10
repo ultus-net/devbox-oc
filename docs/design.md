@@ -162,10 +162,13 @@ design rejected and this one keeps rejected.
     the ACR path are deleted. The image goes to GHCR with the workflow token, and
     the promoted digest is recorded in `image/prod-digest.txt` by a separate
     operator PR after the build, because the workflow token cannot push to
-    `main`. The toolbox base is pinned by digest to the released Fedora stream,
-    not to a version-labelled tag, because the `46` tag is labelled `rawhide`
-    today. A bump is a deliberate PR that reads the released tag's digest from
-    the registry.
+    `main`. The repair pushes a `chore/prod-digest` branch and prints a compare
+    URL, because the token cannot open the PR either; an operator reads the
+    one-line diff and merges it. A main push that only changes the record does
+    not rebuild, so the merge cannot re-stale it. The toolbox base is pinned by
+    digest to the released Fedora stream, not to a version-labelled tag, because
+    the `46` tag is labelled `rawhide` today. A bump is a deliberate PR that
+    reads the released tag's digest from the registry.
 
 13. **Every build autologins `core` on the local console.** A keyless build has
     no tailnet and `sshd` is masked, so the console is the only door before the

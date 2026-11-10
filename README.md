@@ -133,7 +133,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `image/tests/test_smoke_requires_pin.sh` | the smoke gate refuses to run without a version pin |
 | `image/tests/test_base_pin.sh` | the toolbox base is pinned by digest, not to a tag that can move |
 | `image/tests/test_prod_digest.sh` | a stale digest record fails and the repair keeps the header |
-| `image/tests/test_promote_digest.sh` | a stale record fails, is repaired, and opens exactly one repair PR |
+| `image/tests/test_promote_digest.sh` | a stale record fails, is repaired on one branch, and never calls `gh pr create` |
 | `tests/docs_suite_table.sh` | every suite the gate runs is listed in the README table, and no row outlives its suite |
 | `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |

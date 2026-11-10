@@ -242,10 +242,12 @@ ssh core@devbox 'sudo podman auto-update'
 Record the digest that is now live in `image/prod-digest.txt` in a PR, so the
 next rollback reads the image the host actually runs. Rollback is an undo, not a
 forward fix, so that record makes the next rollback return to the build you have
-just left. `image.yml` prints the promoted digest in its job summary, and when
-the record is stale it opens a `chore/prod-digest-<run-id>` PR and fails the run,
-because a workflow token cannot push to the protected `main`. That PR carries no
-CI result, so read the one-line diff and merge it as a human override. A manual
+just left. `image.yml` prints the promoted digest in its job summary. When the
+record is stale it pushes a `chore/prod-digest-<run-id>` branch, prints a compare
+URL and fails the run, because the workflow token cannot open a PR. Open that URL,
+read the one-line diff and merge it as a human override. Delete the branch after
+the merge: a leftover repair branch blocks the next one. A main push that only
+rewrites the record does not rebuild, so the merge cannot re-stale it. A manual
 re-point below does not run that check, so after one edit the record yourself.
 
 If GHCR is unreachable, the host keeps running the local image. Do not delete the

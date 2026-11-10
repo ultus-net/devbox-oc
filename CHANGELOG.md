@@ -134,6 +134,18 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The digest repair path could not succeed. The workflow token is not permitted
+  to open a pull request, so every main build pushed a `chore/prod-digest` branch
+  and then failed at `gh pr create`, and the open-PR guard could not see the
+  leaked branch. `image/promote-digest.sh` now pushes the branch, prints a
+  compare URL and fails, and it refuses to push while any `chore/prod-digest-`
+  branch exists on the remote. The `record-digest` job drops `pull-requests:
+  write` and `GH_TOKEN`. A main push that changes only `image/prod-digest.txt`
+  no longer builds, because the rebuild stamped a new digest and re-staled the
+  record the merge had just fixed; path filters are not evaluated for tag pushes,
+  so a release still builds. `tests/ci_shape.sh` holds the trigger paths and the
+  narrowed permissions, and `image/tests/test_promote_digest.sh` asserts the
+  repair never calls `gh`.
 - The rollback record could go stale without anything failing.
   `image/tests/test_digest_record.sh` accepted `PENDING`, and nothing compared
   the file with the live `:prod` digest, which is how it sat out of date while
@@ -141,14 +153,14 @@ All notable changes to this project. One entry per landed change, newest first.
   `image/promote-digest.sh`, which compares it with the record through
   `image/check-prod-digest.sh` and fails the run when they differ. On a stale
   record it repairs the file with `image/write-prod-digest.sh`, proves the repair
-  passes its own check, pushes a `chore/prod-digest-<run-id>` branch and opens a
-  PR, because a workflow token cannot push to `main`. It opens one PR at a time
-  rather than a branch per run. The repair runs in a `record-digest` job that
+  passes its own check, and pushes a `chore/prod-digest-<run-id>` branch, because
+  a workflow token cannot push to `main`. It pushes one branch at a time rather
+  than one per run. The repair runs in a `record-digest` job that
   depends on `build`, so the write token never sits on the job that executes
   PR-controlled code. `PENDING` stays a valid shape only before the first build.
   `image/tests/test_prod_digest.sh` drives the two helpers against fixtures,
-  `image/tests/test_promote_digest.sh` drives the repair against stub `git` and
-  `gh`, and `tests/ci_shape.sh` reads the parsed workflow to keep the permissions
+  `image/tests/test_promote_digest.sh` drives the repair against stub `git`, and
+  `tests/ci_shape.sh` reads the parsed workflow to keep the permissions
   in that job.
 - The docs claimed more than the tree did. The README suite table listed 24
   suites while `tests/verify.sh` ran 30, so it read as the list while hiding six;

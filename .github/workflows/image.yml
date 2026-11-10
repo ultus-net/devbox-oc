@@ -4,13 +4,21 @@ name: image
 # runs before any push, so a broken image never reaches the registry.
 #
 # The workflow cannot push to protected main. After promoting :prod it compares
-# the pushed digest with image/prod-digest.txt, opens a chore/prod-digest branch
-# when the record is stale, and fails the run so the drift is never silent. A
-# workflow token does not trigger workflows, so that PR arrives without CI.
+# the pushed digest with image/prod-digest.txt and, when the record is stale,
+# pushes a chore/prod-digest branch, prints its compare URL and fails the run so
+# the drift is never silent. The token cannot open the PR, so an operator reads
+# the one-line diff and opens it.
 on:
   push:
     branches: [main]
     tags: ["v*"]
+    # A push that only rewrites the record must not build: the rebuild stamps a
+    # new digest and re-stales the record it just fixed. Path filters are not
+    # evaluated for tag pushes, so a release tag still builds.
+    paths:
+      - image/**
+      - .github/workflows/image.yml
+      - '!image/prod-digest.txt'
   pull_request:
     paths:
       - image/**
@@ -100,13 +108,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Record the digest
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST: ${{ needs.build.outputs.digest }}
         run: |
           set -euo pipefail
