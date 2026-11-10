@@ -3,9 +3,10 @@ name: image
 # Build the container image, smoke-gate it, then push it to GHCR. The smoke test
 # runs before any push, so a broken image never reaches the registry.
 #
-# The workflow cannot update image/prod-digest.txt: main is protected and a
-# workflow token must not push to it. It prints the digest in the job summary
-# instead, and the promotion PR records it in that file.
+# The workflow cannot push to protected main. After promoting :prod it compares
+# the pushed digest with image/prod-digest.txt, opens a chore/prod-digest branch
+# when the record is stale, and fails the run so the drift is never silent. A
+# workflow token does not trigger workflows, so that PR arrives without CI.
 on:
   push:
     branches: [main]
@@ -26,6 +27,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.promote.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -79,8 +82,33 @@ jobs:
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: docker image push --all-tags "${IMAGE_NAME}"
 
-      - name: Record the digest
+      - name: Read the promoted digest
+        id: promote
         if: github.ref == 'refs/heads/main'
         run: |
-          digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE_NAME}:prod")"
-          echo "Promoted ${digest}" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          repo_digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE_NAME}:prod")"
+          # The record wants the bare digest; the RepoDigest form is repo@sha256:...
+          echo "digest=${repo_digest##*@}" >> "$GITHUB_OUTPUT"
+
+  record-digest:
+    # A separate job, because GitHub has no step-level permissions: this is the
+    # only place that holds a write token, and it never runs PR-controlled code.
+    # The build job above executes image/smoke.sh from the checked-out ref.
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record the digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          echo "Promoted ${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          ./image/promote-digest.sh "$DIGEST"
