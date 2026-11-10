@@ -18,11 +18,13 @@ All notable changes to this project. One entry per landed change, newest first.
   for `IdleAction`, and writes the fallback report only when `/srv` is a real
   mountpoint. It reads the booted deployment only, so a staged ucore that has not
   booted cannot pass the rebase assertion. The report agent refuses a truncated
-  post, and the run script requires `SUMMARY failures=0` before it prints a pass.
-  `vm/tests/` guards the merge, the boot command, the guest check's helper
-  definitions, the booted-deployment parse and the data-disk root-device
-  refusal. Those suites are wired into `tests/verify.sh`, and `docs/vm.md` is
-  checked by `tests/docs_complete.sh`. A full `--rebuild` run at the tip passed on
+  post, and `vm/report-verdict.sh` requires `SUMMARY failures=0` before the run
+  prints a pass. `vm/tests/` guards the merge, the boot command, the guest check's
+  helper definitions, the booted-deployment parse and the parent-device
+  comparison, the agent's truncated-post refusal, the verdict, and the data-disk
+  root-device refusal in both its bare and `[/ostree/...]` spellings. Those suites
+  are wired into `tests/verify.sh`, and `docs/vm.md` is checked by
+  `tests/docs_complete.sh`. A full `--rebuild` run at the tip passed on
   2026-11-11: `VM DOGFOOD: pass`, zero failures, one `SKIP` for the absent Cockpit
   socket.
 - Hermes control plane alongside OpenCode. A second podman quadlet

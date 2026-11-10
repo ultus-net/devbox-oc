@@ -8,11 +8,18 @@
 # partition table, so the invariant under test is unchanged.
 set -euo pipefail
 
+# findmnt prints a subvolume or subdirectory as /dev/vda4[/ostree/...], which is
+# not a path readlink can resolve. Strip the suffix before anything uses it.
+source_device() {
+  printf '%s' "${1%%\[*}"
+}
+
 # True when the device is the whole disk or the partition that backs /. A wrong
 # VM_DATA_DEVICE would destroy the OS instead of failing, and the mount unit
 # would then look satisfied while /srv sat on the system disk.
 refuses_root_device() {
   local dev="$1" root_src="$2" root_disk="$3"
+  root_src="$(source_device "$root_src")"
   if [ -z "$root_src" ]; then
     return 1
   fi
@@ -34,7 +41,7 @@ main() {
   root_src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
   root_real=""
   if [ -n "$root_src" ]; then
-    root_real="$(readlink -f "$root_src")"
+    root_real="$(readlink -f "$(source_device "$root_src")" 2>/dev/null || true)"
   fi
   root_disk=""
   if [ -n "$root_real" ]; then

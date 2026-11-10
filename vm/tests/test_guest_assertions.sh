@@ -26,6 +26,11 @@ eval "$booted_body"
 source_body="$(extract source_device)"
 [ -n "$source_body" ] || fail "the guest check defines no source_device"
 eval "$source_body"
+# The extractor ends at the first top-level brace, so a one-line definition would
+# run into the next function. Assert it lifted exactly one.
+case "$source_body" in
+  *parent_device*) fail "the extractor ran past source_device into parent_device" ;;
+esac
 
 # `rpm-ostree status` output, booted deployment first.
 booted_ucore='State: idle
@@ -78,5 +83,25 @@ got="$(source_device /dev/vdb1)"
 naive_source() { printf '%s' "$1"; }
 [ "$(naive_source '/dev/vda4[/x]')" != /dev/vda4 ] \
   || fail "the source_device fixture does not discriminate"
+
+# The same-parent case. Two partitions on the OS disk must not pass as a
+# separate device, so parent_device has to resolve both sources to one disk.
+parent_body="$(extract parent_device)"
+[ -n "$parent_body" ] || fail "the guest check defines no parent_device"
+eval "$parent_body"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/lsblk" <<'EOF'
+#!/bin/sh
+printf 'vda\n'
+EOF
+chmod 0755 "$tmp/bin/lsblk"
+PATH="$tmp/bin:$PATH"
+got="$(parent_device '/dev/vda5[/ostree/deploy/fedora-coreos/var]')"
+[ "$got" = vda ] || fail "parent_device did not strip the subvolume suffix before lsblk"
+other="$(parent_device '/dev/vda4[/ostree/deploy/fedora-coreos/var]')"
+[ "$other" = "$got" ] \
+  || fail "two partitions on one disk did not resolve to the same parent"
 
 echo "guest assertions parse the booted deployment and the parent device"

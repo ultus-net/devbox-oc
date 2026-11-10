@@ -72,7 +72,9 @@ def main():
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
-    sys.stderr.write("agent: listening on 127.0.0.1:%d\n" % args.port)
+    # The bound port matters when --port 0 is used, so print it rather than the
+    # argument.
+    sys.stderr.write("agent: listening on 127.0.0.1:%d\n" % server.server_address[1])
     sys.stderr.flush()
     server.serve_forever()
 

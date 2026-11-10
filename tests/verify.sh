@@ -57,6 +57,8 @@ run "vm run command"         ./vm/tests/test_run_args.sh
 run "vm guest helpers"       ./vm/tests/test_guest_helpers.sh
 run "vm guest assertions"    ./vm/tests/test_guest_assertions.sh
 run "vm guest data"          ./vm/tests/test_guest_data.sh
+run "vm report agent"        ./vm/tests/test_report_agent.sh
+run "vm report verdict"      ./vm/tests/test_report_verdict.sh
 run "docs complete"          ./tests/docs_complete.sh
 run "CI shape"               ./tests/ci_shape.sh
 

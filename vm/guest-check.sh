@@ -101,7 +101,9 @@ check data-label data "$data_label"
 # the same to every other check, so compare the parent block devices. findmnt
 # reports `/dev/vda4[/ostree/deploy/...]` for /var, and a second partition on the
 # same disk is still destroyed by a reinstall.
-source_device() { printf '%s' "${1%%\[*}"; }
+source_device() {
+  printf '%s' "${1%%\[*}"
+}
 parent_device() {
   lsblk -no PKNAME "$(source_device "$1")" 2>/dev/null | head -n1
 }

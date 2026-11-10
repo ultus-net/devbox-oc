@@ -224,29 +224,25 @@ done
 agent_cleanup
 
 rc=0
-if grep -q '^FAIL ' "$report"; then
-  rc=1
-fi
-# The guest writes this line last, so a truncated, empty or foreign report cannot
-# pass. Without it, a partial post would read as a clean run.
-if ! grep -qx 'SUMMARY failures=0' "$report"; then
-  rc=1
-fi
+"$here/report-verdict.sh" "$report" || rc=1
 
 echo
 cat "$report"
 echo
-if [ "$rc" -eq 0 ]; then
-  echo "VM DOGFOOD: pass"
-else
-  echo "VM DOGFOOD: fail (see the report above)"
-fi
 
 if [ "$stop_after" = 1 ]; then
   stop_vm || rc=1
 else
   echo "VM is still running. Attach with: socat -,raw,echo=0 UNIX-CONNECT:$serial_sock"
   echo "Stop it with: $here/run-vm.sh --stop"
+fi
+
+# The verdict comes last, after any shutdown attempt, so it is the run's exit
+# status the operator reads.
+if [ "$rc" -eq 0 ]; then
+  echo "VM DOGFOOD: pass"
+else
+  echo "VM DOGFOOD: fail (see the report above)"
 fi
 
 exit "$rc"

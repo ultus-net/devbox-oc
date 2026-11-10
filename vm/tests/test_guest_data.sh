@@ -24,6 +24,12 @@ if ! refuses_root_device /dev/vda4 /dev/vda4 /dev/vda; then
   fail "T1: the root partition was accepted as the data disk"
 fi
 
+# T1b: findmnt reports the root source with a subvolume suffix. The predicate has
+# to strip it, or the root partition is accepted and repart loses the OS.
+if ! refuses_root_device /dev/vda4 '/dev/vda4[/ostree/deploy/fedora-coreos/var]' /dev/vda; then
+  fail "T1b: a suffixed findmnt source was not recognised as the root partition"
+fi
+
 # T2: a separate disk is accepted, with a resolvable parent disk.
 if refuses_root_device /dev/vdb /dev/vda4 /dev/vda; then
   fail "T2: the separate data disk was refused"
@@ -48,6 +54,19 @@ if ( . "$mutated" >/dev/null 2>&1; refuses_root_device /dev/vdb /dev/vda4 /dev/v
   : # the inverted guard refuses the data disk, so T2 would fail
 else
   fail "mutation survived: an inverted guard still accepted the data disk"
+fi
+
+# Teeth: remove the suffix strip and T1b's case must be accepted instead of
+# refused. Without this, a guard that drifts back to the raw findmnt string
+# passes the suite and lets repart run against the root partition.
+mutated_strip="$tmp/guest-data-nostrip.sh"
+# shellcheck disable=SC2016  # sed pattern, not a shell expansion.
+sed 's|root_src="$(source_device "$root_src")"|root_src="$root_src"|' \
+  "$vm/guest-data.sh" > "$mutated_strip"
+cmp -s "$vm/guest-data.sh" "$mutated_strip" && fail "strip mutation did not land"
+# shellcheck disable=SC1090  # the mutated copy is a run-time path.
+if ( . "$mutated_strip" >/dev/null 2>&1; refuses_root_device /dev/vda4 '/dev/vda4[/ostree/deploy/fedora-coreos/var]' /dev/vda ); then
+  fail "mutation survived: a suffixed root source was refused without the strip"
 fi
 
 echo "guest data script refuses the device that backs /"

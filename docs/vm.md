@@ -160,8 +160,11 @@ target the box comes up serving nothing, so the check fails rather than noting i
 
 `vm/tests/` holds the host-side guards: the overlay merge keeps every base file,
 link, directory and unit and is idempotent, the boot command carries both disks
-and no inbound forward, the guest check defines every helper it calls, and the
-data-disk script refuses the device that backs `/`.
+and no inbound forward, the guest check defines every helper it calls, the
+booted-deployment parse and the parent-device comparison are driven from
+fixtures, the report agent refuses a truncated post, the report verdict demands
+the summary line, and the data-disk script refuses the device that backs `/`
+including its `[/ostree/...]` spelling.
 
 ## The run that proved it
 
@@ -199,8 +202,10 @@ These were found by running the harness, not by reading the config:
 The guest reaches the host through qemu's user network at `10.0.2.2`. The
 harness binds `report-agent.py` to `127.0.0.1` only: there is no host port
 forward and no listener on the LAN. The guest posts its report, and the run
-script turns any `FAIL` line into a non-zero exit. The report is also left at
-`.vm-cache/report.txt` and `/srv/devbox-vm-report.txt` inside the VM.
+script exits non-zero on any `FAIL` line or on a report that lacks the
+`SUMMARY failures=0` line the guest writes last, so a truncated post cannot read
+as a pass. The report is also left at `.vm-cache/report.txt` and
+`/srv/devbox-vm-report.txt` inside the VM.
 
 If the check unit never runs, the harness times out and prints the last 40
 lines of `.vm-cache/serial.log`. The usual causes are a failed rebase

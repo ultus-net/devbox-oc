@@ -353,8 +353,9 @@ Ignition drop-in binds it to loopback. Either way Cockpit is not published, and
 this file does not publish it. The service runs privileged with `/` mounted, so a
 serve mount would hand root-equivalent control to anyone the tailnet ACL admits.
 `docs/design.md` decision 9 keeps it off the tailnet, and
-`host/tests/test_cockpit_loopback.sh` fails if `oc-tailnet` serves any target
-other than the OpenCode loopback port.
+`host/tests/test_cockpit_loopback.sh` fails if `oc-tailnet` serves a target other
+than the three loopback ports it publishes: OpenCode, the Hermes dashboard and
+the Hermes gateway.
 
 A shell is Tailscale SSH. If you need the Cockpit UI, publishing it is a design
 change with its own guard, not a runbook command.
