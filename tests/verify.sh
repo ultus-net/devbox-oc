@@ -26,6 +26,8 @@ run "no LAN listener"        ./host/tests/test_no_lan_listener.sh
 run "no suspend"             ./host/tests/test_nosleep.sh
 run "quadlet persistence"    ./host/tests/test_quadlet_persistence.sh
 run "container digest"       ./image/tests/test_digest_record.sh
+run "image healthcheck"      ./image/tests/test_healthcheck.sh
+run "image smoke pin"        ./image/tests/test_smoke_requires_pin.sh
 run "autorebase"             ./os/butane/tests/test_autorebase.sh
 run "no Azure leftovers"     ./os/butane/tests/test_no_azure.sh
 run "tailscale enabled"      ./os/butane/tests/test_tailscale_enabled.sh

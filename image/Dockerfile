@@ -80,6 +80,10 @@ RUN set -eux; \
     dnf clean all; \
     rm /tmp/toolchains.txt
 
+# The quadlet's HealthCmd runs this once :prod carries it; that switch is a
+# tracked follow-up (#23), not part of this build.
+COPY --chmod=0755 healthcheck.sh /usr/local/bin/devbox-health
+
 # Unprivileged user with a fixed uid so host bind mounts line up.
 RUN set -eux; \
     groupadd -g ${DEV_GID} dev; \

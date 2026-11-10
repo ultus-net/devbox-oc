@@ -126,6 +126,25 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The image gate could pass an image that never serves. `image/smoke.sh` accepted
+  any semver from `opencode --version` and never started the server, so an image
+  that booted but served nothing passed the gate. The image now ships
+  `/usr/local/bin/devbox-health`, which probes `/api/info` and accepts the `401`
+  the runbook already calls healthy; `image/tests/test_healthcheck.sh` drives it
+  through a stub `curl` and pins every answer, including the URL it probes. The
+  smoke gate requires `SMOKE_OC_VERSION` so the pin cannot turn itself off, pins
+  the built binary against the Dockerfile's `OC_VERSION`, starts the container on
+  loopback, requires `401` on `/api/info`, requires the health command to pass,
+  and requires it to fail against a URL that serves nothing. A missing pin now
+  fails the gate, and `image/tests/test_smoke_requires_pin.sh` holds that, so the
+  pin cannot revert to optional unnoticed. The quadlet still runs
+  `opencode --version` as its health check: switching it to `devbox-health` is
+  #23, because the published `:prod` image does not carry the script yet and the
+  VM dogfood run pulls `:prod`.
+  `image/prod-digest.txt` held `PENDING-FIRST-BUILD` while `:prod` had been live
+  since 2026-11-04, so the rollback record named no image; it now records the
+  digest `sha256:fa87259b…` of the last successful `main` build (run
+  42899375906).
 - `vm/tests/test_run_args.sh` T6 read `run-vm.sh` for `qemu-img` and `truncate`
   instead of running it, the text-reading defect this repo's test rules forbid.
   The disk steps now go through `run_step`, which prints the argv under
