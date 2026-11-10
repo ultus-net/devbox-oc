@@ -21,11 +21,11 @@ suites="$(sed -n 's/^[[:space:]]*run[[:space:]]\+"[^"]*"[[:space:]]*\.\/\([^[:sp
 [ -n "$suites" ] || fail "tests/verify.sh declares no suites"
 suite_count="$(printf '%s\n' "$suites" | grep -c . || true)"
 
-# A suite line this reader cannot parse must fail rather than disappear. One
-# `run` per physical line keeps the count equal to the captured paths.
-declared="$(grep -c 'run "' "$verify" || true)"
+# A suite line this reader cannot parse must fail rather than disappear. Count
+# occurrences, not lines, so two runs on one line cannot hide.
+declared="$(grep -o 'run "' "$verify" | grep -c . || true)"
 [ "$declared" = "$suite_count" ] \
-  || fail "tests/verify.sh has $declared suite lines but $suite_count were parsed; keep each run on one line"
+  || fail "tests/verify.sh declares $declared suites but $suite_count were parsed; keep each run on one line"
 
 # Duplicates survive a membership check, so compare the unique count.
 [ "$(printf '%s\n' "$suites" | sort -u | grep -c . || true)" = "$suite_count" ] \
