@@ -116,7 +116,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `host/tests/test_hermes_quadlet.sh` | the Hermes quadlet persists on `/srv`, stays on loopback, and the backup orders both workloads |
 | `host/tests/test_oc_backup.sh` | the backup runs the Fedora image, mounts data read-only, and never prunes |
 | `host/tests/test_tailnet_up.sh` | the tailnet join is idempotent, durable, and needs a real key |
-| `host/tests/test_cockpit_loopback.sh` | Cockpit listens on loopback only and is not published |
+| `host/tests/test_cockpit_loopback.sh` | a shipped Cockpit socket is bound to loopback and is not published |
 | `host/tests/test_no_lan_listener.sh` | sshd is masked and no unit declares a non-loopback listener |
 | `host/tests/test_nosleep.sh` | sleep targets are masked and `IdleAction=ignore` is set |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk and the workload fails closed |
@@ -129,18 +129,46 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
 | `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
+| `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |
+| `vm/tests/test_run_args.sh` | the VM boots the harness Ignition with two disks and no inbound port forward |
 
 Every guard was checked against a mutation it is meant to catch, and the mutation
 was confirmed to land before the result was trusted. The integrity test has a
 documented negative control: it rejects a corrupted tarball.
 
+## Rehearse the install in a VM
+
+Before the Mini is touched, the whole install path runs on a workstation under
+QEMU:
+
+```sh
+./vm/run-vm.sh --rebuild
+```
+
+It boots the pinned Fedora CoreOS image, applies the Ignition compiled from
+`os/butane/ucore.bu`, rebases to ucore on first boot, then runs a check suite
+inside the guest and exits non-zero on any failure. A passing run ends with
+`VM DOGFOOD: pass`. The guest posts its report to a host agent bound to
+`127.0.0.1`; there is no inbound port forward. First boot takes 10 to 20 minutes,
+mostly the rebase download.
+
+This is step 0 of `docs/install.md`, and the rehearsal for every host change.
+Nothing in `os/butane/`, `host/`, `image/` or a quadlet should reach the Mini
+without a passing run. Ignition is first-boot only, so use `--rebuild` after a
+change. `--console` attaches the serial console, and `--stop` powers the VM down.
+The full procedure, the checks, and the limits are in `docs/vm.md`.
+
 ## What is not verified here
 
-No install has run on the target Mini. No live boot has been tested. The
-container image has not been built by the GitHub Actions workflow. The restic
+No install has run on the target Mini. No live boot has been tested on the
+Mini's hardware. The container image has been built by the GitHub Actions
+workflow and pulled by the VM, but not exercised on the target. The restic
 restore drill has not been executed, the keyless console join has not run, and
-the ucore rebase path is documented upstream but unexercised on this hardware.
-Nothing here should be described as working until it runs against real hardware.
+the ucore rebase has run only under QEMU, not on the Mini. The VM harness covers
+the config and the container start path, and its full run passes on this
+workstation; the firmware, disk ids, tailnet join, UPS, and thermals still need
+the real box. Nothing here should be described as working until it runs against
+real hardware.
 
 ## Documentation
 
@@ -150,6 +178,8 @@ Nothing here should be described as working until it runs against real hardware.
   replacement.
 - `docs/web-access.md` covers the tailnet-only client path: the served address,
   browser sign-in, CORS, verification, teardown, and the failures.
+- `docs/vm.md` covers the QEMU rehearsal that precedes the install: the pinned
+  base image, the overlay, the checks, and what a passing run still cannot claim.
 - `CHANGELOG.md` records every landed change and the honest gaps.
 
 ## Status

@@ -114,6 +114,17 @@ storage:
         inline: |
           [Login]
           IdleAction=ignore
+    # systemd-resolved answers LLMNR on 5355 and mDNS on 5353 on every
+    # interface by default. Neither is a systemd socket, so masking or rebinding
+    # a unit cannot close them. Both are responder and resolver, so switch them
+    # off globally; DNS over the tailnet is unaffected.
+    - path: /etc/systemd/resolved.conf.d/10-devbox.conf
+      mode: 0644
+      contents:
+        inline: |
+          [Resolve]
+          LLMNR=no
+          MulticastDNS=no
 systemd:
   units:
     # First boot is Fedora CoreOS. This rebases it to ucore-minimal and reboots.
@@ -136,17 +147,21 @@ systemd:
         ExecStart=/usr/bin/systemctl reboot
         [Install]
         WantedBy=multi-user.target
-    # A mount unit's name must match its Where= path, so /srv is srv.mount.
+    # On Fedora CoreOS /srv is a symlink to var/srv, and systemd refuses to
+    # mount on a path that contains a symlink ("Mount path /srv is not
+    # canonical"). The disk mounts at the real directory, /var/srv, and /srv
+    # reaches it through that symlink. A mount unit's name must match its
+    # Where= path, hence var-srv.mount.
     # The partition and filesystem are prepared once, outside Ignition, so an OS
     # reinstall cannot wipe the data disk. Ignition only mounts it by label.
-    - name: srv.mount
+    - name: var-srv.mount
       enabled: true
       contents: |
         [Unit]
         Description=Devbox data disk
         [Mount]
         What=/dev/disk/by-label/data
-        Where=/srv
+        Where=/var/srv
         Type=ext4
         Options=defaults,noatime,nofail
         TimeoutSec=30
@@ -157,8 +172,8 @@ systemd:
       contents: |
         [Unit]
         Description=Create the persistent directory layout on the data disk
-        After=srv.mount
-        Requires=srv.mount
+        After=var-srv.mount
+        Requires=var-srv.mount
         Before=opencode.service
         [Service]
         Type=oneshot
@@ -171,8 +186,8 @@ systemd:
       contents: |
         [Unit]
         Description=Write the OpenCode environment file from secrets.env
-        After=srv.mount
-        Requires=srv.mount
+        After=var-srv.mount
+        Requires=var-srv.mount
         [Service]
         Type=oneshot
         RemainAfterExit=yes
@@ -184,8 +199,8 @@ systemd:
       contents: |
         [Unit]
         Description=Write the Hermes environment file from secrets.env
-        After=srv.mount
-        Requires=srv.mount
+        After=var-srv.mount
+        Requires=var-srv.mount
         [Service]
         Type=oneshot
         RemainAfterExit=yes
@@ -196,9 +211,9 @@ systemd:
       contents: |
         [Unit]
         Description=Back up the data disk with restic
-        After=srv.mount network-online.target
+        After=var-srv.mount network-online.target
         Wants=network-online.target
-        Requires=srv.mount
+        Requires=var-srv.mount
         [Service]
         Type=oneshot
         Nice=10

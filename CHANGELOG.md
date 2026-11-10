@@ -6,6 +6,27 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- QEMU dogfood harness. `vm/run-vm.sh` boots a pinned Fedora CoreOS QEMU
+  image, applies the Ignition compiled from `os/butane/ucore.bu`, waits for the
+  one-shot ucore rebase, then runs a check suite inside the guest. The guest
+  posts its report to `vm/report-agent.py` bound to `127.0.0.1`, reached at
+  `10.0.2.2` over qemu's user network, so the harness adds no inbound listener.
+  The overlay appends a serial console, the data-disk preparation and the check
+  unit; it never edits the shipped Ignition. The guest check fails, rather than
+  notes, when no boot target wants a quadlet unit. It reads port bindings from
+  `podman port` and probes each loopback port, inspects logind's Manager property
+  for `IdleAction`, and writes the fallback report only when `/srv` is a real
+  mountpoint. It reads the booted deployment only, so a staged ucore that has not
+  booted cannot pass the rebase assertion. The report agent refuses a truncated
+  post, and `vm/report-verdict.sh` requires `SUMMARY failures=0` before the run
+  prints a pass. `vm/tests/` guards the merge, the boot command, the guest check's
+  helper definitions, the booted-deployment parse and the parent-device
+  comparison, the agent's truncated-post refusal, the verdict, and the data-disk
+  root-device refusal in both its bare and `[/ostree/...]` spellings. Those suites
+  are wired into `tests/verify.sh`, and `docs/vm.md` is checked by
+  `tests/docs_complete.sh`. A full `--rebuild` run at the tip passed on
+  2026-11-11: `VM DOGFOOD: pass`, zero failures, one `SKIP` for the absent Cockpit
+  socket.
 - Hermes control plane alongside OpenCode. A second podman quadlet
   (`host/quadlet/hermes.container`) runs the official `nousresearch/hermes-agent`
   image as the assistant that schedules and delegates work to the OpenCode
@@ -59,6 +80,12 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- The VM rehearsal is the documented step before bare metal, not an optional
+  extra. `README.md` leads with it, `docs/install.md` opens with a new step 0 that
+  requires `VM DOGFOOD: pass`, `docs/runbook.md` carries the procedure for a host
+  change, and `AGENTS.md` makes a passing run the readiness condition for anything
+  under `os/butane/`, `host/`, `image/` or a quadlet. `docs/vm.md` gains a "When
+  to run it" section, which also names the changes that need no run.
 - Pivoted from an Azure VM to an always-on HP laptop in a server room. The
   workload is unchanged: ucore host, podman quadlet, tailnet-only reachability,
   separate data disk. Secrets now come from `/etc/devbox/secrets.env`, written by
@@ -99,6 +126,28 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The docs claimed ucore ships and enables Cockpit. ucore-minimal installs the
+  Cockpit packages but not `cockpit-ws`, so `cockpit.socket` does not exist and
+  nothing listens on 9090. The Ignition drop-in stays as a guard for an image
+  that does ship the socket, and `AGENTS.md`, design decision 9, the web-access
+  diagram and the test docstring now say so. Found by the QEMU harness, which
+  skips the Cockpit assertion when the socket is absent.
+- systemd-resolved answered LLMNR on 5355 and mDNS on 5353 on every interface.
+  Neither is a systemd socket, so the sshd mask and the Cockpit rebind could not
+  close them. An Ignition drop-in sets `LLMNR=no` and `MulticastDNS=no`. The
+  harness's TCP scan reported the LLMNR listener; mDNS is UDP, so the config guard
+  is what keeps both off. `host/tests/test_no_lan_listener.sh` now reads the
+  effective `[Resolve]` values in drop-in order and fails on a commented-out
+  switch, a wrong section or a later override, with a mutation for each.
+- The data disk mounts at `/var/srv`, not `/srv`. On Fedora CoreOS and ucore
+  `/srv` is a symlink to `var/srv`, and systemd refuses a mount on a path that
+  contains a symlink, so `srv.mount` failed on every boot and `/srv` stayed a
+  plain directory on the OS disk. The unit is now `var-srv.mount`, and the VM
+  check compares the parent block devices behind `/srv` and `/var`, so a second
+  partition on the OS disk cannot pass as a separate device.
+  `os/butane/tests/test_data_mount.sh` covers the unit name, the mount path and
+  every dependency. It reads `Where=` and `What=` from `[Mount]`, and a mutation
+  that moves them to `[Unit]` proves a section-blind grep cannot pass.
 - `host/tests/test_nosleep.sh` requires `IdleAction=ignore` under `[Login]`, so a
   commented-out or mis-sectioned setting no longer passes the guard.
 - `os/butane/build.sh` stages Butane's output and moves it into place only after
@@ -117,9 +166,10 @@ All notable changes to this project. One entry per landed change, newest first.
 ### Known gaps
 
 - No install has run on the target Mini, and no live boot has been tested.
-- The container image has never been built by the GitHub Actions workflow.
+- The container image has been built by the GitHub Actions workflow and pulled in
+  the VM, but it has not run on the Mini.
 - The restic restore drill has not been executed against a real repository.
-- The ucore rebase path is documented upstream but unexercised on this hardware.
+- The ucore rebase has run under QEMU, not on the Mini.
 - `podman-auto-update.timer` is not gated on idleness. It follows `:prod` on its
   own schedule and restarts the container when the tag moves, so an update can
   land during a running session. The health check decides whether the new image

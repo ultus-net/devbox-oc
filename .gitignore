@@ -16,3 +16,5 @@ os/butane/.*.network.ign.tmp
 .commit-msg-tmp*.txt
 # Local tool cache (Butane, shellcheck) used by the verification gate.
 .tools/
+# QEMU dogfood harness cache: base image, overlays, data disk, reports.
+.vm-cache/

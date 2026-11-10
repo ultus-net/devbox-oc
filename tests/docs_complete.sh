@@ -10,7 +10,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 for f in README.md CHANGELOG.md docs/design.md docs/install.md docs/runbook.md \
-  docs/web-access.md; do
+  docs/web-access.md docs/vm.md; do
   [ -s "$root/$f" ] || fail "missing or empty: $f"
 done
 
@@ -110,5 +110,27 @@ for f in README.md docs/design.md docs/install.md docs/runbook.md; do
   grep -Fq "docs/web-access.md" "$root/$f" \
     || fail "$f does not link the web-access doc"
 done
+
+# The VM harness is the only dogfood path that runs without the Mini. It must
+# say how to repeat a first boot and that the harness adds no inbound listener.
+vm_doc="$root/docs/vm.md"
+for topic in "--rebuild" "first boot" "127.0.0.1" "ghcr.io/ultus-net/devbox:prod"; do
+  grep -Fq -- "$topic" "$vm_doc" \
+    || fail "vm doc does not cover: $topic"
+done
+
+for f in README.md AGENTS.md; do
+  grep -Fq "docs/vm.md" "$root/$f" || fail "$f does not link the VM doc"
+done
+
+# The VM rehearsal is the gate before bare metal. Every document that sends work
+# to the Mini must name the command and the pass condition, so the step cannot be
+# dropped from one of them without a failure.
+for f in README.md AGENTS.md docs/install.md docs/runbook.md; do
+  grep -Fq "./vm/run-vm.sh --rebuild" "$root/$f" \
+    || fail "$f does not name the VM rehearsal command"
+done
+grep -Fq "VM DOGFOOD: pass" "$root/docs/install.md" \
+  || fail "install doc does not state the VM pass condition"
 
 echo "docs complete"

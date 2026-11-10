@@ -30,9 +30,11 @@ preference.
 - **No public listener and no inbound port forward.** Reachability is Tailscale.
   `tailscale serve` publishes loopback with real TLS.
   `os/butane/tests/test_no_azure.sh` keeps the Azure network path deleted.
-- **Everything that listens, listens on loopback.** ucore ships Cockpit and
-  enables it, so its socket is rebound to `127.0.0.1` by an Ignition drop-in, and
-  `sshd` is masked because the server firewall profile would expose it on the LAN.
+- **Everything that listens, listens on loopback.** ucore-minimal installs the
+  Cockpit packages but not `cockpit-ws`, so `cockpit.socket` does not exist and
+  nothing answers on 9090. An Ignition drop-in rebinds it to `127.0.0.1` if a
+  future image ships it, and `sshd` is masked because the server firewall profile
+  would expose it on the LAN.
   `host/tests/test_cockpit_loopback.sh` and `host/tests/test_no_lan_listener.sh`
   guard both. The OpenCode port is published as `127.0.0.1:4096:4096`.
 - **Always on. No scheduled stop and no idle deallocation.** Sleep targets are
@@ -69,6 +71,13 @@ One gate runs everything:
 It must end with `VERIFY: all suites pass`. It is a real gate, not a formality:
 it fails rather than skips when `shellcheck` or PyYAML is missing.
 
+`./vm/run-vm.sh --rebuild` is the end-to-end rehearsal, and it runs before bare
+metal rather than after. The same Ignition, the ucore rebase, the data-disk
+mount, both containers and every loopback port run under QEMU. A change under
+`os/butane/`, `host/`, `image/` or a quadlet is not ready for the Mini until a
+run ends with `VM DOGFOOD: pass`. `tests/verify.sh` guards the harness itself;
+the run is the evidence. `docs/vm.md` is the procedure.
+
 **Set `BUTANE` when you change anything under `os/butane/`.** Without it the
 artifact reproducibility check prints `SKIP` and the gate still returns 0. Pass a
 Butane 0.29.0 binary:
@@ -101,7 +110,8 @@ The pinned version and its sha256 are in `.github/workflows/verify.yml`.
 | `image/` | toolbox container: Dockerfile, toolchains, smoke test, digest record |
 | `.github/workflows/` | verify gate and the GHCR image build |
 | `tests/` | the one verification gate and the docs/CI guards |
-| `docs/` | design, first install, and the runbook |
+| `vm/` | QEMU dogfood harness: pinned FCOS base, Ignition overlay, guest checks (`docs/vm.md`) |
+| `docs/` | design, first install, the runbook, and the VM harness procedure |
 
 `os/butane/ucore.ign` is a compiled artifact and must stay byte-identical to what
 `os/butane/build-placeholder.sh` produces. Never hand-edit it.
@@ -117,8 +127,11 @@ in the PR that lands the work.
 
 ## What is not verified here
 
-No install has run on the target Mini, no live boot has been tested, the
-container image has not been built by the workflow, the restic restore drill has
-not been executed, and the ucore rebase path is unexercised on this hardware. Do
-not describe anything as working until it has run against real hardware.
+No install has run on the target Mini and no live boot has been tested there.
+`vm/run-vm.sh` exercises the same Ignition under QEMU, including the ucore
+rebase and the container start path, and a full run passes on a workstation. It
+cannot verify the firmware, the two physical disk ids, the tailnet join, the
+UPS, or the thermals. The container image has been built by the workflow and
+pulled in the VM. The restic restore drill has not been executed. Do not
+describe anything as working until it has run against real hardware.
 `README.md` lists the same gaps; keep them in step.

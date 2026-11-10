@@ -4,9 +4,30 @@ This is the first install path. It assumes physical access, a wired network, and
 two disks. Read `docs/design.md` first; the decisions there explain why the steps
 are in this order.
 
-The short version: boot Fedora CoreOS installation media, install to the OS disk
-with an Ignition file that joins the tailnet or leaves the join for the console,
-let ucore rebase once, then provision the runtime secrets over Tailscale.
+The short version: rehearse the install in a VM, boot Fedora CoreOS installation
+media, install to the OS disk with an Ignition file that joins the tailnet or
+leaves the join for the console, let ucore rebase once, then provision the
+runtime secrets over Tailscale.
+
+## 0. Rehearse in a VM
+
+Run the install in QEMU on the preparation machine first. It uses the same
+`os/butane/ucore.bu` this install ships, so a config fault surfaces with no disk
+at risk and no trip to the server room.
+
+```sh
+./vm/run-vm.sh --rebuild
+```
+
+It takes 10 to 20 minutes. It must end with `VM DOGFOOD: pass`. Then power it down:
+
+```sh
+./vm/run-vm.sh --stop
+```
+
+Skip this only when an earlier run already passed on the current Ignition. Rerun
+it after every change to `os/butane/`, `host/`, `image/` or a quadlet. The full
+procedure and the list of what it cannot prove are in `docs/vm.md`.
 
 ## 1. Prepare the hardware
 
@@ -122,6 +143,11 @@ sudo reboot
 
 Replace `/dev/nvme0n1` with the OS disk. The data disk is not named here. Ignition
 mounts it by its `data` label on first boot, and leaves the filesystem alone.
+
+On Fedora CoreOS `/srv` is a symlink to `var/srv`, and systemd refuses to mount
+on a path that contains a symlink. The mount unit is `var-srv.mount` and it
+mounts at `/var/srv`. `/srv` reaches it through the symlink, so every path in
+this repo stays `/srv/...`.
 
 ## 5. Let ucore rebase
 

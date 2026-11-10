@@ -139,12 +139,13 @@ design rejected and this one keeps rejected.
    with a real TLS certificate: OpenCode on 443 (`127.0.0.1:4096`), the Hermes
    dashboard on 8443 (`127.0.0.1:9119`), and the Hermes gateway API on 10000
    (`127.0.0.1:8642`). Serve only accepts 443, 8443 and 10000 for HTTPS, which is
-   why those three. Cockpit ships with ucore, so an Ignition drop-in rebinds its
-   socket to loopback and it is deliberately not published. Use Tailscale SSH
-   plus the OpenCode and Hermes desktop clients. Add Cockpit later as a loopback
-   container if it is genuinely needed. `docs/web-access.md` records the client
-   path, the proof that no public listener exists, and the failures that look
-   like a broken server but are not.
+   why those three. ucore-minimal installs the Cockpit packages but not
+   `cockpit-ws`, so `cockpit.socket` does not exist and nothing listens on 9090.
+   An Ignition drop-in rebinds it to loopback if a future image ships it, and it
+   is deliberately not published. Use Tailscale SSH plus the OpenCode and Hermes
+   desktop clients. Add Cockpit later as a loopback container if it is genuinely
+   needed. `docs/web-access.md` records the client path, the proof that no public
+   listener exists, and the failures that look like a broken server but are not.
 
 10. **Backups are restic to an off-box repository, not a disk snapshot.** A
     snapshot on the same box is not a backup. Restic gives encryption,
@@ -244,11 +245,17 @@ TCP 443; test the path before relying on it.
 
 There is no inbound port forward. The host firewall rejects inbound traffic
 except established flows. The only listeners are loopback: OpenCode on 4096, the
-Hermes gateway on 8642 and its dashboard on 9119, Cockpit on 9090, and
-`tailscaled` for the tailnet. `tailscale serve` terminates TLS and proxies to
-loopback. `sshd` is masked because Fedora CoreOS enables it and the server
-firewall profile would expose it on the LAN. Shell access is Tailscale SSH,
-which runs inside `tailscaled`.
+Hermes gateway on 8642 and its dashboard on 9119, and `tailscaled` for the
+tailnet. `cockpit.socket` does not exist on ucore-minimal; if an image ships it,
+an Ignition drop-in binds it to 9090 on loopback. `tailscale serve` terminates
+TLS and proxies to loopback. `sshd` is masked because Fedora CoreOS enables it
+and the server firewall profile would expose it on the LAN. Shell access is
+Tailscale SSH, which runs inside `tailscaled`.
+
+systemd-resolved answers LLMNR on 5355 and mDNS on 5353 on every interface by
+default. Neither is a systemd socket, so masking or rebinding a unit cannot close
+them. Ignition switches both off in a `resolved.conf.d` drop-in, and
+`host/tests/test_no_lan_listener.sh` fails on a config that drops it.
 
 ## Risks the cloud hid
 

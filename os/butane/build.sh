@@ -87,8 +87,8 @@ fi
 jq -e '.ignition.version' "$staged" >/dev/null || { echo "not valid ignition" >&2; exit 1; }
 jq -e '.systemd.units | map(.name) | index("ucore-autorebase.service")' "$staged" >/dev/null \
   || { echo "autorebase unit missing" >&2; exit 1; }
-jq -e '.systemd.units | map(.name) | index("srv.mount")' "$staged" >/dev/null \
-  || { echo "srv.mount missing" >&2; exit 1; }
+jq -e '.systemd.units | map(.name) | index("var-srv.mount")' "$staged" >/dev/null \
+  || { echo "var-srv.mount missing" >&2; exit 1; }
 jq -e '.storage.files | map(.path) | index("/etc/containers/systemd/opencode.container")' \
   "$staged" >/dev/null || { echo "quadlet is not baked into the image" >&2; exit 1; }
 jq -e '.storage.files | map(.path) | index("/etc/containers/systemd/hermes.container")' \
