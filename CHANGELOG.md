@@ -159,14 +159,15 @@ All notable changes to this project. One entry per landed change, newest first.
   loopback, requires `401` on `/api/info`, requires the health command to pass,
   and requires it to fail against a URL that serves nothing. A missing pin now
   fails the gate, and `image/tests/test_smoke_requires_pin.sh` holds that, so the
-  pin cannot revert to optional unnoticed. The quadlet still runs
-  `opencode --version` as its health check: switching it to `devbox-health` is
-  #23, because the published `:prod` image does not carry the script yet and the
-  VM dogfood run pulls `:prod`.
+  pin cannot revert to optional unnoticed. At that point the quadlet still ran
+  `opencode --version` as its health check, because the published `:prod` image
+  did not carry `devbox-health` yet and the VM dogfood run pulls `:prod`; the
+  switch landed once `:prod` carried the script.
   `image/prod-digest.txt` held `PENDING-FIRST-BUILD` while `:prod` had been live
-  since 2026-11-04, so the rollback record named no image; it now records the
-  digest `sha256:fa87259b…` of the last successful `main` build (run
-  42899375906).
+  since 2026-11-04, so the rollback record named no image; it recorded the digest
+  `sha256:fa87259b…` of the last successful `main` build (run 42899375906) and
+  now holds `sha256:a158e9c1…` from run 42907276884, after this gate and the disk
+  write path test landed.
 - `vm/tests/test_run_args.sh` T6 read `run-vm.sh` for `qemu-img` and `truncate`
   instead of running it, the text-reading defect this repo's test rules forbid.
   The disk steps now go through `run_step`, which prints the argv under
