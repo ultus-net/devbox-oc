@@ -114,6 +114,17 @@ storage:
         inline: |
           [Login]
           IdleAction=ignore
+    # systemd-resolved answers LLMNR on 5355 and mDNS on 5353 on every
+    # interface by default. Neither is a systemd socket, so masking or rebinding
+    # a unit cannot close them. Both are responder and resolver, so switch them
+    # off globally; DNS over the tailnet is unaffected.
+    - path: /etc/systemd/resolved.conf.d/10-devbox.conf
+      mode: 0644
+      contents:
+        inline: |
+          [Resolve]
+          LLMNR=no
+          MulticastDNS=no
 systemd:
   units:
     # First boot is Fedora CoreOS. This rebases it to ucore-minimal and reboots.

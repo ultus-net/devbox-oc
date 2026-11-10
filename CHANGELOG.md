@@ -112,6 +112,11 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- systemd-resolved answered LLMNR on 5355 and mDNS on 5353 on every interface.
+  Neither is a systemd socket, so the sshd mask and the Cockpit rebind could not
+  close them. An Ignition drop-in sets `LLMNR=no` and `MulticastDNS=no`.
+  `host/tests/test_no_lan_listener.sh` now requires that drop-in and fails on a
+  config that drops it. Found by the QEMU harness's wildcard-listener scan.
 - The data disk mounts at `/var/srv`, not `/srv`. On Fedora CoreOS and ucore
   `/srv` is a symlink to `var/srv`, and systemd refuses a mount on a path that
   contains a symlink, so `srv.mount` failed on every boot and `/srv` stayed a

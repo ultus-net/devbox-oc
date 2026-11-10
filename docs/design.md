@@ -250,6 +250,11 @@ loopback. `sshd` is masked because Fedora CoreOS enables it and the server
 firewall profile would expose it on the LAN. Shell access is Tailscale SSH,
 which runs inside `tailscaled`.
 
+systemd-resolved answers LLMNR on 5355 and mDNS on 5353 on every interface by
+default. Neither is a systemd socket, so masking or rebinding a unit cannot close
+them. Ignition switches both off in a `resolved.conf.d` drop-in, and
+`host/tests/test_no_lan_listener.sh` fails on a config that drops it.
+
 ## Risks the cloud hid
 
 | Risk | Consequence | Mitigation |
