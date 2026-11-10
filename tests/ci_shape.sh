@@ -86,9 +86,13 @@ if "digest" not in (build.get("outputs") or {}):
     fail("the build job does not publish the promoted digest")
 if record.get("needs") != "build":
     fail("the record job does not depend on the build job")
-# Without this condition the write token would sit on pull_request runs too.
-if "refs/heads/main" not in str(record.get("if", "")):
+# Without this condition the write token would sit on pull_request runs too. A
+# widened condition can reintroduce that, so reject the event names outright.
+gate = str(record.get("if", ""))
+if "refs/heads/main" not in gate:
     fail("the record job is not limited to main")
+if "pull_request" in gate or "event_name" in gate:
+    fail("the record job condition can run on a pull request: " + gate)
 
 for scope in ("contents", "pull-requests"):
     if scopes(record.get("permissions")).get(scope) != "write":
