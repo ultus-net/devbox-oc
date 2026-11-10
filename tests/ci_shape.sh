@@ -125,6 +125,10 @@ if "image/**" not in paths:
     fail("a main push no longer builds the image paths")
 if "!image/prod-digest.txt" not in paths:
     fail("a main push that only rewrites the digest record still rebuilds")
+# GitHub applies paths in order: a negation only excludes what a positive pattern
+# matched before it. Listing the exclusion first re-includes the record.
+if paths.index("!image/prod-digest.txt") < paths.index("image/**"):
+    fail("the record exclusion comes before the image paths, so it does not exclude")
 PY
 
 echo "CI publishes to GHCR behind a smoke gate"

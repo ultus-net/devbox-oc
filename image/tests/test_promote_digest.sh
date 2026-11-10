@@ -30,7 +30,7 @@ unset GITHUB_SERVER_URL || true
 cat > "$tmp/bin/git" <<'EOF'
 #!/bin/sh
 printf 'git %s\n' "$*" >> "$CALLS"
-if [ "$1 $2" = "ls-remote --heads" ] && [ -n "${REMOTE_BRANCH:-}" ]; then
+if [ "$1 $2" = "ls-remote --branches" ] && [ -n "${REMOTE_BRANCH:-}" ]; then
   printf '0\t%s\n' "$REMOTE_BRANCH"
 fi
 exit 0
@@ -91,9 +91,13 @@ if out="$("$promote" "$b" 2>&1)"; then
   fail "a stale record passed while a repair branch existed: $out"
 fi
 case "$out" in
-  *"already exists"*) ;;
-  *) fail "the existing-branch refusal was unclear: $out" ;;
+  *"Delete it and re-run"*) ;;
+  *) fail "the existing-branch refusal did not say to delete and re-run: $out" ;;
 esac
+# The probe must name the branch prefix. A truncated pattern would pass the
+# fixture above and restore the branch leak it exists to stop.
+grep -Fqx 'git ls-remote --branches origin refs/heads/chore/prod-digest-*' "$CALLS" \
+  || fail "the repair probed a different ref pattern: $(cat "$CALLS")"
 grep -qx "$a" "$PROD_DIGEST_FILE" || fail "the record changed while a repair branch existed"
 if grep -qE '^git (switch|push|commit|add) ' "$CALLS"; then
   fail "a second branch was pushed while a repair branch existed: $(cat "$CALLS")"

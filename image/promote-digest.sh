@@ -38,12 +38,13 @@ fi
 slug="${GITHUB_REPOSITORY:-}"
 [ -n "$slug" ] || fail "GITHUB_REPOSITORY is unset, so the compare URL cannot be built"
 
-# One repair branch at a time. A branch per stale run would pile up, and merging
-# an older one re-stales the record it just fixed. A leaked branch with no PR
-# counts too, so the check is the remote, not the open PR list.
-existing="$(git ls-remote --heads origin "refs/heads/${branch_prefix}-*")"
+# One repair branch at a time. A branch per stale run would pile up. It may
+# record a digest an earlier run promoted, so merging it blind can write a record
+# that no longer matches :prod: delete it and re-run instead.
+existing="$(git ls-remote --branches origin "refs/heads/${branch_prefix}-*")" \
+  || fail "could not list ${branch_prefix}- branches on origin"
 [ -z "$existing" ] \
-  || fail "the record is stale but a ${branch_prefix}- branch already exists; merge or delete it first"
+  || fail "the record is stale but a ${branch_prefix}- branch already exists; it may record an older digest. Delete it and re-run the image build."
 
 "$here/write-prod-digest.sh" "$pushed"
 # Prove the repair before pushing it. A branch that does not fix the check only
@@ -60,7 +61,7 @@ git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git switch -c "$branch"
 git add "$record"
 git commit -m "chore: record the promoted prod digest"
-git push origin "$branch"
+git push origin "$branch" || fail "could not push ${branch} to origin"
 
 # The step summary is what an operator reads first, so the link goes there too.
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
