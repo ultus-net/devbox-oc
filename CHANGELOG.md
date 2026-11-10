@@ -126,6 +126,14 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The quadlet health command only proved the binary ran. `HealthCmd` was
+  `opencode --version`, so a build that booted but never served still reported
+  healthy, and `podman auto-update` would have kept it. It now runs
+  `/usr/local/bin/devbox-health`, which probes `/api/info` and accepts the `401`
+  the runbook calls healthy. `host/tests/test_quadlet_health.sh` ties the
+  quadlet to the Dockerfile COPY target, so a path drift or a return to a version
+  probe fails the gate. The generated `os/butane/ucore.ign` is rebuilt from the
+  new quadlet.
 - The disk write path had no test. `vm/tests/test_run_args.sh` proved the plan
   matched the command, but nothing ran the create steps, so deleting either `mv`
   in `run-vm.sh` kept every suite green and an aborted create could leave a

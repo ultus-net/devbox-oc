@@ -28,6 +28,11 @@ be failed. Join it from the console first.
 both containers as `healthy`. `findmnt` must name the data device, not the OS
 disk.
 
+`healthy` means the image's own health command answered, not that a binary ran.
+`devbox-health` requests `http://127.0.0.1:4096/api/info` and accepts `401`, so
+the server is up and asking for the password. A container that boots but never
+serves stays unhealthy, and `podman auto-update` refuses to keep the new image.
+
 ## Remote web access
 
 The browser and client path is `docs/web-access.md`. It records the served
