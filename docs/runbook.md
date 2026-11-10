@@ -176,7 +176,11 @@ Never remove the newest snapshot before a verified restore.
 
 The quadlet follows `:prod`. Every build also publishes an immutable
 `sha-<commit>` tag. Rollback is a re-point of `:prod` to the previous digest,
-then a restart.
+a pull of that tag on the host, and then a restart.
+
+A restart alone changes nothing: neither quadlet sets `Pull=`, so podman reuses
+the local image and `systemctl restart` starts the same build again. The pull is
+the step that moves the host.
 
 ```sh
 ssh core@devbox 'sudo podman auto-update --dry-run'
@@ -188,10 +192,38 @@ promoted digest in its job summary, because a workflow token cannot push to the
 protected `main`. After a production build, copy that digest into
 `image/prod-digest.txt` in a PR. That PR is the rollback record.
 
-Pull the previous digest, tag it `:prod`, push it back to GHCR, then restart:
+Re-point `:prod` at the previous digest from a workstation logged in to GHCR:
 
 ```sh
+digest=sha256:<previous>
+podman pull ghcr.io/ultus-net/devbox@$digest
+podman tag ghcr.io/ultus-net/devbox@$digest ghcr.io/ultus-net/devbox:prod
+podman push ghcr.io/ultus-net/devbox:prod
+```
+
+Pull the re-pointed tag on the host, then restart:
+
+```sh
+ssh core@devbox 'sudo podman pull ghcr.io/ultus-net/devbox:prod'
 ssh core@devbox 'sudo systemctl restart opencode.service'
+```
+
+Prove the host runs the rolled-back build:
+
+```sh
+ssh core@devbox 'sudo podman image inspect \
+  --format "{{.RepoDigests}}" ghcr.io/ultus-net/devbox:prod'
+```
+
+The output must contain `@sha256:<previous>`. The list can hold both the index
+digest and the per-architecture digest, so check for the expected name rather
+than the last entry. If it still names only the bad digest, the pull did not
+replace the tag. `sudo podman auto-update` performs the pull and the restart in
+one step and keeps the new image only if the health check passes, so it is the
+fallback when the manual pull does not move the tag:
+
+```sh
+ssh core@devbox 'sudo podman auto-update'
 ```
 
 If GHCR is unreachable, the host keeps running the local image. Do not delete the
