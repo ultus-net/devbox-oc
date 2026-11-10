@@ -162,7 +162,9 @@ design rejected and this one keeps rejected.
     the ACR path are deleted. The image goes to GHCR with the workflow token, and
     the promoted digest is recorded in `image/prod-digest.txt` by a separate
     operator PR after the build, because the workflow token cannot push to
-    `main`.
+    `main`. The toolbox base is pinned by digest to the released Fedora stream,
+    not to the version-labelled tag: the `46` tag is labelled `rawhide` today, so
+    a bump is a deliberate PR that reads the tag's digest from the registry.
 
 13. **Every build autologins `core` on the local console.** A keyless build has
     no tailnet and `sshd` is masked, so the console is the only door before the

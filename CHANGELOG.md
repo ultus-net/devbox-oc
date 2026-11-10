@@ -80,6 +80,14 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- The toolbox base is the released Fedora stream, not a rawhide snapshot. The
+  pin moves from the `fedora-toolbox` digest behind the `46` tag, whose config
+  label reads `rawhide` and which was built 2026-10-23, to the digest behind `45`
+  and `latest`, labelled `45` and built 2026-11-10. Both digests were read from
+  the registry, and the tag label is not treated as a version signal: a bump is
+  a deliberate PR that reads the new digest from the registry.
+  `image/tests/test_base_pin.sh` fails if the base stops being a Fedora image
+  consumed by digest, or if the build no longer starts `FROM` the pin.
 - The VM rehearsal is the documented step before bare metal, not an optional
   extra. `README.md` leads with it, `docs/install.md` opens with a new step 0 that
   requires `VM DOGFOOD: pass`, `docs/runbook.md` carries the procedure for a host

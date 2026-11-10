@@ -131,6 +131,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `image/tests/test_digest_record.sh` | the rollback digest record holds exactly one valid digest |
 | `image/tests/test_healthcheck.sh` | the health command accepts a serving API and rejects anything else |
 | `image/tests/test_smoke_requires_pin.sh` | the smoke gate refuses to run without a version pin |
+| `image/tests/test_base_pin.sh` | the toolbox base is pinned by digest, not to a tag that can move |
 | `image/tests/test_prod_digest.sh` | a stale digest record fails and the repair keeps the header |
 | `image/tests/test_promote_digest.sh` | a stale record fails, is repaired, and opens exactly one repair PR |
 | `tests/docs_suite_table.sh` | every suite the gate runs is listed in the README table, and no row outlives its suite |
