@@ -134,9 +134,12 @@ All notable changes to this project. One entry per landed change, newest first.
   asserts the exact overlay and truncate argv at non-default sizes, that both
   disks land under their final names, that no temporary name survives, that a
   second run reuses them without calling either stub, and that `--rebuild`
-  recreates both. Dropping either `mv` fails it. `VM_BASE_IMAGE` skips the pinned
-  base download for that test, and `--disks-only` stops before QEMU, so the test
-  needs neither Butane nor KVM.
+  recreates both. A failed create now removes its temporary, and the test drives
+  that with a stub that fails after writing, so the leftover cannot come back.
+  Dropping either `mv`, or the cleanup, fails it. `VM_BASE_IMAGE` skips the pinned
+  base download for that test, and `--disks-only` stops before QEMU and needs
+  neither Butane, KVM nor the QEMU binary. `--help` now prints the whole header,
+  and `vm/tests/test_run_args.sh` T4d guards that range.
 - `vm/tests/test_run_args.sh` T6 read `run-vm.sh` for `qemu-img` and `truncate`
   instead of running it, the text-reading defect this repo's test rules forbid.
   The disk steps now go through `run_step`, which prints the argv under

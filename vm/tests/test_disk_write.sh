@@ -5,8 +5,8 @@
 # record the argv they received, so these assertions see the command that ran,
 # the file it landed on, and that the temporary name was renamed into place.
 #
-# The gap this closes: every other suite passed with either `mv` deleted, so an
-# aborted create could leave a disk a later run trusts and nothing noticed.
+# The gap this closes: every other suite passed with either `mv` deleted, so a
+# create that never landed could leave a disk a later run silently ignored.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 vm="$(cd "$here/.." && pwd)"
@@ -24,6 +24,7 @@ cat > "$tmp/bin/qemu-img" <<EOF
 #!/bin/sh
 printf '%s\n' "\$*" >> "$logs/qemu-img"
 printf 'stub\n' > "\$8"
+if [ "\${STUB_FAIL:-0}" = 1 ]; then exit 1; fi
 EOF
 
 cat > "$tmp/bin/truncate" <<EOF
@@ -31,17 +32,14 @@ cat > "$tmp/bin/truncate" <<EOF
 printf '%s\n' "\$*" >> "$logs/truncate"
 printf 'stub\n' > "\$3"
 EOF
-
-# run-vm.sh resolves its engine on PATH, so a stub keeps this test off real QEMU.
-cat > "$tmp/bin/qemu-system-x86_64" <<EOF
-#!/bin/sh
-printf '%s\n' "\$*" >> "$logs/qemu"
-EOF
-chmod 0755 "$tmp/bin/qemu-img" "$tmp/bin/truncate" "$tmp/bin/qemu-system-x86_64"
+chmod 0755 "$tmp/bin/qemu-img" "$tmp/bin/truncate"
 
 # A base the overlay can name. Its content is never read: qemu-img is a stub.
 base="$tmp/base.qcow2"
 printf 'stub base\n' > "$base"
+
+final_os="$cache/vm-disk.qcow2"
+final_data="$cache/data.img"
 
 run_vm() {
   env PATH="$tmp/bin:$PATH" VM_CACHE="$cache" VM_BASE_IMAGE="$base" \
@@ -53,35 +51,38 @@ if ! run_vm >"$tmp/run.log" 2>&1; then
   fail "the disk write path did not complete"
 fi
 
-# The overlay names the base it was given, and the requested size, not a default.
-line="$(cat "$logs/qemu-img")"
-prefix="create -f qcow2 -F qcow2 -b $base $cache/vm-disk.qcow2.new."
-case "$line" in
-  "$prefix"*" 48G") ;;
-  *) fail "qemu-img was not asked for the overlay: $line" ;;
-esac
-pid_part="${line#"$prefix"}"
-pid_part="${pid_part% 48G}"
-case "$pid_part" in
-  ''|*[!0-9]*) fail "the overlay was not written to a temporary name: $line" ;;
+# The overlay names the base and the size it was given, and it lands on a
+# temporary name rather than the file a later run would trust.
+read -r -a argv <<< "$(cat "$logs/qemu-img")"
+[ "${argv[0]:-}" = create ] || fail "qemu-img was not asked to create: ${argv[*]:-}"
+[ "${argv[1]:-} ${argv[2]:-}" = "-f qcow2" ] || fail "the overlay format is not qcow2: ${argv[*]}"
+[ "${argv[3]:-} ${argv[4]:-}" = "-F qcow2" ] || fail "the base format is not qcow2: ${argv[*]}"
+[ "${argv[5]:-}" = -b ] || fail "the overlay names no base: ${argv[*]}"
+[ "${argv[6]:-}" = "$base" ] || fail "the overlay base is not the one given: ${argv[6]:-none}"
+os_dest="${argv[7]:-}"
+[ "${argv[8]:-}" = 48G ] || fail "the overlay size is not the one requested: ${argv[8]:-none}"
+[ "$os_dest" != "$final_os" ] || fail "the overlay was written straight to the final name"
+case "$os_dest" in
+  "$final_os".*) ;;
+  *) fail "the overlay did not land beside its final name: $os_dest" ;;
 esac
 
-line="$(cat "$logs/truncate")"
-prefix="-s 12G $cache/data.img.new."
-case "$line" in
-  "$prefix"*) ;;
-  *) fail "truncate was not asked for the data disk: $line" ;;
-esac
-case "${line#"$prefix"}" in
-  ''|*[!0-9]*) fail "the data disk was not written to a temporary name: $line" ;;
+read -r -a argv <<< "$(cat "$logs/truncate")"
+[ "${argv[0]:-}" = -s ] || fail "truncate was not asked for a size: ${argv[*]:-}"
+[ "${argv[1]:-}" = 12G ] || fail "the data size is not the one requested: ${argv[1]:-none}"
+data_dest="${argv[2]:-}"
+[ "$data_dest" != "$final_data" ] || fail "the data disk was written straight to the final name"
+case "$data_dest" in
+  "$final_data".*) ;;
+  *) fail "the data disk did not land beside its final name: $data_dest" ;;
 esac
 
 # A temporary name that survives is a disk the next run would silently reuse.
 leftovers="$(compgen -G "$cache/*.new.*" || true)"
 [ -z "$leftovers" ] || fail "temporary disk names survived: $leftovers"
 
-[ -s "$cache/vm-disk.qcow2" ] || fail "no OS disk after the create path"
-[ -s "$cache/data.img" ] || fail "no data disk after the create path"
+[ -s "$final_os" ] || fail "no OS disk after the create path"
+[ -s "$final_data" ] || fail "no data disk after the create path"
 
 # Reuse: a disk that exists is not recreated, so neither stub is called.
 : > "$logs/qemu-img"
@@ -101,4 +102,15 @@ fi
 grep -q ' 48G$' "$logs/qemu-img" || fail "--rebuild did not recreate the OS disk"
 grep -q '^-s 12G ' "$logs/truncate" || fail "--rebuild did not recreate the data disk"
 
-echo "the disk write path creates both disks and renames them into place"
+# A create that fails must not leave its temporary behind; nothing else ever
+# removes it.
+rm -rf "$cache"
+mkdir -p "$cache"
+if STUB_FAIL=1 run_vm >"$tmp/run4.log" 2>&1; then
+  fail "an aborted create exited zero"
+fi
+leftovers="$(compgen -G "$cache/*.new.*" || true)"
+[ -z "$leftovers" ] || fail "an aborted create left $leftovers"
+[ ! -e "$final_os" ] || fail "an aborted create left a final OS disk"
+
+echo "the disk write path creates both disks, renames them into place, and cleans up a failed create"

@@ -24,6 +24,7 @@ port="${VM_AGENT_PORT:-8123}"
 timeout="${VM_TIMEOUT:-2400}"
 kvm_device="${KVM_DEVICE:-/dev/kvm}"
 qemu="${QEMU:-qemu-system-x86_64}"
+base_image="${VM_BASE_IMAGE:-}"
 
 rebuild=0
 console=0
@@ -104,7 +105,13 @@ if [ "$stop_only" = 1 ]; then
   exit 0
 fi
 
-for tool in "$qemu" qemu-img jq curl python3; do
+# --disks-only stops before QEMU, so it must not demand the QEMU toolchain.
+if [ "$disks_only" = 1 ]; then
+  tools=(qemu-img truncate)
+else
+  tools=("$qemu" qemu-img jq curl python3)
+fi
+for tool in "${tools[@]}"; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }
 done
 
@@ -133,21 +140,29 @@ run_step() {
 create_os_disk() {
   local dest="$disk"
   [ "$dry_run" = 1 ] || dest="$disk.new.$$"
-  run_step qemu-img create -f qcow2 -F qcow2 -b "$base" "$dest" "$disk_size" >/dev/null
+  # A failed create must not leave the temporary behind, because nothing else
+  # ever removes it.
+  if ! run_step qemu-img create -f qcow2 -F qcow2 -b "$base" "$dest" "$disk_size" >/dev/null; then
+    [ "$dry_run" = 1 ] || rm -f "$dest"
+    return 1
+  fi
   [ "$dry_run" = 1 ] || mv "$dest" "$disk"
 }
 
 create_data_disk() {
   local dest="$data"
   [ "$dry_run" = 1 ] || dest="$data.new.$$"
-  run_step truncate -s "$data_size" "$dest"
+  if ! run_step truncate -s "$data_size" "$dest"; then
+    [ "$dry_run" = 1 ] || rm -f "$dest"
+    return 1
+  fi
   [ "$dry_run" = 1 ] || mv "$dest" "$data"
 }
 
 if [ "$dry_run" = 1 ]; then
-  base="${VM_BASE_IMAGE:-$("$here/fetch-fcos.sh" --print-base)}"
+  base="${base_image:-$("$here/fetch-fcos.sh" --print-base)}"
 else
-  base="${VM_BASE_IMAGE:-$("$here/fetch-fcos.sh")}"
+  base="${base_image:-$("$here/fetch-fcos.sh")}"
   if [ "$disks_only" = 0 ]; then
     # Keep the guest's report URL on the same port the agent below binds.
     ign="$(VM_AGENT_URL="http://10.0.2.2:$port" "$here/build-ignition.sh")"
