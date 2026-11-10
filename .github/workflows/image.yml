@@ -50,6 +50,8 @@ jobs:
             type=ref,event=tag
 
       # load: true keeps the image local so the smoke test runs before a push.
+      # Attestations are not set here on purpose: the docker exporter used by
+      # load does not carry them, so claiming provenance here would be false.
       - name: Build
         uses: docker/build-push-action@v6
         with:
@@ -61,7 +63,15 @@ jobs:
       - name: Smoke test
         env:
           ENGINE: docker
-        run: ./image/smoke.sh "$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -1)"
+        run: |
+          set -euo pipefail
+          # The version comes from the Dockerfile, so the gate compares the built
+          # binary with the pin instead of accepting any semver. An empty value
+          # must fail here, not turn the pin off.
+          SMOKE_OC_VERSION="$(sed -n 's/^ARG OC_VERSION=//p' image/Dockerfile)"
+          [ -n "$SMOKE_OC_VERSION" ] || { echo "no OC_VERSION in image/Dockerfile" >&2; exit 1; }
+          export SMOKE_OC_VERSION
+          ./image/smoke.sh "$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -1)"
 
       - name: Push
         # A manual run on a feature branch builds and smoke-tests but never
