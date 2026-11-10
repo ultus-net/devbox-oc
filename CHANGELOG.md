@@ -112,6 +112,13 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The data disk mounts at `/var/srv`, not `/srv`. On Fedora CoreOS and ucore
+  `/srv` is a symlink to `var/srv`, and systemd refuses a mount on a path that
+  contains a symlink, so `srv.mount` failed on every boot and `/srv` stayed a
+  plain directory on the OS disk. The unit is now `var-srv.mount`, and the VM
+  check compares the device behind `/srv` with the device behind `/var` so a
+  silent regression cannot pass. `os/butane/tests/test_data_mount.sh` guards the
+  unit name, the mount path and every dependency.
 - `host/tests/test_nosleep.sh` requires `IdleAction=ignore` under `[Login]`, so a
   commented-out or mis-sectioned setting no longer passes the guard.
 - `os/butane/build.sh` stages Butane's output and moves it into place only after

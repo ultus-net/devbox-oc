@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare the harness data disk before srv.mount runs.
+# Prepare the harness data disk before var-srv.mount runs.
 #
 # Production formats the second disk once from the live install media; a VM has
 # no live-media step. This does the same declarative work with systemd-repart,

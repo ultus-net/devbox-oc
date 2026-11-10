@@ -123,6 +123,11 @@ sudo reboot
 Replace `/dev/nvme0n1` with the OS disk. The data disk is not named here. Ignition
 mounts it by its `data` label on first boot, and leaves the filesystem alone.
 
+On Fedora CoreOS `/srv` is a symlink to `var/srv`, and systemd refuses to mount
+on a path that contains a symlink. The mount unit is `var-srv.mount` and it
+mounts at `/var/srv`. `/srv` reaches it through the symlink, so every path in
+this repo stays `/srv/...`.
+
 ## 5. Let ucore rebase
 
 The first boot is Fedora CoreOS with Ignition applied. One one-shot unit then

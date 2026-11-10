@@ -157,27 +157,27 @@
         "name": "ucore-autorebase.service"
       },
       {
-        "contents": "[Unit]\nDescription=Devbox data disk\n[Mount]\nWhat=/dev/disk/by-label/data\nWhere=/srv\nType=ext4\nOptions=defaults,noatime,nofail\nTimeoutSec=30\n[Install]\nWantedBy=local-fs.target\n",
+        "contents": "[Unit]\nDescription=Devbox data disk\n[Mount]\nWhat=/dev/disk/by-label/data\nWhere=/var/srv\nType=ext4\nOptions=defaults,noatime,nofail\nTimeoutSec=30\n[Install]\nWantedBy=local-fs.target\n",
         "enabled": true,
-        "name": "srv.mount"
+        "name": "var-srv.mount"
       },
       {
-        "contents": "[Unit]\nDescription=Create the persistent directory layout on the data disk\nAfter=srv.mount\nRequires=srv.mount\nBefore=opencode.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-paths\n[Install]\nWantedBy=multi-user.target\n",
+        "contents": "[Unit]\nDescription=Create the persistent directory layout on the data disk\nAfter=var-srv.mount\nRequires=var-srv.mount\nBefore=opencode.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-paths\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "oc-paths.service"
       },
       {
-        "contents": "[Unit]\nDescription=Write the OpenCode environment file from secrets.env\nAfter=srv.mount\nRequires=srv.mount\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-env\n[Install]\nWantedBy=multi-user.target\n",
+        "contents": "[Unit]\nDescription=Write the OpenCode environment file from secrets.env\nAfter=var-srv.mount\nRequires=var-srv.mount\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/oc-env\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "oc-env.service"
       },
       {
-        "contents": "[Unit]\nDescription=Write the Hermes environment file from secrets.env\nAfter=srv.mount\nRequires=srv.mount\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/hermes-env\n[Install]\nWantedBy=multi-user.target\n",
+        "contents": "[Unit]\nDescription=Write the Hermes environment file from secrets.env\nAfter=var-srv.mount\nRequires=var-srv.mount\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/hermes-env\n[Install]\nWantedBy=multi-user.target\n",
         "enabled": true,
         "name": "hermes-env.service"
       },
       {
-        "contents": "[Unit]\nDescription=Back up the data disk with restic\nAfter=srv.mount network-online.target\nWants=network-online.target\nRequires=srv.mount\n[Service]\nType=oneshot\nNice=10\nIOSchedulingClass=idle\n# Stop the workloads so neither SQLite store is captured mid-write. The\n# leading - keeps the backup running if the stop already happened.\nExecStartPre=-/usr/bin/systemctl stop hermes.service\nExecStartPre=-/usr/bin/systemctl stop opencode.service\nExecStart=/usr/local/sbin/oc-backup\n# Run after success or failure, so a failed backup never leaves a server\n# down.\nExecStopPost=-/usr/bin/systemctl start opencode.service\nExecStopPost=-/usr/bin/systemctl start hermes.service\n",
+        "contents": "[Unit]\nDescription=Back up the data disk with restic\nAfter=var-srv.mount network-online.target\nWants=network-online.target\nRequires=var-srv.mount\n[Service]\nType=oneshot\nNice=10\nIOSchedulingClass=idle\n# Stop the workloads so neither SQLite store is captured mid-write. The\n# leading - keeps the backup running if the stop already happened.\nExecStartPre=-/usr/bin/systemctl stop hermes.service\nExecStartPre=-/usr/bin/systemctl stop opencode.service\nExecStart=/usr/local/sbin/oc-backup\n# Run after success or failure, so a failed backup never leaves a server\n# down.\nExecStopPost=-/usr/bin/systemctl start opencode.service\nExecStopPost=-/usr/bin/systemctl start hermes.service\n",
         "name": "oc-backup.service"
       },
       {

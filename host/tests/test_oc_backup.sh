@@ -78,7 +78,7 @@ if grep -q 'OPENCODE_PASSWORD' "$tmp/envcopy"; then
 fi
 
 # T0: /srv must be an actual mountpoint. The directory exists on the OS disk when
-# srv.mount fails, so a backup of it would look successful and store nothing.
+# var-srv.mount fails, so a backup of it would look successful and store nothing.
 rc=0
 env PATH="$tmp/bin:$PATH" CALLS="$tmp/calls" IMAGE_FILE="$tmp/backup.env" \
   SECRETS_FILE="$tmp/secrets.env" DATA_DIR="$tmp/data" "$script" \

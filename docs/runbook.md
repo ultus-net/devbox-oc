@@ -243,10 +243,10 @@ not require reinstalling the OS.
 5. Prepare the new disk with one GPT partition labelled `data` and an ext4
    filesystem labelled `data`, then restore `/srv` from restic. Preparing the
    disk destroys its contents, so confirm the device first.
-6. Confirm the `srv.mount` unit is active and `/srv` is on the new device:
+6. Confirm the `var-srv.mount` unit is active and `/srv` is on the new device:
 
 ```sh
-systemctl status srv.mount
+systemctl status var-srv.mount
 findmnt /srv
 ```
 
@@ -267,7 +267,7 @@ touch it.
    **Do not run install step 4.4.** That step creates the `data` partition and
    filesystem and destroys the disk. On an OS reinstall the data disk already
    holds `/srv`; Ignition mounts it by label and leaves it alone.
-3. After the rebase, confirm `srv.mount` is active and `/srv` still holds the
+3. After the rebase, confirm `var-srv.mount` is active and `/srv` still holds the
    repositories and sessions. If the rebuild was keyless, join from the console
    first; `ssh` needs the tailnet.
 4. Re-provision `/etc/devbox/secrets.env` and start `oc-env` and `opencode`.
@@ -308,7 +308,7 @@ After a power event, confirm:
 ssh core@devbox 'uptime'
 ssh core@devbox 'systemctl --failed'
 ssh core@devbox 'sudo podman ps'
-ssh core@devbox 'sudo systemctl status srv.mount'
+ssh core@devbox 'sudo systemctl status var-srv.mount'
 ```
 
 The filesystem is ext4 on the data disk. A power loss can still leave it dirty;

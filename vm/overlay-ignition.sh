@@ -38,7 +38,7 @@ Description=Devbox VM dogfood check
 ConditionPathExists=/etc/ucore-autorebase/done
 ConditionPathExists=!/var/lib/devbox-vm/checked
 Wants=network-online.target
-After=network-online.target srv.mount oc-paths.service oc-env.service
+After=network-online.target var-srv.mount oc-paths.service oc-env.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
@@ -56,7 +56,7 @@ Description=Prepare the VM data disk
 DefaultDependencies=no
 After=dev-vdb.device
 Requires=dev-vdb.device
-Before=srv.mount
+Before=var-srv.mount
 ConditionPathExists=!/etc/devbox-vm/data-ready
 [Service]
 Type=oneshot

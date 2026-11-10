@@ -94,12 +94,12 @@ The overlay only appends, and the merge is idempotent:
 - `devbox-vm-check.service`, which runs `guest-check.sh` on the first ucore
   boot and posts its report;
 - `devbox-vm-data.service`, which prepares the blank data disk before
-  `srv.mount`.
+  `var-srv.mount`.
 
 The last one is the one deliberate difference from production. The real install
 prepares the data disk once from the live media (step 4.4 of
 `docs/install.md`). A VM has no live-media phase, so the harness gives the guest
-a blank disk and runs `systemd-repart` on it before `srv.mount`. That produces
+a blank disk and runs `systemd-repart` on it before `var-srv.mount`. That produces
 the same GPT partition and ext4 label the mount unit looks up. Ignition still
 only mounts by label and never partitions or formats. Nothing in `ucore.bu`
 changes.
@@ -153,6 +153,7 @@ These were found by running the harness, not by reading the config:
 | the repart definition cannot live under `/usr/lib` | Ignition fails first boot: `mkdir /sysroot/usr/lib/devbox-vm: read-only file system` | the overlay writes it to `/etc/devbox-vm/repart/` |
 | a pre-`local-fs` unit cannot exec `/usr/local/sbin/...` | `devbox-vm-data.service` fails `203/EXEC`; `/var` is a separate mount and `/usr/local` is a symlink into it | the data script lives in `/etc/devbox-vm/` |
 | `loginctl show -p IdleAction` is the wrong property | the per-session value is empty even when the manager ignores idle | the check reads the logind Manager property over the bus |
+| `srv.mount` can never mount on Fedora CoreOS | `srv.mount: Mount path /srv is not canonical (contains a symlink)`; `/srv` is a symlink to `var/srv` | the unit is `var-srv.mount` with `Where=/var/srv`, and the check proves `/srv` is not on the OS disk |
 
 ## How the host sees the result
 
@@ -164,8 +165,8 @@ script turns any `FAIL` line into a non-zero exit. The report is also left at
 
 If the check unit never runs, the harness times out and prints the last 40
 lines of `.vm-cache/serial.log`. The usual causes are a failed rebase
-(`journalctl -u ucore-autorebase.service` on the console) or a `srv.mount`
-failure (`systemctl status srv.mount`).
+(`journalctl -u ucore-autorebase.service` on the console) or a `var-srv.mount`
+failure (`systemctl status var-srv.mount`).
 
 ## What it must not claim
 
