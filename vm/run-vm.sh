@@ -105,11 +105,12 @@ if [ "$stop_only" = 1 ]; then
   exit 0
 fi
 
-# --disks-only stops before QEMU, so it must not demand the QEMU toolchain.
+# --disks-only stops before QEMU, so it must not demand the QEMU toolchain. Both
+# paths create the data disk with truncate, so both check it.
 if [ "$disks_only" = 1 ]; then
   tools=(qemu-img truncate)
 else
-  tools=("$qemu" qemu-img jq curl python3)
+  tools=("$qemu" qemu-img truncate jq curl python3)
 fi
 for tool in "${tools[@]}"; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }

@@ -24,13 +24,14 @@ cat > "$tmp/bin/qemu-img" <<EOF
 #!/bin/sh
 printf '%s\n' "\$*" >> "$logs/qemu-img"
 printf 'stub\n' > "\$8"
-if [ "\${STUB_FAIL:-0}" = 1 ]; then exit 1; fi
+if [ "\${STUB_FAIL:-none}" = os ]; then exit 1; fi
 EOF
 
 cat > "$tmp/bin/truncate" <<EOF
 #!/bin/sh
 printf '%s\n' "\$*" >> "$logs/truncate"
 printf 'stub\n' > "\$3"
+if [ "\${STUB_FAIL:-none}" = data ]; then exit 1; fi
 EOF
 chmod 0755 "$tmp/bin/qemu-img" "$tmp/bin/truncate"
 
@@ -103,14 +104,25 @@ grep -q ' 48G$' "$logs/qemu-img" || fail "--rebuild did not recreate the OS disk
 grep -q '^-s 12G ' "$logs/truncate" || fail "--rebuild did not recreate the data disk"
 
 # A create that fails must not leave its temporary behind; nothing else ever
-# removes it.
+# removes it. Each disk is driven separately, because a failure on the OS disk
+# never reaches the data disk.
 rm -rf "$cache"
 mkdir -p "$cache"
-if STUB_FAIL=1 run_vm >"$tmp/run4.log" 2>&1; then
-  fail "an aborted create exited zero"
+if STUB_FAIL=os run_vm >"$tmp/run4.log" 2>&1; then
+  fail "an aborted OS create exited zero"
 fi
 leftovers="$(compgen -G "$cache/*.new.*" || true)"
-[ -z "$leftovers" ] || fail "an aborted create left $leftovers"
-[ ! -e "$final_os" ] || fail "an aborted create left a final OS disk"
+[ -z "$leftovers" ] || fail "an aborted OS create left $leftovers"
+[ ! -e "$final_os" ] || fail "an aborted OS create left a final OS disk"
+
+rm -rf "$cache"
+mkdir -p "$cache"
+if STUB_FAIL=data run_vm >"$tmp/run5.log" 2>&1; then
+  fail "an aborted data create exited zero"
+fi
+[ -s "$final_os" ] || fail "the OS disk was not created before the data create failed"
+leftovers="$(compgen -G "$cache/*.new.*" || true)"
+[ -z "$leftovers" ] || fail "an aborted data create left $leftovers"
+[ ! -e "$final_data" ] || fail "an aborted data create left a final data disk"
 
 echo "the disk write path creates both disks, renames them into place, and cleans up a failed create"
