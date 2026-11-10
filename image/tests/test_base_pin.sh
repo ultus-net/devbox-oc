@@ -27,11 +27,12 @@ printf '%s' "${base##*@sha256:}" | grep -qE '^[0-9a-f]{64}$' \
   || fail "the base digest is not 64 lowercase hex characters: $base"
 
 # The pin must be the image the build starts from, not a leftover argument. One
-# stage only, so a second FROM cannot pull something else in beside it.
-stages="$(grep -c '^FROM ' "$dockerfile" || true)"
+# stage only, so a second FROM cannot pull something else in beside it. Leading
+# whitespace is legal in a Dockerfile, so it cannot hide a stage from the count.
+stages="$(grep -cE '^[[:space:]]*FROM[[:space:]]' "$dockerfile" || true)"
 [ "$stages" = "1" ] || fail "the Dockerfile has $stages FROM lines; this guard expects one"
 
-from_line="$(grep -m1 '^FROM ' "$dockerfile")"
+from_line="$(grep -m1 -E '^[[:space:]]*FROM[[:space:]]' "$dockerfile")"
 [ "$from_line" = "FROM \${BASE}" ] \
   || fail "the Dockerfile does not build FROM the pinned base: $from_line"
 
