@@ -12,10 +12,10 @@
 # you locally. That parity is the point: the same image runs on your
 # workstation.
 #
-# Pin by DIGEST. The `46` tag currently resolves to content labelled
-# `org.opencontainers.image.version: rawhide`, so the tag is not a
-# reliable version signal.
-ARG BASE=registry.fedoraproject.org/fedora-toolbox@sha256:2c8a6048963d9006e0d5d01399cb0817f073ccf2e181b97db300db29d1c57a3f
+# Pin by DIGEST, to the released stream. A tag is not a version signal; see
+# docs/design.md decision 12. A bump is a deliberate PR that reads the new
+# digest from the registry.
+ARG BASE=registry.fedoraproject.org/fedora-toolbox@sha256:f510347985a36bcf2b44deefd047b20a35373abc0edfa20eb5dc9175b6eca9b7
 
 FROM ${BASE}
 
