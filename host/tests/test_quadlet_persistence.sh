@@ -32,7 +32,7 @@ grep -q '/home/dev/.local/share/opencode' "$q" || fail "session data is not pers
 # the workload.
 unit_section="$(awk '/^\[Unit\]/{on=1;next} /^\[/{on=0} on' "$q")"
 [ -n "$unit_section" ] || fail "quadlet has no [Unit] section"
-printf '%s\n' "$unit_section" | grep -Eq '^Requires=.*oc-env\.service' \
+grep -Eq '^Requires=.*oc-env\.service' <<<"$unit_section" \
   || fail "quadlet does not require oc-env.service in its [Unit] section"
 
 # Read from [Container] only: the generator reads EnvironmentFile= there, and the
@@ -53,7 +53,7 @@ grep -Eq '^PublishPort=127\.0\.0\.1:4096:4096$' "$q" \
 # the box comes up healthy-looking with no workload.
 install_section="$(awk '/^\[Install\]/{on=1;next} /^\[/{on=0} on' "$q")"
 [ -n "$install_section" ] || fail "quadlet has no [Install] section"
-printf '%s\n' "$install_section" | grep -Eq '^WantedBy=default\.target$' \
+grep -Eq '^WantedBy=default\.target$' <<<"$install_section" \
   || fail "quadlet is not wanted by default.target, so it will not start at boot"
 
 # No shipped file may define the password. The env file is written at boot from

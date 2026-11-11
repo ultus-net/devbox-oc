@@ -215,7 +215,10 @@ wait_health hermes
 version="$(podman exec opencode opencode --version 2>&1 || true)"
 # The CLI prints "opencode v2.1.4", so match a semver token rather than an
 # anchored number. A bare error message must not pass.
-if printf '%s\n' "$version" | grep -qE '(^| )v?[0-9]+\.[0-9]+\.[0-9]+'; then
+# A here-string, not `printf | grep`: under `pipefail` an early exit becomes
+# SIGPIPE, and this sits in an `if`, so a false failure would take the else
+# branch and report a valid version as unexpected.
+if grep -qE '(^| )v?[0-9]+\.[0-9]+\.[0-9]+' <<<"$version"; then
   pass opencode-version "$version"
 else
   fail opencode-version "unexpected output: ${version:-none}"

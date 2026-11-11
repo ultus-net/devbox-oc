@@ -254,6 +254,16 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The `printf | grep` pipelines that can turn a passing assertion into SIGPIPE
+  are gone (#67). `host/tests/test_cockpit_loopback.sh`,
+  `host/tests/test_hermes_quadlet.sh`, `host/tests/test_quadlet_persistence.sh`
+  and `vm/guest-check.sh` now read their input with a here-string, and the two
+  ordered-line lookups use `grep -m1` instead of `grep | head`. The quadlet
+  guard that rejected a non-loopback `PublishPort` was the worst of them: it ran
+  `grep | grep -vq` inside an `if`, so a SIGPIPE read as "every port is
+  loopback". It now names the offending line. Each rewritten check was proved
+  against a mutation before the commit: a bare `PublishPort`, a non-loopback
+  `ListenStream`, and `After=` in place of `Requires=` all still fail.
 - The image pin refused a tag, a foreign digest and an empty record, but it
   accepted two references podman cannot pull. `os/butane/image-ref.sh` read
   `repo:@sha256:<digest>` as a digest on a repository whose name ends in a colon,

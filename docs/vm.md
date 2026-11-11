@@ -232,6 +232,13 @@ The same run rehearsed the rollback against the fixture registry and reported
 `PASS rollback-timer-restored`. It booted `sha256:dca354f8…` from the `:newer`
 push digest and rolled back to the `:older` digest `sha256:98238d00…`.
 
+On 2026-11-12 the harness re-ran `./vm/run-vm.sh --rebuild` on the change that
+replaced the guest's `printf | grep` version check with a here-string. It
+reported `VM DOGFOOD: pass` with `SUMMARY failures=0` and the same single `SKIP`
+(`cockpit-loopback`). The log also shows
+`PASS opencode-version: opencode v2.1.4`, so the rewritten check still accepts
+a semver line.
+
 `SUMMARY failures=0` is the line to look for. A `SKIP` is a conditional guard
 whose condition the image does not meet, and the report says which one.
 
