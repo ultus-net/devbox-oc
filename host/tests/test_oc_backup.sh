@@ -25,7 +25,11 @@ EOF
 chmod +x "$tmp/bin/podman"
 printf 'OPENCODE_PASSWORD=server-secret\nRESTIC_REPOSITORY=s3:https://s3.example.invalid/devbox-restic\nRESTIC_PASSWORD=x\n' \
   > "$tmp/secrets.env"
-printf 'RESTIC_IMAGE=ghcr.io/ultus-net/devbox:prod\n' > "$tmp/backup.env"
+# The build bakes a digest, so the fixture is one. A tag here would let a backup
+# that rewrote the reference pass unnoticed against the shipped shape.
+digest=5b9d548651dade448e26ca449ec0611ffe1a0a3d77c241deead3022302f7b5ec
+image="ghcr.io/ultus-net/devbox@sha256:$digest"
+printf 'RESTIC_IMAGE=%s\n' "$image" > "$tmp/backup.env"
 
 run_backup() (
   env PATH="$tmp/bin:$PATH" CALLS="$tmp/calls" ENVCOPY="$tmp/envcopy" \
@@ -41,8 +45,13 @@ case "$calls" in
   *) fail "restic is not the container entrypoint: $calls" ;;
 esac
 case "$calls" in
-  *"ghcr.io/ultus-net/devbox:prod"*) ;;
-  *) fail "the backup did not use the project image: $calls" ;;
+  *"ghcr.io/ultus-net/devbox@sha256:$digest"*) ;;
+  *) fail "the backup did not use the digest the build writes: $calls" ;;
+esac
+case "$calls" in
+  *":prod"*)
+    fail "the backup ran a tag the build no longer writes: $calls"
+    ;;
 esac
 case "$calls" in
   *--security-opt\ label=disable*) ;;

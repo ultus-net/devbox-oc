@@ -213,10 +213,13 @@ design rejected and this one keeps rejected.
     `docs/runbook.md` documents. That edit moves the workload only, so the next
     backup still runs the `RESTIC_IMAGE` baked into `/etc/devbox/backup.env`,
     which is the newer digest: the backup is not the workload. The Hermes waiver
-    image (decision 14) still follows its upstream tag. The VM harness boots its
-    loopback fixture image
-    through `ALLOW_UNPINNED_IMAGE`, because no fixture can carry the recorded
-    digest; the pin itself is what `os/butane/tests/test_image_pin.sh` asserts.
+    image (decision 14) still follows its upstream tag. `ALLOW_UNPINNED_IMAGE` is
+    the single escape, and only two non-shipping scripts set it:
+    `vm/build-ignition.sh` for the loopback fixture image, because no fixture can
+    carry the recorded digest, and `os/butane/build-placeholder.sh` for the
+    committed placeholder artifact. The shipped media is built by
+    `os/butane/build.sh`, which never sets it. The pin itself is what
+    `os/butane/tests/test_image_pin.sh` asserts.
 
 ## Secrets
 

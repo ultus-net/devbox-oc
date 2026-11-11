@@ -191,6 +191,20 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The image pin refused a tag, a foreign digest and an empty record, but it
+  accepted two references podman cannot pull. `os/butane/image-ref.sh` read
+  `repo:@sha256:<digest>` as a digest on a repository whose name ends in a colon,
+  and `a@b@sha256:<digest>` as a digest on `a`, so either shape baked a
+  first-boot failure rather than stopping the build. Both now fail on the shape
+  before the digest is compared, and the escape does not waive a shape podman
+  cannot pull. `os/butane/tests/test_image_pin.sh` covers them.
+- The keyless build suite required a promoted digest, so a tree whose
+  `image/prod-digest.txt` still held `PENDING` failed a suite that is about the
+  console door and the Tailscale key. It now builds against a fixture digest with
+  `ALLOW_UNPINNED_IMAGE`, and the pin keeps its own suite.
+- The backup suite fixture passed `RESTIC_IMAGE=...:prod`, a tag the build no
+  longer writes, so nothing guarded the digest shape the backup runs. The fixture
+  is now a digest.
 - The CI shape guard trusted text it never ran, and only caught an
   apt-installed shellcheck when the command fit on one line. `tests/ci_shape.sh`
   matched each physical line, so an `apt-get install -y` split onto a second line
