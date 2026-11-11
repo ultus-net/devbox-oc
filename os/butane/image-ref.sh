@@ -14,6 +14,9 @@
 #   <repo>@sha256:..  that digest, when it is the recorded one
 #   <repo>:<tag>      refused, because a tag can move after the media is written
 #
+# A reference that names two repositories, a tag and a digest, or an empty tag
+# position is refused as unpullable, before any pin comparison.
+#
 # ALLOW_UNPINNED_IMAGE=1 accepts a tag or an unrecorded digest. The VM harness
 # sets it for the fixture image and build-placeholder.sh sets it for the
 # non-bootable artifact; a real build never does.
@@ -27,6 +30,11 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 ref="${1:-$default_repo}"
 case "$ref" in
   *[[:space:]]*) fail "the image reference holds whitespace: $ref" ;;
+esac
+# One '@' separates the repository from the digest. Two make a reference that
+# names one repository and a digest for another, which podman cannot pull.
+case "$ref" in
+  *@*@*) fail "the image reference holds more than one @: $ref" ;;
 esac
 
 # The last path segment carries the tag or digest; the registry host and its
@@ -53,6 +61,13 @@ case "$name" in
   "") fail "the image reference names no repository: $ref" ;;
   */) fail "the image reference ends in a slash: $ref" ;;
   *//*) fail "the image reference has an empty path component: $ref" ;;
+esac
+# A colon in the last path segment left in the name is a second tag or an empty
+# tag position: repo:@sha256:<digest> and repo:prod@sha256:<digest> both name a
+# reference podman cannot pull.
+case "${name##*/}" in
+  *:) fail "the image reference has an empty component before the tag or digest: $ref" ;;
+  *:*) fail "the image reference names a tag and a digest: $ref" ;;
 esac
 
 recorded=""

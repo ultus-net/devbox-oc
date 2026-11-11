@@ -134,6 +134,45 @@ case "$err" in
   *) fail "the mid-path refusal does not name the cause: $err" ;;
 esac
 
+# The colon is the tag separator, so a digest after it leaves an empty tag
+# position. podman cannot pull repo:@sha256:<digest>, and the shape check has to
+# refuse it before the digest is compared or the escape is consulted.
+if err="$("$pin" "$repo:@sha256:$digest" 2>&1 >/dev/null)"; then
+  fail "a digest after an empty tag position was accepted"
+fi
+case "$err" in
+  *"empty component before the tag or digest"*) ;;
+  *) fail "the empty tag-position refusal does not name the cause: $err" ;;
+esac
+
+# Two references glued together name one repository and a digest for another.
+if err="$("$pin" "a@b@sha256:$digest" 2>&1 >/dev/null)"; then
+  fail "a reference with two @ was accepted"
+fi
+case "$err" in
+  *"more than one @"*) ;;
+  *) fail "the two-@ refusal does not name the cause: $err" ;;
+esac
+
+# A tag and a digest together are not a reference either.
+if err="$("$pin" "$repo:prod@sha256:$digest" 2>&1 >/dev/null)"; then
+  fail "a reference with a tag and a digest was accepted"
+fi
+case "$err" in
+  *"names a tag and a digest"*) ;;
+  *) fail "the tag-and-digest refusal does not name the cause: $err" ;;
+esac
+
+# The escape is for a digest that no record names, not for a shape podman cannot
+# pull, so it does not waive any of the three refusals above.
+if err="$(ALLOW_UNPINNED_IMAGE=1 "$pin" "$repo:@sha256:$digest" 2>&1 >/dev/null)"; then
+  fail "the escape accepted a digest after an empty tag position"
+fi
+case "$err" in
+  *"empty component before the tag or digest"*) ;;
+  *) fail "the escape changed the empty tag-position refusal: $err" ;;
+esac
+
 # build.sh resolves the reference before it compiles, so a tag fails without
 # Butane and without touching the committed artifact.
 if err="$(SSH_PUBKEY=x IMAGE="$repo:prod" BUTANE=/bin/false \

@@ -32,12 +32,11 @@ export BUTANE
 
 export SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl keyless-test"
 export OC_HOSTNAME=devbox
-# The build pins the recorded digest, so this test uses it too. A tag would be
-# refused before the compile, which test_image_pin.sh covers.
-record="$repo_root/image/prod-digest.txt"
-recorded="$(grep -E '^sha256:[0-9a-f]{64}$' "$record" | head -1 || true)"
-[ -n "$recorded" ] || fail "no promoted digest in $record; the build has nothing to pin"
-export IMAGE="ghcr.io/example/devbox@$recorded"
+# This suite is about the console door and the key, not the pin, so it uses a
+# fixture digest and the escape. A tree with no promoted record then still runs
+# it; test_image_pin.sh owns the pin and the shapes it refuses.
+export ALLOW_UNPINNED_IMAGE=1
+export IMAGE="ghcr.io/example/devbox@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 keyfile="/etc/devbox/tailscale-authkey"
 autologin="/etc/systemd/system/getty@tty1.service.d/10-autologin.conf"
