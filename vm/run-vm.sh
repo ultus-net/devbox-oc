@@ -185,9 +185,8 @@ run_step() {
   "$@"
 }
 
-# The guest boots the digest the push wrote, never the fixture tag. The dry run
-# and the real run compose the reference here, so the plan names the shape the
-# boot uses and a test can assert it. The digest file holds the `sha256:` prefix.
+# The guest boots the digest the push wrote, never the fixture tag. The digest
+# file holds the `sha256:` prefix.
 pinned_ref() {
   printf '%s@%s\n' "$1" "$2"
 }
