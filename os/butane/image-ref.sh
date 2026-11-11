@@ -62,9 +62,8 @@ case "$name" in
   */) fail "the image reference ends in a slash: $ref" ;;
   *//*) fail "the image reference has an empty path component: $ref" ;;
 esac
-# A colon in the last path segment left in the name is a second tag or an empty
-# tag position: repo:@sha256:<digest> and repo:prod@sha256:<digest> both name a
-# reference podman cannot pull.
+# A colon left in the name's last path segment is an empty tag position or a
+# second tag. A registry port sits before a slash, so it is not this case.
 case "${name##*/}" in
   *:) fail "the image reference has an empty component before the tag or digest: $ref" ;;
   *:*) fail "the image reference names a tag and a digest: $ref" ;;

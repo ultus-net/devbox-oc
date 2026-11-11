@@ -74,6 +74,21 @@ case "$err" in
   *) fail "the PENDING refusal does not name the cause: $err" ;;
 esac
 
+# A build must refuse the same tree rather than compile around it: it has no
+# digest to bake, and a real build never sets the escape. This is the case the
+# keyless suite no longer carries, because a red gate there hid its real subject.
+if err="$(SSH_PUBKEY=x IMAGE="$repo" BUTANE=/bin/false \
+  "$build" "$tmp/pending.ign" 2>&1)"; then
+  fail "build.sh compiled with a PENDING digest record"
+fi
+case "$err" in
+  *"no promoted digest to pin"*) ;;
+  *) fail "build.sh did not fail at the PENDING record: $err" ;;
+esac
+if [ -e "$tmp/pending.ign" ]; then
+  fail "a build with a PENDING record wrote an artifact"
+fi
+
 # A record that holds two digests cannot name one pin.
 printf 'sha256:%s\nsha256:%s\n' "$digest" "$other" > "$record"
 if err="$("$pin" "$repo" 2>&1 >/dev/null)"; then
