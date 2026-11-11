@@ -119,13 +119,14 @@ if ! diff -u "$tmp/plan.expected" "$tmp/rebuild.actual"; then
   fail "T6c: --rebuild did not plan both writes"
 fi
 
-# T7: the default run resolves the guest image to the fixture tag, and both
-#     opt-outs resolve it to the published tag. The image is what the guest
-#     pulls, so an opt-out that still starts the fixture is a defect.
+# T7: the default run plans the digest reference the boot composes, not the
+#     fixture tag. The digest does not exist until the push runs, so the plan
+#     names the shape. T9b asserts the real run fills it in.
 default_says="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" \
   || fail "T7: the default --dry-run failed"
-printf '%s\n' "$default_says" | grep -q '^image: 10\.0\.2\.2:5000/devbox:newer' \
-  || fail "T7: the default run does not name the fixture image"
+printf '%s\n' "$default_says" \
+  | grep -Fqx -- "image: 10.0.2.2:5000/devbox@sha256:<from the push> (fixture registry, digest from the push)" \
+  || fail "T7: the plan does not name the pinned shape the boot composes"
 
 no_rollback="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run --no-rollback 2>&1 >/dev/null)" \
   || fail "T7b: --no-rollback --dry-run failed"
@@ -173,17 +174,28 @@ if [ -e "$tmp/preflight-cache/vm-disk.qcow2" ]; then
 fi
 
 # T9: a run that fails after the fixture starts still removes it. The stub
-#     podman starts the registry and the stubs answer the health poll, then a
-#     broken butane fails the ignition build and the EXIT trap must call down.
+#     podman starts the registry, answers the health poll and writes the digest
+#     the push would have written, so the run reaches the ignition build; a
+#     broken butane then fails it and the EXIT trap must call down.
 mkdir -p "$tmp/fixbin"
 cat > "$tmp/fixbin/podman" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "$PODMAN_LOG"
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--digestfile" ]; then
+    printf 'sha256:%s\n' "$FIXTURE_DIGEST" > "$arg"
+  fi
+  prev="$arg"
+done
 exit 0
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$tmp/fixbin/curl"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/fixbin/sleep"
 chmod 0755 "$tmp/fixbin/podman" "$tmp/fixbin/curl" "$tmp/fixbin/sleep"
+
+FIXTURE_DIGEST=1111111111111111111111111111111111111111111111111111111111111111
+export FIXTURE_DIGEST
 
 PODMAN_LOG="$tmp/teardown.log"
 export PODMAN_LOG
@@ -196,5 +208,16 @@ fi
 teardown_rm="$(grep -cx 'rm -f devbox-vm-registry' "$PODMAN_LOG" || true)"
 [ "${teardown_rm:-0}" -ge 2 ] \
   || fail "T9: the fixture survived a failure after it started"
+
+# T9b: the real run boots the digest the push wrote, composed as repo@sha256:...
+#      The stub writes that digest into the push's --digestfile, so a harness
+#      that stayed on the fixture tag prints the tag and fails here.
+if PATH="$tmp/fixbin:$PATH" VM_CACHE="$tmp/pinned-cache" \
+  VM_BASE_IMAGE="$tmp/pinned-base.qcow2" BUTANE=/bin/false \
+  "$vm/run-vm.sh" >"$tmp/pn.out" 2>"$tmp/pn.err"; then
+  fail "T9b: a broken butane did not fail the run"
+fi
+grep -Fqx -- "image: 10.0.2.2:5000/devbox@sha256:$FIXTURE_DIGEST (fixture registry)" "$tmp/pn.err" \
+  || fail "T9b: the run did not boot the digest the push wrote"
 
 echo "vm run command uses the harness Ignition, two disks, and no inbound forward"

@@ -185,6 +185,12 @@ run_step() {
   "$@"
 }
 
+# The guest boots the digest the push wrote, never the fixture tag. The digest
+# file holds the `sha256:` prefix.
+pinned_ref() {
+  printf '%s@%s\n' "$1" "$2"
+}
+
 create_os_disk() {
   local dest="$disk"
   [ "$dry_run" = 1 ] || dest="$disk.new.$$"
@@ -215,10 +221,12 @@ if [ "$fixture" = 1 ]; then
   export VM_REGISTRY="$registry_host"
   export VM_ROLLBACK_REPO="$registry_host/devbox"
   if [ "$dry_run" = 1 ]; then
-    # The digest only exists once the push has run, so the plan names the ref the
-    # guest resolves and says where the digest comes from.
+    # The digest only exists once the push has run, so the plan prints the shape
+    # the boot composes. VM_IMAGE stays the tag the fixture pushes because no
+    # build reads it on this path.
     export VM_IMAGE="$registry_host/devbox:newer"
-    echo "image: $VM_IMAGE (fixture registry, digest from the push)" >&2
+    plan_ref="$(pinned_ref "$registry_host/devbox" "sha256:<from the push>")"
+    echo "image: $plan_ref (fixture registry, digest from the push)" >&2
   else
     # Mark the container as ours before it exists, so a failed start still runs
     # the cleanup trap.
@@ -231,7 +239,8 @@ if [ "$fixture" = 1 ]; then
       echo "the fixture push wrote no newer digest in $cache" >&2
       exit 1
     fi
-    export VM_IMAGE="$registry_host/devbox@$newer_digest"
+    VM_IMAGE="$(pinned_ref "$registry_host/devbox" "$newer_digest")"
+    export VM_IMAGE
     echo "image: $VM_IMAGE (fixture registry)" >&2
   fi
 elif [ "$dry_run" = 1 ] && [ "$disks_only" = 0 ]; then
