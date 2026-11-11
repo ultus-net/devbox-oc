@@ -133,6 +133,10 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- The gap list says what the first attested publish produced when read by hand:
+  an index with an `attestation-manifest` child, SLSA provenance naming the
+  builder run and the Fedora toolbox base digest, and an SPDX 2.3 SBOM with 456
+  packages. The earlier entry said no registry run had been checked (#24).
 - Following the Hermes tag is recorded as an accepted risk. The image is the
   upstream `docker.io/nousresearch/hermes-agent:latest` tag, and
   `podman-auto-update.timer` pulls it unattended and as root. `podman auto-update`
