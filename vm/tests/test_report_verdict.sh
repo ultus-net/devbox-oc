@@ -79,6 +79,13 @@ if "$verdict" "$tmp/rollback-missing.txt" 2>/dev/null; then
   fail "a fixture report missing one rollback line was accepted"
 fi
 
+# Every required line is load-bearing, so prove it for the pin step too rather
+# than for the last name in the loop alone.
+grep -v '^PASS rollback-pin:' "$tmp/rollback.txt" > "$tmp/rollback-no-pin.txt"
+if "$verdict" "$tmp/rollback-no-pin.txt" 2>/dev/null; then
+  fail "a fixture report with no rollback-pin line was accepted"
+fi
+
 # Teeth: skip the fixture requirement and the rollback-less fixture report must
 # pass, so the assertion above cannot be satisfied by an unrelated check.
 mutated="$tmp/verdict-norollback.sh"
