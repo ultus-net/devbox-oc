@@ -76,47 +76,36 @@ def logical_lines(text):
 
 
 body = executed(run)
-if "set -euo pipefail" not in body:
-    fail("the shellcheck install does not fail fast")
-for needed in (
-    "shellcheck/releases/download/${SHELLCHECK_VERSION}",
-    "curl -fsSL",
-    "tar -x",
-    "/usr/local/bin/shellcheck",
-    "SHELLCHECK_VERSION#v",
-):
-    if needed not in body:
-        fail("the shellcheck install is missing: " + needed)
 
-# A check can match this text and still never run, so the install step has to
-# stay straight-line shell. A branch, an `&&` chain, an `exit` or `exec` before
-# the work, or a command redefined on the way fails here rather than passing as
-# text that never ran. Quoted text is checked too, because `"$(...)"` still runs.
-CONTROL = re.compile(
-    r"(^|[\s;|&()])(if|then|elif|else|fi|for|while|until|do|done|case|esac"
-    r"|select|function|eval|exit|exec|return)(?=$|[\s;|&()])"
+# The install step is a fixed sequence, so compare it to that sequence instead
+# of blocklisting constructs. A text reader cannot prove a command runs, and any
+# extra line can shadow a command or skip the checksum, so an unlisted line
+# fails here until this list moves with it in the same commit. Proving execution
+# needs the step run, which CI does on every pull request.
+PINNED = (
+    r"set -euo pipefail",
+    r'url="https://github\.com/koalaman/shellcheck/releases/download/'
+    r"\$\{SHELLCHECK_VERSION\}/shellcheck-\$\{SHELLCHECK_VERSION\}\.linux\.x86_64"
+    r'\.tar\.gz"',
+    r'curl -fsSL -o /tmp/shellcheck\.tar\.gz "\$url"',
+    r'echo "\$\{SHELLCHECK_SHA256\}  /tmp/shellcheck\.tar\.gz" \| sha256sum -c -',
+    r"tar -xzf /tmp/shellcheck\.tar\.gz -C /tmp",
+    r'sudo install -m 0755 "/tmp/shellcheck-\$\{SHELLCHECK_VERSION\}/shellcheck" '
+    r"/usr/local/bin/shellcheck",
+    r"shellcheck --version",
+    r"\[ \"\$\(shellcheck --version \| awk '/\^version:/ \{print \$2\}'\)\" = "
+    r'"\$\{SHELLCHECK_VERSION#v\}" \]',
 )
-DEFINES = re.compile(r"^\s*(function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)|^\s*[{}]\s*$")
-for line in logical_lines(body):
-    if CONTROL.search(line):
-        fail("the shellcheck install is not straight-line shell: " + line.strip())
-    if DEFINES.search(line):
-        fail("the shellcheck install defines a command: " + line.strip())
-    if re.search(r"&&|\|\||;|(?<![&>])&(?![&])", line):
-        fail("the shellcheck install chains commands: " + line.strip())
 
-# The checksum match binds one spelling, so a rewrite fails until this guard
-# moves with it in the same commit, which is the direction that keeps the pin
-# checked.
-# The checksum has to be checked against the downloaded archive, by the pinned
-# variable, on a line that runs that command rather than one that just names it.
-checksum = re.search(
-    r'^\s*echo\s+"\$\{SHELLCHECK_SHA256\}\s+/tmp/shellcheck\.tar\.gz"\s*\|\s*sha256sum\s+-c\s+-$',
-    body,
-    re.MULTILINE,
-)
-if checksum is None:
-    fail("the shellcheck install does not check the pinned digest of the archive")
+lines = [line.strip() for line in logical_lines(body) if line.strip()]
+if len(lines) != len(PINNED):
+    fail(
+        "the shellcheck install runs %d commands, the pinned sequence has %d"
+        % (len(lines), len(PINNED))
+    )
+for number, (line, pattern) in enumerate(zip(lines, PINNED), start=1):
+    if not re.fullmatch(pattern, line):
+        fail("the shellcheck install line %d is not the pinned command: %s" % (number, line))
 
 for other in steps:
     for line in logical_lines(other.get("run") or ""):
