@@ -210,7 +210,9 @@ design rejected and this one keeps rejected.
     boots; podman verifies the pulled content against the digest. The cost is the
     auto-update convenience: a new digest lands by a reviewed commit and a
     rebuilt Ignition, and moving one back on a running box is the unit edit
-    `docs/runbook.md` documents. The Hermes waiver image (decision 14) still
+    `docs/runbook.md` documents. That edit moves the workload only: `RESTIC_IMAGE`
+    in `/etc/devbox/backup.env` keeps the newer digest, because the backup is not
+    the workload. The Hermes waiver image (decision 14) still
     follows its upstream tag. The VM harness boots its loopback fixture image
     through `ALLOW_UNPINNED_IMAGE`, because no fixture can carry the recorded
     digest; the pin itself is what `os/butane/tests/test_image_pin.sh` asserts.
