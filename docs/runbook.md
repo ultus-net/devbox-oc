@@ -219,10 +219,10 @@ pull makes the digest present before the restart.
 
 The rollback moves the workload only. Ignition also bakes the same digest into
 `/etc/devbox/backup.env` as `RESTIC_IMAGE`, and the unit edit does not touch
-that file, so the nightly backup keeps running the digest you rolled back from.
-That is intended: the backup is not the workload, and its image does not change
-what a restore produces. Edit `RESTIC_IMAGE` only when the newer backup image is
-itself the fault.
+that file, so the next nightly backup still runs the newer image rather than the
+build you have just restored. That is intended: the backup is not the workload,
+and its image does not change what a restore produces. Edit `RESTIC_IMAGE` only
+when the newer backup image is itself the fault.
 
 Prove the host runs the rolled-back build:
 
