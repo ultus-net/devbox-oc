@@ -204,8 +204,9 @@ manual: no pull verifies either document. The restic restore drill has not been
 executed, the keyless console join has not run, and the ucore rebase has run only
 under QEMU, not on the Mini. The VM harness covers the config and the container
 start path, and its full run passes on this workstation; the firmware, disk ids,
-tailnet join, UPS, and thermals still need the real box. Nothing here should be
-described as working until it runs against real hardware.
+tailnet join, UPS, and thermals still need the real box. A hypervisor-hosted
+guest is an option on paper only (decision 16), and no guest has booted on one.
+Nothing here should be described as working until it runs against real hardware.
 
 ## Documentation
 
@@ -217,6 +218,8 @@ described as working until it runs against real hardware.
   browser sign-in, CORS, verification, teardown, and the failures.
 - `docs/vm.md` covers the QEMU rehearsal that precedes the install: the pinned
   base image, the overlay, the checks, and what a passing run still cannot claim.
+- `docs/vm-host.md` records the hypervisor-hosted option: what it keeps, what it
+  changes, what has to be added first, and what would justify the spend.
 - `CHANGELOG.md` records every landed change and the honest gaps.
 
 ## Status
