@@ -346,9 +346,12 @@ not require reinstalling the OS.
 2. Power off the box.
 3. Replace the data disk.
 4. Boot with the new disk.
-5. Prepare the new disk with one GPT partition labelled `data` and an ext4
-   filesystem labelled `data`, then restore `/srv` from restic. Preparing the
-   disk destroys its contents, so confirm the device first.
+5. Prepare the new disk with the `systemd-repart` commands in install step 4.4,
+   with `$data` set to the new device. Step 4.4 is first install only: it builds
+   a filesystem and never repairs one, so do not run it against a disk that
+   still holds `/srv` you want to keep. It creates one GPT partition and one
+   ext4 filesystem, both labelled `data`, and destroys the device, so confirm
+   the device first.
 6. Confirm the `var-srv.mount` unit is active and `/srv` is on the new device:
 
 ```sh
@@ -356,7 +359,8 @@ systemctl status var-srv.mount
 findmnt /srv
 ```
 
-7. Start the container and run the restore drill.
+7. Start the container and restore `/srv` with the procedure in
+   `## Restore from restic`.
 
 The mount unit uses the `data` filesystem label, so a device with a different
 `/dev/disk/by-id/` path needs no edit. If the filesystem carries another label,

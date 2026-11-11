@@ -44,6 +44,29 @@ grep -q "Do not run install step 4.4" "$root/docs/runbook.md" \
 grep -q "First install only" "$root/docs/install.md" \
   || fail "install doc does not mark data-disk preparation as first-install only"
 
+# A procedure nobody has run before cannot rely on the reader to infer success.
+# Every numbered step carries a check and a recovery, and a step that loses
+# either fails here rather than on the Mini. A numbered section with numbered
+# subsections is a container, so the substeps carry the pair.
+awk '
+  /^## [0-9]/ { n++; cur = n; lvl[n] = 2; hd[n] = $0; parent = n; next }
+  /^### [0-9]/ { n++; cur = n; lvl[n] = 3; hd[n] = $0; child[parent]++; next }
+  /^## / { cur = 0; parent = 0; next }
+  /^\*\*Expect:\*\*/ { if (cur) saw_expect[cur] = 1 }
+  /^\*\*If it fails:\*\*/ { if (cur) saw_fail[cur] = 1 }
+  END {
+    bad = 0
+    for (i = 1; i <= n; i++) {
+      if (lvl[i] == 2 && child[i] > 0) continue
+      if (!saw_expect[i] || !saw_fail[i]) {
+        printf "install doc step lacks Expect or If it fails: %s\n", hd[i] > "/dev/stderr"
+        bad = 1
+      }
+    }
+    exit bad
+  }
+' "$root/docs/install.md" || fail "an install step does not say what success looks like"
+
 # The only shell path is Tailscale SSH. The docs must say sshd is masked, or an
 # operator will look for it and think the box is broken.
 grep -riq "sshd is masked\|masked" "$root/docs/design.md" \
@@ -67,19 +90,27 @@ section() {
     f' "$web"
 }
 
+# Match in the shell, not through `printf | grep -q`. Under `pipefail` that
+# pipeline fails when grep exits at the first match and printf is still writing:
+# SIGPIPE, which reads as a missing phrase. CI failed on exactly that while the
+# same check passed locally. A here-string has the same race on a long body.
+contains() { # $1 haystack, $2 fixed needle, case-insensitive
+  [[ "${1,,}" == *"${2,,}"* ]]
+}
+
 invariant="$(section "## The invariant:")"
 [ -n "$invariant" ] || fail "web-access doc has no invariant section"
 for term in "tailscale funnel" "pair --remote" "service set remote" desktop \
   internet; do
-  printf '%s\n' "$invariant" | grep -Fqi -- "$term" \
+  contains "$invariant" "$term" \
     || fail "web-access invariant does not name: $term"
 done
 
 # The prohibition must be inside the invariant and must stay a prohibition. A
 # rewrite that recommends the routes, or moves the warning elsewhere, fails.
-printf '%s\n' "$invariant" | grep -Fqi "remote access stays off" \
+contains "$invariant" "remote access stays off" \
   || fail "web-access invariant does not keep remote access off"
-printf '%s\n' "$invariant" | grep -Fqi "never use them" \
+contains "$invariant" "never use them" \
   || fail "web-access invariant does not prohibit the OpenTunnel routes"
 grep -Eq 'Never run .opencode pair --remote.' "$web" \
   || fail "web-access doc does not prohibit opencode pair --remote"
@@ -94,14 +125,14 @@ for topic in "tailscale funnel status" "serve reset" "--cors"; do
     "--cors") body="$cors" ;;
     *) body="$verify" ;;
   esac
-  printf '%s\n' "$body" | grep -Fq -- "$topic" \
+  contains "$body" "$topic" \
     || fail "web-access section does not cover: $topic"
 done
 for topic in "api/info" "not on the tailnet"; do
-  printf '%s\n' "$verify" | grep -Fq -- "$topic" \
+  contains "$verify" "$topic" \
     || fail "web-access verify section does not cover: $topic"
 done
-printf '%s\n' "$verify" | grep -Fqi "Available on the internet" \
+contains "$verify" "Available on the internet" \
   || fail "web-access verify does not give the funnel pass condition"
 grep -Fqi "tailnet only" "$web" \
   || fail "web-access doc does not scope the publication to the tailnet"
