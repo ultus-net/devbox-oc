@@ -120,7 +120,8 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `host/tests/test_no_lan_listener.sh` | sshd is masked and no unit declares a non-loopback listener |
 | `host/tests/test_nosleep.sh` | sleep targets are masked and `IdleAction=ignore` is set |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk and the workload fails closed |
-| `host/tests/test_quadlet_health.sh` | the quadlet health command is the API probe the image installs, not a version print |
+| `host/tests/test_quadlet_health.sh` | both quadlet health commands are the API probes their images ship, not version prints |
+| `host/tests/test_hermes_health.sh` | the Hermes probe accepts the gateway payload and rejects a 401, a foreign body, or a refused port |
 | `os/butane/tests/test_autorebase.sh` | one enabled rebase unit, pinned, marked, disabled, rebooted |
 | `os/butane/tests/test_no_azure.sh` | no Azure endpoint or deleted module survives |
 | `os/butane/tests/test_tailscale_enabled.sh` | `tailscaled` is enabled and orders the join |

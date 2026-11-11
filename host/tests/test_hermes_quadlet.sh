@@ -27,10 +27,25 @@ if grep -Eq '^Volume=[a-z0-9_-]+:/' "$q"; then
   fail "hermes uses a named volume; it would live on the OS disk"
 fi
 
+# Persisted state stays on the data disk. The one other mount allowed is the
+# health script: a single file installed by Ignition, mounted read-only at the
+# same path inside the container so the HealthCmd can run it.
+health_bin="$(sed -n 's/^HealthCmd=//p' "$q")"
+[ -n "$health_bin" ] || fail "hermes quadlet declares no HealthCmd"
 while read -r line; do
-  src="$(printf '%s' "${line#Volume=}" | cut -d: -f1)"
+  spec="${line#Volume=}"
+  src="$(printf '%s' "$spec" | cut -d: -f1)"
+  dst="$(printf '%s' "$spec" | cut -d: -f2)"
+  opts="$(printf '%s' "$spec" | cut -d: -f3)"
   case "$src" in
-    /srv/*) ;;
+    /srv/*) [ "$dst" = "/opt/data" ] || fail "hermes state mounts at $dst, not /opt/data" ;;
+    "$health_bin")
+      [ "$src" = "$dst" ] || fail "the health script mounts at $dst, not $src"
+      case ",$opts," in
+        *,ro,*) ;;
+        *) fail "the health script mount is writable" ;;
+      esac
+      ;;
     *) fail "hermes volume outside the data disk: $src" ;;
   esac
 done < <(grep -E '^Volume=' "$q")

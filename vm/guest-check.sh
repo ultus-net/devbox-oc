@@ -232,10 +232,10 @@ for name in opencode hermes; do
 done
 info port-bindings "${bindings:-none}"
 
-# A TCP connect, not an HTTP request: the Hermes gateway answers a bare GET with
-# 404 or nothing at all, and its health check only proves the binary runs. The
-# listener may also come up after the container reports healthy, so retry
-# before failing.
+# A TCP connect here, not an HTTP request: the container's own health command is
+# what proves the API serves answers, and guest-check reads that verdict
+# separately in wait_health. This only proves the listener bound. The listener may
+# also come up after the container reports healthy, so retry before failing.
 wait_port() {
   local name="$1" port="$2"
   for _ in $(seq 1 30); do

@@ -26,6 +26,7 @@ run "no LAN listener"        ./host/tests/test_no_lan_listener.sh
 run "no suspend"             ./host/tests/test_nosleep.sh
 run "quadlet persistence"    ./host/tests/test_quadlet_persistence.sh
 run "quadlet health"         ./host/tests/test_quadlet_health.sh
+run "hermes health probe"    ./host/tests/test_hermes_health.sh
 run "container digest"       ./image/tests/test_digest_record.sh
 run "prod digest guard"      ./image/tests/test_prod_digest.sh
 run "promote digest"         ./image/tests/test_promote_digest.sh

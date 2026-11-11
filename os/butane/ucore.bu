@@ -58,6 +58,13 @@ storage:
       mode: 0755
       contents:
         local: host/bin/hermes-env
+    # The upstream Hermes image ships no health check, so the host provides one
+    # and the quadlet mounts it read-only at the same path. It probes the gateway
+    # API on 8642, which is the workload the quadlet runs.
+    - path: /usr/local/bin/hermes-health.sh
+      mode: 0755
+      contents:
+        local: host/bin/hermes-health.sh
     - path: /usr/local/sbin/oc-backup
       mode: 0755
       contents:
