@@ -25,7 +25,6 @@ allow_unpinned="${ALLOW_UNPINNED_IMAGE:-0}"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 ref="${1:-$default_repo}"
-[ -n "$ref" ] || fail "the image reference is empty"
 case "$ref" in
   *[[:space:]]*) fail "the image reference holds whitespace: $ref" ;;
 esac
