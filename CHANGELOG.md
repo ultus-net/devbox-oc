@@ -6,14 +6,16 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
-- The harness's pinned reference is asserted, not only observed. `vm/run-vm.sh`
-  composed `repo@sha256:<digest>` inline at the boot, so the only evidence the
-  rehearsal pinned the push digest rather than the fixture tag was the dogfood
-  log. `pinned_ref` now composes the reference for the real run and for the
-  `--dry-run` plan, which prints `repo@sha256:<from the push>`.
-  `vm/tests/test_run_args.sh` stubs the push's `--digestfile`, runs the real
-  path, and requires the exact `image: 10.0.2.2:5000/devbox@sha256:<digest>`
-  line, so reverting to the tag fails the suite.
+- `tests/ci_attest.sh` parses the image workflow and guards the attested
+  publish chain against four failure modes: the push step sets exactly
+  `provenance: mode=max` and `sbom`; no `load` exporter carries attestations;
+  `:prod` moves with `docker buildx imagetools create` onto the digest that was
+  smoke-tested, and only after it; and the login and load conditions select by
+  ref, never a pull request event or a manual dispatch. It also keeps
+  `id-token` off every permission scope and `cosign` out of the file (#24).
+  Each guard is proven against a mutation it catches:
+  `load-carries-attestations`, `silent-noop-provenance`,
+  `promote-before-smoke`, and `raw-docker-push`.
 - The image build pushes an attested `sha-` digest, smoke-tests that digest, and
   promotes `prod` to it only after the gate, so provenance and an SBOM ride the
   manifest. `docker/build-push-action` publishes with `provenance: mode=max` and
@@ -22,6 +24,14 @@ All notable changes to this project. One entry per landed change, newest first.
   attestation child. Pull requests and manual runs still build and smoke locally
   with no login and no push, and tag pushes publish `sha-` and the release tag
   without touching `prod`.
+- The harness's pinned reference is asserted, not only observed. `vm/run-vm.sh`
+  composed `repo@sha256:<digest>` inline at the boot, so the only evidence the
+  rehearsal pinned the push digest rather than the fixture tag was the dogfood
+  log. `pinned_ref` now composes the reference for the real run and for the
+  `--dry-run` plan, which prints `repo@sha256:<from the push>`.
+  `vm/tests/test_run_args.sh` stubs the push's `--digestfile`, runs the real
+  path, and requires the exact `image: 10.0.2.2:5000/devbox@sha256:<digest>`
+  line, so reverting to the tag fails the suite.
 - The VM harness rehearses the container rollback. The procedure was documented
   but never executed, and moving the recorded digest to test it would need new
   media and a reinstall. `vm/fixture-registry.sh` now runs a Fedora registry

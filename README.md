@@ -148,6 +148,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `tests/docs_suite_table.sh` | every suite the gate runs is listed in the README table, and no row outlives its suite |
 | `tests/test_gate_cwd.sh` | the gate passes when invoked from a directory outside the repo |
 | `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
+| `tests/ci_attest.sh` | the attested digest push includes provenance:mode=max, sbom, and no load exporter |
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
 | `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |
 | `vm/tests/test_fixture_registry.sh` | the rollback fixture stays on loopback, builds FROM the published image, and never pushes to GHCR |

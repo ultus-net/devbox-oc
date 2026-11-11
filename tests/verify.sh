@@ -87,6 +87,7 @@ fi
 run "docs complete"          ./tests/docs_complete.sh
 run "docs suite table"       ./tests/docs_suite_table.sh
 run "CI shape"               ./tests/ci_shape.sh
+run "CI attestations"        ./tests/ci_attest.sh
 
 # Lint every shell script we own. Prefer a shellcheck on PATH so this works on a
 # build agent, then a local download. A missing linter FAILS the gate unless
