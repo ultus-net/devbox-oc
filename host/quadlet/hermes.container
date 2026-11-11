@@ -44,11 +44,16 @@ Environment=API_SERVER_HOST=0.0.0.0
 # a service manager. `gateway run` is the long-running server.
 Exec=gateway run
 Volume=/srv/hermes/data:/opt/data:Z
+# The image ships no health check, so the host script is mounted read-only at
+# the path the command names. The probe runs inside the container because that is
+# where the API it checks is reachable.
+Volume=/usr/local/bin/hermes-health.sh:/usr/local/bin/hermes-health.sh:ro,Z
 AutoUpdate=registry
 
 # `podman auto-update` only keeps a new image if the container reports healthy,
-# so this is what makes the update path safe rather than optimistic.
-HealthCmd=hermes --version
+# so this is what makes the update path safe rather than optimistic. A version
+# print answers for a gateway that serves nothing; the script probes the API.
+HealthCmd=/usr/local/bin/hermes-health.sh
 HealthInterval=30s
 HealthTimeout=10s
 HealthRetries=3
