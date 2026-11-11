@@ -14,9 +14,10 @@ All notable changes to this project. One entry per landed change, newest first.
   no `load` exporter carries attestations; `:prod` moves with
   `docker buildx imagetools create` onto the digest that was smoke-tested, and
   only after it; the promotion proves the attestation child by parsing the index
-  children instead of grepping the text; and the login and load conditions
-  select by ref, never a pull request event or a manual dispatch. It also keeps
-  `id-token` off every permission scope and `cosign` out of the file (#24).
+  children instead of grepping the text; and the login and load conditions are
+  pinned to their exact ref expressions, so no broader event can slip in. It
+  also keeps `id-token` off every permission scope and `cosign` out of the file
+  (#24).
   Each guard is proven against a mutation it catches:
   `load-carries-attestations`, `silent-noop-provenance`,
   `promote-before-smoke`, `raw-docker-push`, `login-reaches-fork`,

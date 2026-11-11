@@ -138,37 +138,47 @@ if str(env_(promote).get(source.group(1), "")) != "${{ steps.build.outputs.diges
 if "--prefer-index=false" in run:
     fail("the promotion would drop the attestation child (imagetools create)")
 
-# The runtime check runs shell, so read the uncommented lines only: a commented
-# token would satisfy a bare substring test without enforcing anything.
+# The runtime check is shell, so read the uncommented lines only and bind the
+# reader to the inspect command. A commented token, or a token on a line away
+# from the reader, must not satisfy this.
 code = [line for line in run.splitlines() if not line.strip().startswith("#")]
-if not any("attestation-manifest" in line for line in code):
-    fail("the promotion does not require the attestation child (attestation)")
-if not any(("jq -e" in line) or ("python3 -c" in line) for line in code):
-    fail("the promotion greps the index instead of reading its children (attestation)")
+inspect = [i for i, line in enumerate(code) if "{{json .Manifest}}" in line]
+if not inspect:
+    fail("the promotion does not inspect the promoted index (attestation)")
+check = "\n".join(code[inspect[0]:])
+for needle in (
+    ".annotations[\"vnd.docker.reference.type\"]",
+    "attestation-manifest",
+    "jq -e",
+):
+    if needle not in check:
+        fail("the promotion does not parse the attestation child (attestation)")
 
+# Pin the two ref conditions exactly. They are the whole fork and dispatch
+# safety property, so a broader expression must fail rather than match a
+# substring.
 login = [
     s for s in steps
     if str(s.get("uses", "")).startswith("docker/login-action@")
 ]
 if len(login) != 1:
     fail("the workflow has %d login steps, not one (fork)" % len(login))
-login_if = str(login[0].get("if", ""))
-if "refs/heads/main" not in login_if or "refs/tags/" not in login_if:
-    fail("the login runs on a ref that is not main or a tag (fork)")
-if "pull_request" in login_if or "event_name" in login_if:
-    fail("the login condition would reach a pull request (fork)")
+login_if = " ".join(str(login[0].get("if", "")).split())
+want_login = (
+    "github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')"
+)
+if login_if != want_login:
+    fail("the login condition is not exactly main or a tag (fork)")
 
 loads = [s for s in buildx_steps if truthy(with_(s).get("load"))]
 if len(loads) != 1:
     fail("the workflow has %d local build steps, not one (manual dispatch)" % len(loads))
-load_if = str(loads[0].get("if", ""))
-if "refs/heads/main" not in load_if:
-    fail("the local build is not the complement of the push (manual dispatch)")
-if "event_name" in load_if:
-    fail(
-        "the local build is selected by event, so a manual dispatch on a "
-        "branch builds nothing (manual dispatch)"
-    )
+load_if = " ".join(str(loads[0].get("if", "")).split())
+want_load = (
+    "github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')"
+)
+if load_if != want_load:
+    fail("the local build condition is not the exact complement (manual dispatch)")
 
 for block in [doc.get("permissions") or {}] + [
     (job.get("permissions") or {}) for job in (doc.get("jobs") or {}).values()
