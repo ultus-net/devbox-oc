@@ -10,15 +10,17 @@ All notable changes to this project. One entry per landed change, newest first.
   digest, and records that the attestations are unsigned: they support an
   incident review, not a trust decision (#24).
 - `tests/ci_attest.sh` parses the image workflow and guards the attested
-  publish chain against four failure modes: the push step sets exactly
-  `provenance: mode=max` and `sbom`; no `load` exporter carries attestations;
-  `:prod` moves with `docker buildx imagetools create` onto the digest that was
-  smoke-tested, and only after it; and the login and load conditions select by
-  ref, never a pull request event or a manual dispatch. It also keeps
+  publish chain: the push step sets exactly `provenance: mode=max` and `sbom`;
+  no `load` exporter carries attestations; `:prod` moves with
+  `docker buildx imagetools create` onto the digest that was smoke-tested, and
+  only after it; the promotion proves the attestation child by parsing the index
+  children instead of grepping the text; and the login and load conditions
+  select by ref, never a pull request event or a manual dispatch. It also keeps
   `id-token` off every permission scope and `cosign` out of the file (#24).
   Each guard is proven against a mutation it catches:
   `load-carries-attestations`, `silent-noop-provenance`,
-  `promote-before-smoke`, and `raw-docker-push`.
+  `promote-before-smoke`, `raw-docker-push`, `login-reaches-fork`,
+  `dispatch-skips-local`, and `commented-child-check`.
 - The image build pushes an attested `sha-` digest, smoke-tests that digest, and
   promotes `prod` to it only after the gate, so provenance and an SBOM ride the
   manifest. `docker/build-push-action` publishes with `provenance: mode=max` and

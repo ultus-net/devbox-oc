@@ -126,11 +126,13 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools create -t "${IMAGE_NAME}:prod" "${IMAGE_NAME}@${DIGEST}"
-          manifest="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${IMAGE_NAME}:prod")"
-          case "$manifest" in
-            *attestation-manifest*) ;;
-            *) echo "promoted ${IMAGE_NAME}:prod carries no attestation manifest" >&2; exit 1 ;;
-          esac
+          # jq ships on the GitHub-hosted runner, so this adds no install step.
+          # Parse the index and read the child annotations, so a moved field or a
+          # comment cannot satisfy the check.
+          docker buildx imagetools inspect --format '{{json .Manifest}}' "${IMAGE_NAME}:prod" \
+            | jq -e '[.manifests[].annotations["vnd.docker.reference.type"]]
+                     | any(. == "attestation-manifest")' >/dev/null \
+            || { echo "promoted ${IMAGE_NAME}:prod carries no attestation manifest" >&2; exit 1; }
           {
             echo "Promoted ${IMAGE_NAME}:prod to ${DIGEST}"
             echo "The attested digest is the sha- tag; image/prod-digest.txt records the rollback point."

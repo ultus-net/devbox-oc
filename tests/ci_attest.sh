@@ -138,8 +138,13 @@ if str(env_(promote).get(source.group(1), "")) != "${{ steps.build.outputs.diges
 if "--prefer-index=false" in run:
     fail("the promotion would drop the attestation child (imagetools create)")
 
-if "attestation-manifest" not in run:
+# The runtime check runs shell, so read the uncommented lines only: a commented
+# token would satisfy a bare substring test without enforcing anything.
+code = [line for line in run.splitlines() if not line.strip().startswith("#")]
+if not any("attestation-manifest" in line for line in code):
     fail("the promotion does not require the attestation child (attestation)")
+if not any(("jq -e" in line) or ("python3 -c" in line) for line in code):
+    fail("the promotion greps the index instead of reading its children (attestation)")
 
 login = [
     s for s in steps
@@ -205,6 +210,27 @@ elif name == "raw-docker-push":
     steps.append(
         {"name": "Raw docker push", "run": 'docker image push --all-tags "$IMAGE_NAME"'}
     )
+elif name == "login-reaches-fork":
+    step = next(
+        s for s in steps
+        if str(s.get("uses", "")).startswith("docker/login-action@")
+    )
+    step["if"] = (
+        "github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')"
+        " || github.event_name == 'pull_request'"
+    )
+elif name == "dispatch-skips-local":
+    step = next(s for s in steps if (s.get("with") or {}).get("load"))
+    step["if"] = (
+        "github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')"
+        " && github.event_name != 'workflow_dispatch'"
+    )
+elif name == "commented-child-check":
+    step = next(s for s in steps if ":prod" in str(s.get("run", "")))
+    step["run"] = "\n".join(
+        ("# " + line) if "attestation-manifest" in line else line
+        for line in str(step["run"]).splitlines()
+    )
 else:
     sys.exit("unknown mutation: " + name)
 with open(dst, "w") as handle:
@@ -233,7 +259,10 @@ PY
   caught silent-noop-provenance "mode=max"
   caught promote-before-smoke "before it is smoke-tested"
   caught raw-docker-push "not through buildx"
-  echo "teeth: 4 mutations caught"
+  caught login-reaches-fork "fork"
+  caught dispatch-skips-local "manual dispatch"
+  caught commented-child-check "attestation"
+  echo "teeth: 7 mutations caught"
 fi
 
 echo "CI publishes an attested digest and promotes prod only after the smoke gate"
