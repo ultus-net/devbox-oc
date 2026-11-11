@@ -193,6 +193,14 @@ design rejected and this one keeps rejected.
     OpenCode at `http://opencode:4096` on the shared `devbox` podman network, so
     neither port leaves the host. Every other layer in the repo stays Fedora.
 
+    Following the `:latest` tag is an accepted risk, reviewed on 2026-11-11 and
+    due again by 2027-02-11. `podman-auto-update.timer` pulls whatever that tag
+    serves, unattended and as root, and `podman auto-update` keeps the new image
+    only if the health probe passes. The alternative, a digest pin, was rejected:
+    it freezes another team's releases until a reviewed commit, and this image is
+    consumed as published. Reopen the decision at the review date or when the
+    health probe rejects an upstream release.
+
 15. **The host runs one image digest, not a tag.** `os/butane/build.sh` resolves
     `image/prod-digest.txt` through `os/butane/image-ref.sh` and bakes
     `<repo>@sha256:<digest>` into the quadlet and into the backup unit's

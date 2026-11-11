@@ -246,7 +246,10 @@ one, record the digest yourself.
 
 `podman auto-update` still runs for Hermes, which follows its upstream tag. It
 does not touch the pinned OpenCode container, so it cannot repair or undo a
-rollback.
+rollback. That tag follow is an accepted risk, reviewed on 2026-11-11 and due
+again by 2027-02-11 (decision 14): whatever `hermes-agent:latest` serves is
+pulled unattended and as root, and `podman auto-update` keeps the new image only
+if the health probe passes.
 
 If GHCR is unreachable, the host keeps running the local image. Do not delete the
 local image until the rollback is confirmed.
