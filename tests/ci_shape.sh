@@ -88,12 +88,24 @@ for needed in (
     if needed not in body:
         fail("the shellcheck install is missing: " + needed)
 
-# Two limits stay, and both fail closed rather than open. The token checks read
-# text, so a checksum inside `if false` still passes; proving reachability needs
-# the step executed or its control flow parsed. CI's own `sha256sum -c` fails
-# loud, so that machinery buys nothing. The checksum match binds one spelling,
-# and a rewrite fails until this guard moves with it in the same commit, which is
-# the direction that keeps the pin checked.
+# A check can match this text and still never run, so the install step has to
+# stay straight-line shell. A branch, an `&&` chain or a function nobody calls
+# fails here rather than passing as text that is never executed.
+CONTROL = re.compile(
+    r"(^|[\s;|&()])(if|then|elif|else|fi|for|while|until|do|done|case|esac"
+    r"|select|function|eval)(?=$|[\s;|&()])"
+)
+for line in logical_lines(body):
+    # Operators inside quotes are data, not control flow.
+    bare = re.sub(r"'[^']*'|\"(\\.|[^\"\\])*\"", "", line)
+    if CONTROL.search(bare):
+        fail("the shellcheck install is not straight-line shell: " + line.strip())
+    if re.search(r"&&|\|\||;|(?<![&>])&(?![&])", bare):
+        fail("the shellcheck install chains commands: " + line.strip())
+
+# The checksum match binds one spelling, so a rewrite fails until this guard
+# moves with it in the same commit, which is the direction that keeps the pin
+# checked.
 # The checksum has to be checked against the downloaded archive, by the pinned
 # variable, on a line that runs that command rather than one that just names it.
 checksum = re.search(

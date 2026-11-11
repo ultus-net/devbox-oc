@@ -178,14 +178,15 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
-- The CI shape guard only caught an apt-installed shellcheck when the command fit
-  on one line. `tests/ci_shape.sh` matched each physical line, so an
-  `apt-get install -y` split onto a second line with a backslash continuation
-  slipped past it. The apt check now joins backslash continuations and matches
-  the command as written. Two limits stay, and the guard records both: the token
-  checks read text, so a checksum inside `if false` still passes, and the
-  checksum match binds one spelling, so a rewrite fails until the guard moves
-  with it in the same commit.
+- The CI shape guard trusted text it never ran, and only caught an
+  apt-installed shellcheck when the command fit on one line. `tests/ci_shape.sh`
+  matched each physical line, so an `apt-get install -y` split onto a second line
+  with a backslash continuation slipped past it, and a checksum inside
+  `if false; then ... fi` passed as though it ran. The guard now joins backslash
+  continuations, and requires the install step to stay straight-line shell: a
+  branch, an `&&` or `;` chain, or a `function` or `eval` fails it. The checksum
+  match still binds one spelling, so a rewrite fails until the guard moves with
+  it in the same commit, which is the direction that keeps the pin checked.
 - The verify gate only worked from the repo root. `tests/verify.sh` resolved its
   suite paths, its script `find` and its Butane and shellcheck lookups from
   `$PWD`, so a run from anywhere else failed on paths that did not exist there.
