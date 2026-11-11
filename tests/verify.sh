@@ -3,6 +3,13 @@
 # This is the repo's verification gate; it is what a reviewer runs.
 set -uo pipefail
 
+# Work from the repository root, wherever the gate was invoked. The suite paths,
+# the script find and the linter pin are relative to it, so a run from another
+# directory used to fail on paths that did not exist there.
+here="$(cd "$(dirname "$0")/.." && pwd)"
+[ -n "$here" ] || { echo "FAIL: cannot resolve the repository root" >&2; exit 1; }
+cd "$here" || exit 1
+
 rc=0
 
 run() {
@@ -41,7 +48,7 @@ run "tailscale enabled"      ./os/butane/tests/test_tailscale_enabled.sh
 # Look for a local binary so the reproducibility assertion is active here; the
 # suite reports a SKIP when none is available rather than pretending it ran.
 if [ -z "${BUTANE:-}" ]; then
-  for candidate in "$(command -v butane 2>/dev/null || true)" "$PWD/.tools/butane"; do
+  for candidate in "$(command -v butane 2>/dev/null || true)" "$here/.tools/butane"; do
     if [ -n "$candidate" ] && [ -x "$candidate" ]; then
       BUTANE="$candidate"
       export BUTANE
@@ -69,6 +76,14 @@ run "vm guest assertions"    ./vm/tests/test_guest_assertions.sh
 run "vm guest data"          ./vm/tests/test_guest_data.sh
 run "vm report agent"        ./vm/tests/test_report_agent.sh
 run "vm report verdict"      ./vm/tests/test_report_verdict.sh
+# The gate runs itself from outside the repo, which needs that nested call to
+# skip this suite. The skip is printed so a missing suite is never silent, and
+# only tests/test_gate_cwd.sh sets VERIFY_INNER.
+if [ "${VERIFY_INNER:-0}" = "1" ]; then
+  printf '== gate cwd (skipped: the gate is running its own child)\n'
+else
+  run "gate cwd"             ./tests/test_gate_cwd.sh
+fi
 run "docs complete"          ./tests/docs_complete.sh
 run "docs suite table"       ./tests/docs_suite_table.sh
 run "CI shape"               ./tests/ci_shape.sh
@@ -85,8 +100,8 @@ mapfile -t scripts < <(
 shellcheck_bin=""
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck_bin="$(command -v shellcheck)"
-elif [ -x .tools/shellcheck ]; then
-  shellcheck_bin=.tools/shellcheck
+elif [ -x "$here/.tools/shellcheck" ]; then
+  shellcheck_bin="$here/.tools/shellcheck"
 fi
 
 if [ "${#scripts[@]}" -eq 0 ]; then
@@ -101,7 +116,7 @@ elif [ -z "$shellcheck_bin" ]; then
     rc=1
   fi
 else
-  pin_file="$(dirname "$0")/../.github/workflows/verify.yml"
+  pin_file="$here/.github/workflows/verify.yml"
   pinned="$(sed -n 's/^ *SHELLCHECK_VERSION: *//p' "$pin_file" | head -1)"
   running="$("$shellcheck_bin" --version | sed -n 's/^version: //p')"
   printf '== shellcheck (%s files, %s)\n' "${#scripts[@]}" "${running:-unknown}"
