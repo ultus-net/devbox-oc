@@ -6,6 +6,9 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- The runbook shows how to read a published image's provenance and SBOM from its
+  digest, and records that the attestations are unsigned: they support an
+  incident review, not a trust decision (#24).
 - `tests/ci_attest.sh` parses the image workflow and guards the attested
   publish chain against four failure modes: the push step sets exactly
   `provenance: mode=max` and `sbom`; no `load` exporter carries attestations;

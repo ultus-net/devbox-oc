@@ -174,6 +174,17 @@ design rejected and this one keeps rejected.
     the `46` tag is labelled `rawhide` today. A bump is a deliberate PR that
     reads the released tag's digest from the registry.
 
+    The pushed digest carries build attestations. `docker/build-push-action`
+    publishes with `provenance: mode=max` and `sbom: true`, so the index holds a
+    child annotated `vnd.docker.reference.type: attestation-manifest` that
+    carries SLSA provenance and an SPDX SBOM, and `docker buildx imagetools
+    create` copies that child onto `:prod`. They are unsigned: they record a
+    build's inputs, and anyone with write access to the package could publish a
+    matching pair, so they serve an incident review rather than a trust
+    decision. The host pin (decision 15) is what decides what boots.
+    `docs/runbook.md` shows how to read them, and keyless signing with host-side
+    enforcement is a separate issue.
+
 13. **Every build autologins `core` on the local console.** A keyless build has
     no tailnet and `sshd` is masked, so the console is the only door before the
     join. A keyed build also loses its door when the key expires or the node is
