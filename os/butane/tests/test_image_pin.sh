@@ -115,6 +115,25 @@ case "$err" in
   *) fail "the empty-repository refusal does not name the cause: $err" ;;
 esac
 
+# A digest after an empty path component is the same defect one slash over:
+# repo/@sha256:<recorded> is not a reference podman can pull.
+if err="$("$pin" "$repo/@sha256:$digest" 2>&1 >/dev/null)"; then
+  fail "a digest after an empty path component was accepted"
+fi
+case "$err" in
+  *"ends in a slash"*) ;;
+  *) fail "the empty-path refusal does not name the cause: $err" ;;
+esac
+
+# So is an empty component in the middle of a bare reference.
+if err="$("$pin" "$repo//devbox" 2>&1 >/dev/null)"; then
+  fail "a bare reference with an empty path component was accepted"
+fi
+case "$err" in
+  *"empty path component"*) ;;
+  *) fail "the mid-path refusal does not name the cause: $err" ;;
+esac
+
 # build.sh resolves the reference before it compiles, so a tag fails without
 # Butane and without touching the committed artifact.
 if err="$(SSH_PUBKEY=x IMAGE="$repo:prod" BUTANE=/bin/false \

@@ -28,7 +28,6 @@ ref="${1:-$default_repo}"
 [ -n "$ref" ] || fail "the image reference is empty"
 case "$ref" in
   *[[:space:]]*) fail "the image reference holds whitespace: $ref" ;;
-  */) fail "the image reference ends in a slash: $ref" ;;
 esac
 
 # The last path segment carries the tag or digest; the registry host and its
@@ -43,6 +42,20 @@ else
   form=bare
 fi
 
+# Everything before the tag or digest is the repository. An empty component
+# there produces a reference podman cannot pull, so refuse it before a boot
+# config is written rather than at first start.
+name="$ref"
+case "$form" in
+  digest) name="${ref%%@*}" ;;
+  tag) name="${ref%:*}" ;;
+esac
+case "$name" in
+  "") fail "the image reference names no repository: $ref" ;;
+  */) fail "the image reference ends in a slash: $ref" ;;
+  *//*) fail "the image reference has an empty path component: $ref" ;;
+esac
+
 recorded=""
 if [ -s "$record" ]; then
   count="$(grep -cE '^sha256:[0-9a-f]{64}$' "$record" || true)"
@@ -54,7 +67,6 @@ fi
 
 case "$form" in
   digest)
-    [ -n "${ref%%@*}" ] || fail "the image reference names no repository: $ref"
     printf '%s' "${digest#sha256:}" | grep -qE '^[0-9a-f]{64}$' \
       || fail "the image digest is not 64 hex characters: $ref"
     if [ -z "$recorded" ]; then

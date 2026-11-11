@@ -191,9 +191,10 @@ design rejected and this one keeps rejected.
 
 15. **The host runs one image digest, not a tag.** `os/butane/build.sh` resolves
     `image/prod-digest.txt` through `os/butane/image-ref.sh` and bakes
-    `<repo>@sha256:<digest>` into the quadlet. A tag, a digest that is not the
-    recorded one, or a record that holds nothing fails the build, so a moved
-    `:prod` or a registry serving different bytes cannot change what boots;
+    `<repo>@sha256:<digest>` into the quadlet. A tag, a malformed reference, a
+    digest that is not the recorded one, or a record that holds nothing fails the
+    build, so a moved `:prod` or a registry serving different bytes cannot change
+    what boots;
     podman verifies the pulled content against the digest. The cost is the
     auto-update convenience: a new digest lands by a reviewed commit and a
     rebuilt Ignition, and moving one back on a running box is the unit edit
