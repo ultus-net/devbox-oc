@@ -155,8 +155,12 @@ design rejected and this one keeps rejected.
 11. **The host is not edited in place.** Host scripts, units, the quadlet, and
     the logind policy come from `os/butane/ucore.bu`. A change lands in git and
     is applied by regenerating Ignition and reinstalling, or by a deliberate
-    `rpm-ostree` overlay documented in the runbook. The one runtime file is
-    `/etc/devbox/secrets.env`.
+    `rpm-ostree` overlay documented in the runbook. The one runtime config file
+    is `/etc/devbox/secrets.env`. One edit to a generated unit is deliberate and
+    documented: the container rollback in `docs/runbook.md` rewrites `Image=` in
+    `/etc/containers/systemd/opencode.container`, because Ignition is first-boot
+    only and a rollback cannot wait for new media. Decision 15 records the pin
+    that edit moves.
 
 12. **GitHub Actions builds the container image.** The Azure DevOps pipeline and
     the ACR path are deleted. The image goes to GHCR with the workflow token, and
@@ -191,11 +195,11 @@ design rejected and this one keeps rejected.
 
 15. **The host runs one image digest, not a tag.** `os/butane/build.sh` resolves
     `image/prod-digest.txt` through `os/butane/image-ref.sh` and bakes
-    `<repo>@sha256:<digest>` into the quadlet. A tag, a malformed reference, a
-    digest that is not the recorded one, or a record that holds nothing fails the
-    build, so a moved `:prod` or a registry serving different bytes cannot change
-    what boots;
-    podman verifies the pulled content against the digest. The cost is the
+    `<repo>@sha256:<digest>` into the quadlet and into the backup unit's
+    `RESTIC_IMAGE`. A tag, a reference with an empty path component, a digest
+    that is not the recorded one, or a record that holds nothing fails the build,
+    so a moved `:prod` or a registry serving different bytes cannot change what
+    boots; podman verifies the pulled content against the digest. The cost is the
     auto-update convenience: a new digest lands by a reviewed commit and a
     rebuilt Ignition, and moving one back on a running box is the unit edit
     `docs/runbook.md` documents. The Hermes waiver image (decision 14) still

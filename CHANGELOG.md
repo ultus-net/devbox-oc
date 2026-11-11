@@ -106,14 +106,14 @@ All notable changes to this project. One entry per landed change, newest first.
   the host first started was what it ran, and `AutoUpdate=registry` kept pulling
   it unattended as root. `os/butane/build.sh` now resolves the digest recorded in
   `image/prod-digest.txt` through `os/butane/image-ref.sh` and bakes
-  `<repo>@sha256:<digest>` into the quadlet. A tag, a malformed reference, a
-  digest that is not the recorded one, or a record with nothing to pin fails the
-  build, and podman verifies the pulled content against the digest. The OpenCode
-  quadlet no longer
-  sets `AutoUpdate`, so the container no longer updates itself: a new digest is a
-  reviewed commit plus a rebuilt Ignition, and `docs/runbook.md` documents the
-  in-place unit edit a rollback needs. The Hermes waiver image still follows its
-  upstream tag.
+  `<repo>@sha256:<digest>` into the quadlet and into `RESTIC_IMAGE`, so
+  `oc-backup` runs the same pinned image. A tag, a reference with an empty path
+  component, a digest that is not the recorded one, or a record with nothing to
+  pin fails the build, and podman verifies the pulled content against the
+  digest. The OpenCode quadlet no longer sets `AutoUpdate`, so the container no
+  longer updates itself: a new digest is a reviewed commit plus a rebuilt
+  Ignition, and `docs/runbook.md` documents the in-place unit edit a rollback
+  needs. The Hermes waiver image still follows its upstream tag.
 - The VM rollback rehearsal follows the pinned unit. It boots the digest the
   fixture push wrote and rewrites `Image=` to the older digest, then reloads the
   generator and restarts, instead of re-pointing a tag the pinned host no longer

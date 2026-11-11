@@ -83,8 +83,9 @@ BUTANE=/path/to/butane ./os/butane/build.sh
 `github.repository_owner`). The build appends the digest recorded in
 `image/prod-digest.txt` and bakes `<repo>@sha256:<digest>` into the quadlet, so
 the host runs one content digest rather than a tag that can move. The build
-refuses a tag, a malformed reference, a digest that is not the recorded one, and
-a record that holds no digest; promote a build before writing the USB.
+refuses a tag, a reference with an empty path component, a digest that is not the
+recorded one, and a record that holds no digest; promote a build before writing
+the USB.
 
 GHCR packages are private by default, and the host
 pulls anonymously, so set the package visibility to public before installing.
