@@ -64,7 +64,6 @@ if "set -euo pipefail" not in body:
 for needed in (
     "shellcheck/releases/download/${SHELLCHECK_VERSION}",
     "curl -fsSL",
-    "sha256sum -c",
     "tar -x",
     "/usr/local/bin/shellcheck",
     "SHELLCHECK_VERSION#v",
@@ -72,10 +71,19 @@ for needed in (
     if needed not in body:
         fail("the shellcheck install is missing: " + needed)
 
+# The checksum has to be checked against the downloaded archive, by the pinned
+# variable, on a line that runs that command rather than one that just names it.
+checksum = re.search(
+    r'^\s*echo\s+"\$\{SHELLCHECK_SHA256\}\s+/tmp/shellcheck\.tar\.gz"\s*\|\s*sha256sum\s+-c\s+-$',
+    body,
+    re.MULTILINE,
+)
+if checksum is None:
+    fail("the shellcheck install does not check the pinned digest of the archive")
 
 for other in steps:
     for line in executed(other.get("run") or "").splitlines():
-        if re.search(r"apt(-get)?\s+install.*shellcheck", line):
+        if re.search(r"apt(-get)?(\s+-\S+)*\s+install\b.*shellcheck", line):
             fail("a workflow step installs shellcheck with apt: " + line.strip())
 
 if "SHELLCHECK_VERSION" not in open(gate).read():
