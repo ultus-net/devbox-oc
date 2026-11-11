@@ -11,6 +11,9 @@
 # repeat the whole path. --disks-only stops after the disk steps, so the gate can
 # exercise the write path without QEMU. VM_BASE_IMAGE replaces the pinned base
 # image with a path of your own; the disk test uses it to skip the download.
+# By default the run also seeds two local tags and rehearses the image rollback.
+# --no-rollback boots the published image, VM_IMAGE overrides the image, and
+# --console skips the fixture, because that run exits at detach.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -32,12 +35,15 @@ dry_run=0
 disks_only=0
 stop_after=0
 stop_only=0
+rollback="${VM_ROLLBACK:-1}"
+registry_port="${VM_REGISTRY_PORT:-5000}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --rebuild) rebuild=1 ;;
     --console) console=1 ;;
     --dry-run) dry_run=1 ;;
     --disks-only) disks_only=1 ;;
+    --no-rollback) rollback=0 ;;
     --stop-after-check) stop_after=1 ;;
     --stop) stop_only=1 ;;
     --timeout)
@@ -50,7 +56,7 @@ while [ "$#" -gt 0 ]; do
       esac
       timeout="$1"
       ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -105,6 +111,16 @@ if [ "$stop_only" = 1 ]; then
   exit 0
 fi
 
+# One decision, three readers: the preflight, the dry-run report and the fixture
+# start. A rollback run against the published tag would be a production mutation,
+# so the fixture runs unless the operator brings an image. A console attach skips
+# it: that run exits at detach, before the guest reaches the rehearsal.
+fixture=0
+if [ "$rollback" = 1 ] && [ "$console" = 0 ] && [ "$disks_only" = 0 ] \
+  && [ -z "${VM_IMAGE:-}" ]; then
+  fixture=1
+fi
+
 # --disks-only stops before QEMU, so it must not demand the QEMU toolchain. Both
 # paths create the data disk with truncate, so both check it.
 if [ "$disks_only" = 1 ]; then
@@ -116,7 +132,38 @@ for tool in "${tools[@]}"; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }
 done
 
+# The fixture is built and served with podman. Fail here rather than midway, but
+# keep --dry-run free of the requirement so the plan still prints on a host that
+# has no podman.
+if [ "$fixture" = 1 ] && [ "$dry_run" = 0 ]; then
+  command -v podman >/dev/null \
+    || { echo "missing tool: podman (needed for the rollback fixture)" >&2; exit 1; }
+  podman --version >/dev/null 2>&1 \
+    || { echo "podman is not usable; the rollback fixture needs it" >&2; exit 1; }
+fi
+
 mkdir -p "$cache"
+
+# The fixture registry and the report agent belong to this run. Stop both on
+# every exit path, including a failed fixture start or a failed disk create, or
+# the next run collides with a stale listener. Neither starts on a dry run.
+registry_up=0
+agent_started=0
+# shellcheck disable=SC2317  # invoked by the EXIT trap
+agent_cleanup() {
+  if [ "${agent_started:-0}" = 1 ] && [ -s "$agent_pid" ]; then
+    kill "$(cat "$agent_pid")" 2>/dev/null || true
+    rm -f "$agent_pid"
+  fi
+}
+# shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap
+cleanup() {
+  agent_cleanup
+  if [ "${registry_up:-0}" = 1 ]; then
+    "$here/fixture-registry.sh" down >&2 || true
+  fi
+}
+trap cleanup EXIT
 
 # A running VM owns the disks; refuse to stomp it.
 if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && [ "$dry_run" = 0 ]; then
@@ -159,6 +206,26 @@ create_data_disk() {
   fi
   [ "$dry_run" = 1 ] || mv "$dest" "$data"
 }
+
+# Rehearse the rollback against two local tags unless the operator brings an
+# image. The guest pulls the fixture, so no published tag is mutated, and the
+# fixture is built FROM the image the host runs.
+if [ "$fixture" = 1 ]; then
+  registry_host="10.0.2.2:$registry_port"
+  export VM_REGISTRY="$registry_host"
+  export VM_ROLLBACK_REPO="$registry_host/devbox"
+  export VM_IMAGE="$registry_host/devbox:newer"
+  if [ "$dry_run" = 1 ]; then
+    echo "image: $VM_IMAGE (fixture registry)" >&2
+  else
+    # Mark the container as ours before it exists, so a failed start still runs
+    # the cleanup trap.
+    registry_up=1
+    "$here/fixture-registry.sh" up >&2
+  fi
+elif [ "$dry_run" = 1 ] && [ "$disks_only" = 0 ]; then
+  echo "image: ${VM_IMAGE:-ghcr.io/ultus-net/devbox:prod} (published)" >&2
+fi
 
 if [ "$dry_run" = 1 ]; then
   base="${base_image:-$("$here/fetch-fcos.sh" --print-base)}"
@@ -228,17 +295,7 @@ python3 "$here/report-agent.py" \
   --report "$report" \
   --done "$done_flag" >"$cache/agent.log" 2>&1 &
 echo "$!" > "$agent_pid"
-
-# The agent holds the port for the life of this script. Stop it on every exit
-# path, or a timeout or Ctrl-C leaves a stale listener that the next run collides
-# with.
-agent_cleanup() {
-  if [ -s "$agent_pid" ]; then
-    kill "$(cat "$agent_pid")" 2>/dev/null || true
-    rm -f "$agent_pid"
-  fi
-}
-trap agent_cleanup EXIT
+agent_started=1
 
 echo "booting the VM (serial log: $serial_log)" >&2
 "$qemu" "${qemu_args[@]}"

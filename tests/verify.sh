@@ -60,6 +60,7 @@ run "keyless build"          ./os/butane/tests/test_keyless_build.sh
 run "image integrity"        ./image/tests/test_integrity_logic.sh
 
 run "vm overlay merge"       ./vm/tests/test_overlay_merge.sh
+run "vm rollback fixture"    ./vm/tests/test_fixture_registry.sh
 run "vm run command"         ./vm/tests/test_run_args.sh
 run "vm disk write path"     ./vm/tests/test_disk_write.sh
 run "vm guest helpers"       ./vm/tests/test_guest_helpers.sh
