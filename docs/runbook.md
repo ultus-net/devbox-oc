@@ -38,7 +38,9 @@ an error status is unhealthy even when its body looks healthy. The image ships n
 health check, so Ignition writes the script and the quadlet mounts it read-only
 at the same path. `/health/detailed` needs the Bearer key, so the probe uses the
 unauthenticated path. A container that boots but never serves stays unhealthy,
-and `podman auto-update` refuses to keep the new image.
+which is what the guest check and an operator read. `podman auto-update` keeps a
+new Hermes image only when its probe passes, and it does not touch the pinned
+OpenCode container.
 
 ## Remote web access
 
@@ -180,16 +182,14 @@ Never remove the newest snapshot before a verified restore.
 
 ## Roll back the container
 
-The OpenCode quadlet follows `:prod`. Every build also publishes an immutable
-`sha-<commit>` tag. Rollback is a re-point of `:prod` to the previous digest,
-a pull of that tag on the host, and then a restart.
+The OpenCode quadlet runs one digest, not a tag. The media bakes
+`ghcr.io/ultus-net/devbox@sha256:<digest>` from `image/prod-digest.txt`, and
+podman verifies the pulled content against that digest, so a moved `:prod`
+cannot change what the box runs. Nothing updates this container on its own: a
+digest lands by a reviewed commit and a rebuilt Ignition.
 
-A restart alone changes nothing: neither quadlet sets `Pull=`, so podman reuses
-the local image and `systemctl restart` starts the same build again. The pull is
-the step that moves the host.
-
-`image/prod-digest.txt` holds the digest `:prod` currently names. It records one
-image, so the previous digest comes from git, which logged every move:
+`image/prod-digest.txt` holds the digest the repo pins. It records one image, so
+the previous digest comes from git, which logged every move:
 
 ```sh
 git log --oneline -- image/prod-digest.txt
@@ -200,64 +200,51 @@ The first line names the commit that set the current value. The line after it
 names the move before that: use its commit in the second command, whose line
 starting `sha256:` is the previous digest. The value already carries the prefix.
 
-Re-point `:prod` at it from a workstation logged in to GHCR:
+Ignition is first-boot only, so rolling back a running host means editing the
+unit in place. That is a deliberate deviation from design decision 11, and the
+runbook is where that deviation is allowed:
 
 ```sh
-digest=<the full recorded digest>
-podman pull ghcr.io/ultus-net/devbox@$digest
-podman tag ghcr.io/ultus-net/devbox@$digest ghcr.io/ultus-net/devbox:prod
-podman push --digestfile /tmp/prod-digest.txt ghcr.io/ultus-net/devbox:prod || exit 1
-cat /tmp/prod-digest.txt
-```
-
-The digestfile holds the digest GHCR now stores for the tag. The push stops the
-procedure when it fails, so an earlier attempt's file cannot be read as this
-one's. Keep the value for the check below: a re-tagged local image is pushed as
-a single manifest, so its digest can differ from a recorded index digest.
-
-Pull the re-pointed tag on the host, then restart:
-
-```sh
-ssh core@devbox 'sudo podman pull ghcr.io/ultus-net/devbox:prod'
+digest=<the full previous digest>
+ssh core@devbox "sudo podman pull ghcr.io/ultus-net/devbox@$digest"
+ssh core@devbox "sudo sed -i 's|^Image=.*|Image=ghcr.io/ultus-net/devbox@$digest|' \
+  /etc/containers/systemd/opencode.container"
+ssh core@devbox 'sudo systemctl daemon-reload'
 ssh core@devbox 'sudo systemctl restart opencode.service'
 ```
+
+A restart alone changes nothing: the quadlet sets no `Pull=`, so podman reuses
+whatever the unit names. The unit edit is the step that moves the host, and the
+pull makes the digest present before the restart.
 
 Prove the host runs the rolled-back build:
 
 ```sh
-ssh core@devbox 'sudo podman image inspect \
-  --format "{{.RepoDigests}}" ghcr.io/ultus-net/devbox:prod'
+ssh core@devbox 'sudo podman image inspect --format "{{.Image}}" opencode'
+ssh core@devbox 'sudo podman inspect --format "{{.Image}}" opencode \
+  | xargs sudo podman image inspect --format "{{.RepoDigests}}"'
 ```
 
-The output must contain the digest the push wrote to `/tmp/prod-digest.txt` for
-this platform. The list can hold both the index and the per-architecture digest,
-so check for the expected name rather than the last entry. If it is absent, the
-pull did not replace the tag: read the pull output, run
-`sudo podman login ghcr.io` if it asked for credentials, and confirm in GHCR that
-the re-pointed tag exists.
-`podman auto-update` runs the same pull, so it cannot repair a tag that did not
-move.
+The output must name the digest you pinned. If it names the previous one, the
+unit edit or the daemon-reload did not take: read the unit, reload, restart.
 
-To do the pull and the restart in one step instead, run auto-update. It keeps the
-new image only if the health check passes:
+Record the digest that is now live in `image/prod-digest.txt` in a PR, and
+rebuild the Ignition so the repo and the box agree again. Rollback is an undo,
+not a forward fix, so that record makes the next rollback return to the build you
+have just left. `image.yml` prints the promoted digest in its job summary. When
+the record is stale it pushes a `chore/prod-digest-<run-id>` branch, prints a
+compare URL and fails the run, because the workflow token cannot open a PR. Open
+that URL, read the one-line diff and merge it as a human override. Delete the
+branch after the merge: a leftover repair branch blocks the next one, and it may
+record a digest `:prod` has moved past since. When the run refuses because one
+exists, delete it, re-run the image build, and open the new branch; do not merge
+the old one. A main push that only rewrites the record does not rebuild, so the
+merge cannot re-stale it. A manual pull below does not run that check, so after
+one edit the record yourself.
 
-```sh
-ssh core@devbox 'sudo podman auto-update'
-```
-
-Record the digest that is now live in `image/prod-digest.txt` in a PR, so the
-next rollback reads the image the host actually runs. Rollback is an undo, not a
-forward fix, so that record makes the next rollback return to the build you have
-just left. `image.yml` prints the promoted digest in its job summary. When the
-record is stale it pushes a `chore/prod-digest-<run-id>` branch, prints a compare
-URL and fails the run, because the workflow token cannot open a PR. Open that URL,
-read the one-line diff and merge it as a human override. Delete the branch after
-the merge: a leftover repair branch blocks the next one, and it may record a
-digest `:prod` has moved past since. When the run refuses because one exists,
-delete it, re-run the image build, and open the new branch; do not merge the old
-one. A main push that only rewrites the record does not rebuild, so the merge
-cannot re-stale it. A manual re-point below does not run that check, so after one
-edit the record yourself.
+`podman auto-update` still runs for Hermes, which follows its upstream tag. It
+does not touch the pinned OpenCode container, so it cannot repair or undo a
+rollback.
 
 If GHCR is unreachable, the host keeps running the local image. Do not delete the
 local image until the rollback is confirmed.

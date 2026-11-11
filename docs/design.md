@@ -77,7 +77,7 @@ Three artifacts, three cadences:
 | Layer | Built by | Updated by |
 |---|---|---|
 | OS | upstream `ucore-minimal:stable`, rebased once at install | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
-| Container | `.github/workflows/image.yml` into GHCR | `podman auto-update` on `:prod`, kept only if the health check passes |
+| Container | `.github/workflows/image.yml` into GHCR | a reviewed commit moves the digest in `image/prod-digest.txt`, and the media bakes it |
 | Data | not built | nightly restic backup to an off-box repository |
 
 The OS and the container stay separate on purpose. Fusing them would make every
@@ -188,6 +188,19 @@ design rejected and this one keeps rejected.
     fail-closed environment file, and still persists under `/srv`. It reaches
     OpenCode at `http://opencode:4096` on the shared `devbox` podman network, so
     neither port leaves the host. Every other layer in the repo stays Fedora.
+
+15. **The host runs one image digest, not a tag.** `os/butane/build.sh` resolves
+    `image/prod-digest.txt` through `os/butane/image-ref.sh` and bakes
+    `<repo>@sha256:<digest>` into the quadlet. A tag, a digest that is not the
+    recorded one, or a record that holds nothing fails the build, so a moved
+    `:prod` or a registry serving different bytes cannot change what boots;
+    podman verifies the pulled content against the digest. The cost is the
+    auto-update convenience: a new digest lands by a reviewed commit and a
+    rebuilt Ignition, and moving one back on a running box is the unit edit
+    `docs/runbook.md` documents. The Hermes waiver image (decision 14) still
+    follows its upstream tag. The VM harness boots its loopback fixture image
+    through `ALLOW_UNPINNED_IMAGE`, because no fixture can carry the recorded
+    digest; the pin itself is what `os/butane/tests/test_image_pin.sh` asserts.
 
 ## Secrets
 

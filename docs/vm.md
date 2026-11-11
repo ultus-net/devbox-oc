@@ -123,6 +123,11 @@ test it would be a production mutation, so the harness brings its own registry:
    runbook re-points `:prod`, then pulls and restarts again.
 5. It fails unless the running digest moved to the digest the push wrote.
 
+The rehearsal boots an image the record does not name, so `vm/build-ignition.sh`
+sets `ALLOW_UNPINNED_IMAGE` for the build; the shipped media never does. The pin
+itself is what `os/butane/tests/test_image_pin.sh` asserts, because no fixture
+can carry the recorded digest.
+
 The registry container and the VM are throwaway: the container is removed on
 every exit path, and nothing pushes to GHCR or touches the real `:prod` tag. The
 host does keep the two local tags (`127.0.0.1:5000/devbox:older` and `:newer`)

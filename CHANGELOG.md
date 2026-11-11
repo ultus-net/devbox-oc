@@ -98,6 +98,18 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- The container image is pinned by digest. The media baked
+  `ghcr.io/ultus-net/devbox:prod`, so whatever GHCR served under that tag when
+  the host first started was what it ran, and `AutoUpdate=registry` kept pulling
+  it unattended as root. `os/butane/build.sh` now resolves the digest recorded in
+  `image/prod-digest.txt` through `os/butane/image-ref.sh` and bakes
+  `<repo>@sha256:<digest>` into the quadlet. A tag, a digest that is not the
+  recorded one, or a record with nothing to pin fails the build, and podman
+  verifies the pulled content against the digest. The OpenCode quadlet no longer
+  sets `AutoUpdate`, so the container no longer updates itself: a new digest is a
+  reviewed commit plus a rebuilt Ignition, and `docs/runbook.md` documents the
+  in-place unit edit a rollback needs. The Hermes waiver image still follows its
+  upstream tag.
 - The linter is pinned. The verify workflow installed shellcheck from the runner
   image, so CI reported `SC2329` on a head the local 0.10.0 gate passed. The
   workflow now downloads v0.11.0 and checks its sha256, `tests/verify.sh` fails

@@ -40,6 +40,11 @@ fi
 base="$cache/devbox-vm-base.ign"
 out="$cache/devbox-vm.ign"
 
+# The fixture and the published rehearsal both boot an image the record does not
+# name, so the harness asks the pin to stand down. It is loud on stderr, and the
+# shipped build never sets it: design decision 15 records why the rehearsal
+# needs the escape.
+ALLOW_UNPINNED_IMAGE=1 \
 SSH_PUBKEY="$(cat "$key.pub")" \
 TS_AUTHKEY="" \
 OC_HOSTNAME="$hostname" \

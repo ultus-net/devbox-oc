@@ -8,7 +8,9 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 : "${SSH_PUBKEY:?set SSH_PUBKEY to the public key of the operator}"
 : "${TS_AUTHKEY:=}"
-: "${IMAGE:?set IMAGE to the GHCR image reference}"
+# The box runs one digest, so the media cannot bake a tag that moves after it is
+# written. image-ref.sh resolves the recorded digest and refuses a tag.
+IMAGE="$("$here/image-ref.sh" "${IMAGE:-ghcr.io/ultus-net/devbox}")"
 # The Hermes control plane is the official Nous Research image. It is the one
 # non-Fedora container this repo allows; docs/design.md records the waiver.
 : "${HERMES_IMAGE:=docker.io/nousresearch/hermes-agent:latest}"
