@@ -90,7 +90,7 @@ Useful flags:
 | `--stop-after-check` | power down as soon as the report arrives |
 | `--no-rollback` | boot the published image and skip the rollback fixture |
 | `--timeout SECONDS` | how long to wait for the report (default 2400) |
-| `--dry-run` | print the disk plan (each step it would write or reuse) and the exact qemu command, then exit; touches nothing |
+| `--dry-run` | print the image reference the boot composes, the disk plan (each step it would write or reuse) and the exact qemu command, then exit; touches nothing |
 | `--disks-only` | create or reuse the two disks, then exit before QEMU; the gate's disk write test uses it |
 
 `vm/fetch-fcos.sh` owns the base image pin in `vm/fcos.json`. `--print-base`
@@ -211,10 +211,10 @@ systemd's `WantedBy` property rather than a symlink under `/etc`. Without a boot
 target the box comes up serving nothing, so the check fails rather than noting it.
 
 `vm/tests/` holds the host-side guards: the overlay merge, the rollback
-fixture, the boot command and its disk plan, the disk write path, the guest
-helpers, the guest parsers, the report agent and verdict, and the data-disk
-script that must refuse the device backing `/`. The README suite table names
-what each one protects.
+fixture, the boot command and its disk plan, the pinned reference the boot
+composes, the disk write path, the guest helpers, the guest parsers, the report
+agent and verdict, and the data-disk script that must refuse the device backing
+`/`. The README suite table names what each one protects.
 
 ## The run that proved it
 

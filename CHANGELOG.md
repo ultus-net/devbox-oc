@@ -6,6 +6,14 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- The harness's pinned reference is asserted, not only observed. `vm/run-vm.sh`
+  composed `repo@sha256:<digest>` inline at the boot, so the only evidence the
+  rehearsal pinned the push digest rather than the fixture tag was the dogfood
+  log. `pinned_ref` now composes the reference for the real run and for the
+  `--dry-run` plan, which prints `repo@sha256:<from the push>`.
+  `vm/tests/test_run_args.sh` stubs the push's `--digestfile`, runs the real
+  path, and requires the exact `image: 10.0.2.2:5000/devbox@sha256:<digest>`
+  line, so reverting to the tag fails the suite.
 - The VM harness rehearses the container rollback. The procedure was documented
   but never executed, and moving the recorded digest to test it would need new
   media and a reinstall. `vm/fixture-registry.sh` now runs a Fedora registry
