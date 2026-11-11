@@ -184,11 +184,11 @@ All notable changes to this project. One entry per landed change, newest first.
   with a backslash continuation slipped past it, and a checksum inside
   `if false; then ... fi` passed as though it ran. The guard now joins backslash
   continuations, and requires the install step to stay straight-line shell: a
-  branch, an `&&` or `;` chain, an `exit` before the work, or a `function` or
-  `eval` fails it, quoted text included, because `"$(...)"` still runs. The
-  checksum match still binds one spelling, so a rewrite fails until the guard
-  moves with it in the same commit, which is the direction that keeps the pin
-  checked.
+  branch, an `&&` or `;` chain, an `exit` or `exec` before the work, or a command
+  defined on the way fails it, quoted text included, because `"$(...)"` still
+  runs. The checksum match still binds one spelling, so a rewrite fails until the
+  guard moves with it in the same commit, which is the direction that keeps the
+  pin checked.
 - The verify gate only worked from the repo root. `tests/verify.sh` resolved its
   suite paths, its script `find` and its Butane and shellcheck lookups from
   `$PWD`, so a run from anywhere else failed on paths that did not exist there.

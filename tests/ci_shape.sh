@@ -89,16 +89,19 @@ for needed in (
         fail("the shellcheck install is missing: " + needed)
 
 # A check can match this text and still never run, so the install step has to
-# stay straight-line shell. A branch, an `&&` chain, an `exit` before the work or
-# a function nobody calls fails here rather than passing as text that is never
-# executed. Quoted text is checked too, because `"$(...)"` still runs.
+# stay straight-line shell. A branch, an `&&` chain, an `exit` or `exec` before
+# the work, or a command redefined on the way fails here rather than passing as
+# text that never ran. Quoted text is checked too, because `"$(...)"` still runs.
 CONTROL = re.compile(
     r"(^|[\s;|&()])(if|then|elif|else|fi|for|while|until|do|done|case|esac"
-    r"|select|function|eval|exit|return)(?=$|[\s;|&()])"
+    r"|select|function|eval|exit|exec|return)(?=$|[\s;|&()])"
 )
+DEFINES = re.compile(r"^\s*(function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)|^\s*[{}]\s*$")
 for line in logical_lines(body):
     if CONTROL.search(line):
         fail("the shellcheck install is not straight-line shell: " + line.strip())
+    if DEFINES.search(line):
+        fail("the shellcheck install defines a command: " + line.strip())
     if re.search(r"&&|\|\||;|(?<![&>])&(?![&])", line):
         fail("the shellcheck install chains commands: " + line.strip())
 
