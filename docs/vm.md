@@ -42,8 +42,8 @@ break without a commit here.
 - `qemu-system-x86_64` and `qemu-img` (QEMU 8 or newer; tested on 11).
 - `jq`, `curl`, `python3`, `ssh-keygen`, `xz`, `sha256sum`.
 - `podman` for the default rollback rehearsal, which builds the fixture registry
-  and its two tags. `--no-rollback` and an explicit `VM_IMAGE` skip the fixture
-  and do not need it.
+  and its two tags. `--no-rollback`, `--console` and an explicit `VM_IMAGE` skip
+  the fixture and do not need it.
 - Butane 0.29.0, as `BUTANE` or `butane` on `PATH`, to compile the Ignition.
 - `socat` is optional. Without it the harness still runs, and only the serial
   console attach and the graceful shutdown are unavailable.

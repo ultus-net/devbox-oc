@@ -11,9 +11,9 @@
 # repeat the whole path. --disks-only stops after the disk steps, so the gate can
 # exercise the write path without QEMU. VM_BASE_IMAGE replaces the pinned base
 # image with a path of your own; the disk test uses it to skip the download.
-# By default the run also seeds two local tags and rehearses the image rollback;
-# --no-rollback boots the published image instead. VM_IMAGE overrides the image
-# and skips the fixture.
+# By default the run also seeds two local tags and rehearses the image rollback.
+# --no-rollback boots the published image, VM_IMAGE overrides the image, and
+# --console skips the fixture, because that run exits at detach.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"

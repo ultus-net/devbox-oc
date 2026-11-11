@@ -15,12 +15,12 @@ All notable changes to this project. One entry per landed change, newest first.
   `:newer`, and proves that a bare restart leaves the digest alone, that a
   re-point to the older digest moves it, and that the running image names the
   digest the push wrote. The overlay marks only that fixture host insecure, and
-  the run is the default; `--no-rollback` boots the published image instead and
-  `VM_IMAGE` skips the fixture. The host refuses a default run without a working
-  podman, removes the fixture container on every exit path, and requires the
-  seven rollback PASS lines when the guest pulled the fixture image, so a skipped
-  rehearsal cannot read as green. The guest restores the auto-update timer it
-  stopped. `vm/tests/test_fixture_registry.sh`
+  the run is the default; `--no-rollback` boots the published image instead, and
+  `VM_IMAGE` or `--console` skip the fixture. The host refuses a default run
+  without a working podman, removes the fixture container on every exit path,
+  and requires the seven rollback PASS lines when the guest pulled the fixture
+  image, so a skipped rehearsal cannot read as green. The guest restores the
+  auto-update timer it stopped. `vm/tests/test_fixture_registry.sh`
   holds the loopback bind, the build-from-published-image rule, and the
   no-push-to-GHCR rule, and `vm/tests/test_overlay_merge.sh` holds the insecure
   drop-in.

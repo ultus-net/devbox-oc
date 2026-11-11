@@ -173,9 +173,9 @@ Nothing in `os/butane/`, `host/`, `image/` or a quadlet should reach the Mini
 without a passing run. The default run also rehearses the container rollback
 against two local fixture tags, so the documented re-point path is executed, not
 assumed. Ignition is first-boot only, so use `--rebuild` after a change.
-`--console` attaches the serial console, `--stop` powers the VM down, and
-`--no-rollback` skips the fixture. The full procedure, the checks, and the
-limits are in `docs/vm.md`.
+`--console` attaches the serial console and skips the fixture, `--stop` powers
+the VM down, and `--no-rollback` boots the published image. The full procedure,
+the checks, and the limits are in `docs/vm.md`.
 
 ## What is not verified here
 
