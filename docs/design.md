@@ -185,8 +185,8 @@ design rejected and this one keeps rejected.
     build's inputs, and anyone with write access to the package could publish a
     matching pair, so they serve an incident review rather than a trust
     decision. The host pin (decision 15) is what decides what boots.
-    `docs/runbook.md` shows how to read them, and keyless signing with host-side
-    enforcement is a separate issue.
+    `docs/runbook.md` shows how to read them. Keyless signing with host-side
+    enforcement is not implemented; it is tracked in #66.
 
 13. **Every build autologins `core` on the local console.** A keyless build has
     no tailnet and `sshd` is masked, so the console is the only door before the

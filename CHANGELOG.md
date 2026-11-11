@@ -138,6 +138,9 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- Decision 12 no longer calls keyless signing "a separate issue" with nothing
+  behind it. The attestations stay unsigned, and signing with host-side
+  enforcement is recorded as not implemented and tracked in #66.
 - `docs/install.md` is a checkable procedure. Every numbered step now gives the
   exact command, the output that means success, and the recovery when it fails.
   The destructive data-disk step no longer carries a `REPLACE_ME` placeholder
