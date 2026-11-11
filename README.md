@@ -199,8 +199,8 @@ workflow and pulled by the VM, but not exercised on the target. The attested
 publish was read once by hand on 2026-11-12: `:prod` resolved to an index with an
 `attestation-manifest` child, `{{json .Provenance}}` returned the SLSA
 provenance (the builder run URL and the Fedora toolbox base digest), and
-`{{json .SBOM}}` returned an SPDX 2.3 document with 456 packages. Nothing
-re-reads either document on a later pull. The restic restore drill has not been
+`{{json .SBOM}}` returned an SPDX 2.3 document with 456 packages. That read was
+manual: no pull verifies either document. The restic restore drill has not been
 executed, the keyless console join has not run, and the ucore rebase has run only
 under QEMU, not on the Mini. The VM harness covers the config and the container
 start path, and its full run passes on this workstation; the firmware, disk ids,

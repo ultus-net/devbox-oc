@@ -137,7 +137,7 @@ UPS, or the thermals. The container image has been built by the workflow and
 pulled in the VM. The attested publish was read once by hand on 2026-11-12:
 `:prod` is an index with an `attestation-manifest` child, and the provenance and
 SBOM fields returned a SLSA document and an SPDX 2.3 document with 456 packages.
-Nothing re-reads them on a later pull. The restic restore drill has not been
-executed. Do not describe anything as working until it has run against real
-hardware.
+That read was manual: no pull verifies either document. The restic restore drill
+has not been executed. Do not describe anything as working until it has run
+against real hardware.
 `README.md` lists the same gaps; keep them in step.
