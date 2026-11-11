@@ -108,8 +108,9 @@ the image and skips the fixture.
 
 ## The rollback fixture
 
-The rollback procedure was never exercised. Moving the recorded digest to test it
-would need new media and a reinstall, so the harness brings its own registry:
+The rollback procedure was documented but never run. Moving the recorded digest
+to test it would need new media and a reinstall, so the harness brings its own
+registry:
 
 1. `vm/fixture-registry.sh` builds a Fedora registry image (`docker-distribution`
    from the Fedora repositories) and runs it on `127.0.0.1:5000`.
@@ -194,9 +195,9 @@ The guest check asserts, in order:
 | fail closed | with no `secrets.env`, `/etc/opencode/env` does not exist, `oc-env.service` has failed, and OpenCode is inactive |
 | boot | systemd reports a boot target wanting both quadlet units, so a reboot brings them up |
 | secrets | after a dummy `secrets.env`, both env writers are active and their files are 0600 |
-| image | the fixture tag pulls from the loopback registry; `--no-rollback`, `--console` or an explicit `VM_IMAGE` pull `ghcr.io/ultus-net/devbox:prod` |
+| image | the harness boots the digest the fixture `:newer` push wrote; `--no-rollback`, `--console` or an explicit `VM_IMAGE` use the reference they were given, `ghcr.io/ultus-net/devbox:prod` by default |
 | workloads | `opencode` and `hermes` are healthy, 4096, 8642, and 9119 are bound on loopback, and a connection to each loopback port succeeds |
-| rollback | a bare restart leaves the digest unchanged; a re-point moves it to the digest the push wrote |
+| rollback | a bare restart leaves the digest unchanged; rewriting `Image=` to the older digest, then a generator reload and restart, moves it |
 | invariant | no TCP listener is on `0.0.0.0` or `[::]`; the scan names the owning process |
 
 The dummy secrets are `vm-dogfood-not-a-secret` values written inside the
@@ -227,8 +228,9 @@ ships no `cockpit.socket`.
 
 The same run rehearsed the rollback against the fixture registry and reported
 `PASS rollback-restart-stable`, `PASS rollback-pull-older`,
-`PASS rollback-repoint`, `PASS rollback-pull-newer`, `PASS rollback-digest`,
-`PASS rollback-changed`, and `PASS rollback-timer-restored`.
+`PASS rollback-pin`, `PASS rollback-digest`, `PASS rollback-changed`, and
+`PASS rollback-timer-restored`. It booted `sha256:dca354f8…` from the `:newer`
+push digest and rolled back to the `:older` digest `sha256:98238d00…`.
 
 `SUMMARY failures=0` is the line to look for. A `SKIP` is a conditional guard
 whose condition the image does not meet, and the report says which one.

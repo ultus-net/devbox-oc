@@ -220,13 +220,15 @@ pull makes the digest present before the restart.
 Prove the host runs the rolled-back build:
 
 ```sh
-ssh core@devbox 'sudo podman image inspect --format "{{.Image}}" opencode'
 ssh core@devbox 'sudo podman inspect --format "{{.Image}}" opencode \
   | xargs sudo podman image inspect --format "{{.RepoDigests}}"'
 ```
 
 The output must name the digest you pinned. If it names the previous one, the
 unit edit or the daemon-reload did not take: read the unit, reload, restart.
+`podman image inspect --format "{{.Image}}" opencode` is not a proof: `.Image`
+resolves on a container, so on an image podman errors with `can't evaluate field
+Image in type interface {}`.
 
 Record the digest that is now live in `image/prod-digest.txt` in a PR, and
 rebuild the Ignition so the repo and the box agree again. Rollback is an undo,
@@ -239,8 +241,8 @@ branch after the merge: a leftover repair branch blocks the next one, and it may
 record a digest `:prod` has moved past since. When the run refuses because one
 exists, delete it, re-run the image build, and open the new branch; do not merge
 the old one. A main push that only rewrites the record does not rebuild, so the
-merge cannot re-stale it. A manual pull below does not run that check, so after
-one edit the record yourself.
+merge cannot re-stale it. The unit edit above does not run that check, so after
+one, record the digest yourself.
 
 `podman auto-update` still runs for Hermes, which follows its upstream tag. It
 does not touch the pinned OpenCode container, so it cannot repair or undo a

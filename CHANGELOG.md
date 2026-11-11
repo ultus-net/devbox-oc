@@ -7,21 +7,24 @@ All notable changes to this project. One entry per landed change, newest first.
 ### Added
 
 - The VM harness rehearses the container rollback. The procedure was documented
-  but never executed, and re-pointing the real `:prod` tag to test it would be a
-  production mutation. `vm/fixture-registry.sh` now runs a Fedora registry
+  but never executed, and moving the recorded digest to test it would need new
+  media and a reinstall. `vm/fixture-registry.sh` now runs a Fedora registry
   (`docker-distribution`, not the Alpine `registry:2`) on `127.0.0.1`, pulls the
   published image, and pushes two tags built FROM it as `devbox:older` and
-  `devbox:newer`. The guest reaches the registry at qemu's `10.0.2.2`, pulls
-  `:newer`, and proves that a bare restart leaves the digest alone, that a
-  re-point to the older digest moves it, and that the running image names the
-  digest the push wrote. The overlay marks only that fixture host insecure, and
-  the run is the default; `--no-rollback` boots the published image instead, and
-  `VM_IMAGE` or `--console` skip the fixture. The host refuses a default run
-  without a working podman, removes the fixture container on every exit path,
-  and requires the seven rollback PASS lines when the guest pulled the fixture
-  image, so a skipped rehearsal cannot read as green. The guest restores the
-  auto-update timer it stopped. `vm/tests/test_fixture_registry.sh`
-  holds the loopback bind, the build-from-published-image rule, and the
+  `devbox:newer`, keeping the digest each push wrote. The guest reaches the
+  registry at qemu's `10.0.2.2` and `vm/run-vm.sh` boots the `:newer` push
+  digest, so the quadlet carries a digest exactly as the media does. The guest
+  proves a bare restart leaves that digest alone, pulls `:older`, rewrites
+  `Image=` to the older digest the way the runbook rolls a host back, reloads
+  the generator, restarts, and proves the running image moved. The overlay marks
+  only that fixture host insecure, and the run is the default; `--no-rollback`
+  boots the published image instead, and `VM_IMAGE` or `--console` skip the
+  fixture. The host refuses a default run without a working podman, removes the
+  fixture container on every exit path, and requires the six rollback PASS lines
+  when the guest pulled the fixture image, so a skipped rehearsal cannot read as
+  green. The guest restores the auto-update timer it stopped.
+  `vm/tests/test_fixture_registry.sh` holds the loopback bind, the
+  build-from-published-image rule, the digest file per push, and the
   no-push-to-GHCR rule, and `vm/tests/test_overlay_merge.sh` holds the insecure
   drop-in.
 - QEMU dogfood harness. `vm/run-vm.sh` boots a pinned Fedora CoreOS QEMU
