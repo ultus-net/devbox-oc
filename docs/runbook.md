@@ -261,6 +261,42 @@ if the health probe passes.
 If GHCR is unreachable, the host keeps running the local image. Do not delete the
 local image until the rollback is confirmed.
 
+## Check a published image's provenance and SBOM
+
+Every `main` build pushes an attested `sha-<commit>` index, and once that digest
+passes the smoke gate `:prod` becomes a copy of the same index. The index carries
+a child annotated `vnd.docker.reference.type: attestation-manifest`, and that
+child holds two documents: SLSA provenance at `mode=max` and an SPDX SBOM. They
+record what the build consumed, so an incident review or a rollback can read the
+inputs behind the digest the host runs.
+
+Read the digest, not the tag: `:prod` moves, and the attestation describes one
+digest. `image/prod-digest.txt` already carries the `sha256:` prefix.
+
+```sh
+digest=$(cat image/prod-digest.txt)
+ref="ghcr.io/ultus-net/devbox@$digest"
+docker buildx imagetools inspect "$ref"
+docker buildx imagetools inspect --format '{{json .Provenance}}' "$ref"
+docker buildx imagetools inspect --format '{{json .SBOM}}' "$ref"
+```
+
+Those need Docker with the buildx plugin, so run them on a workstation or a
+runner, not on the host. The host has podman, which pulls and pins the digest but
+does not print attestations.
+
+The listing must show the image manifest and one attestation child. The
+provenance names the frontend, the base image digest, and the build arguments;
+the SBOM lists the packages in the image. An empty result means the digest went
+to the registry without attestations, which is a defect in the build.
+
+The attestations are unsigned. They record a build's inputs, and nothing
+verifies them at pull time. Anyone with write access to the package could publish
+a matching pair, so read them as evidence about a build, not as proof of who ran
+it. The host pin still decides what boots, so a forged attestation cannot change
+the running image. Keyless signing and host-side enforcement are deliberately
+out of this change (#24), and decision 12 records the limit.
+
 ## Roll back the OS
 
 ucore is an ostree system, so the previous deployment is still on disk.

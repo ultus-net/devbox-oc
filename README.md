@@ -148,6 +148,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `tests/docs_suite_table.sh` | every suite the gate runs is listed in the README table, and no row outlives its suite |
 | `tests/test_gate_cwd.sh` | the gate passes when invoked from a directory outside the repo |
 | `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
+| `tests/ci_attest.sh` | the push is attested, the digest is smoke-tested before `:prod` moves, and forks and dispatches stay off the publish path |
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
 | `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |
 | `vm/tests/test_fixture_registry.sh` | the rollback fixture stays on loopback, builds FROM the published image, and never pushes to GHCR |
@@ -194,9 +195,12 @@ the checks, and the limits are in `docs/vm.md`.
 
 No install has run on the target Mini. No live boot has been tested on the
 Mini's hardware. The container image has been built by the GitHub Actions
-workflow and pulled by the VM, but not exercised on the target. The restic
-restore drill has not been executed, the keyless console join has not run, and
-the ucore rebase has run only under QEMU, not on the Mini. The VM harness covers
+workflow and pulled by the VM, but not exercised on the target. No registry run
+has been checked end to end: the workflow asserts the promoted tag carries an
+attestation child, but nobody has read the provenance or SBOM with
+`imagetools inspect`. The restic restore drill has not been executed, the
+keyless console join has not run, and the ucore rebase has run only under QEMU,
+not on the Mini. The VM harness covers
 the config and the container start path, and its full run passes on this
 workstation; the firmware, disk ids, tailnet join, UPS, and thermals still need
 the real box. Nothing here should be described as working until it runs against

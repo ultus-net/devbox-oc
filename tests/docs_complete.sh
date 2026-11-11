@@ -133,4 +133,12 @@ done
 grep -Fq "VM DOGFOOD: pass" "$root/docs/install.md" \
   || fail "install doc does not state the VM pass condition"
 
+# The attestations only count as evidence if the operator can read them, so the
+# runbook names the inspection command and the unsigned limit.
+runbook="$root/docs/runbook.md"
+for topic in "imagetools inspect" "unsigned"; do
+  grep -Fqi -- "$topic" "$runbook" \
+    || fail "runbook does not cover the image attestations: $topic"
+done
+
 echo "docs complete"

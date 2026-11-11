@@ -2,8 +2,8 @@
 # tests/ci_shape.sh
 #
 # The CI is part of the deploy path. These assertions keep it pointed at the
-# right registry, keep the verify gate real, and keep the smoke test before any
-# push.
+# right registry, keep the verify gate real, and keep the smoke gate on the
+# published digest.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
@@ -194,16 +194,7 @@ if grep -qiE 'azure|dockerhub|docker\.io.*login' "$image"; then
   fail "image workflow still names an Azure or Docker Hub registry"
 fi
 
-# The smoke step must appear before the push step, or a broken image is already
-# in the registry by the time the test fails.
-smoke_line="$(grep -n 'name: Smoke test' "$image" | head -1 | cut -d: -f1)"
-push_line="$(grep -n 'name: Push' "$image" | head -1 | cut -d: -f1)"
-if [ -z "$smoke_line" ] || [ -z "$push_line" ]; then
-  fail "image workflow is missing a smoke or push step"
-fi
-if [ "$smoke_line" -ge "$push_line" ]; then
-  fail "the image is pushed before it is smoke-tested"
-fi
+# The publish ordering is now asserted by tests/ci_attest.sh.
 
 # A promoted digest that differs from the record is a silent rollback fault. The
 # repair runs in its own job so the write token never sits on the job that

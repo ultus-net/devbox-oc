@@ -6,6 +6,30 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- The runbook shows how to read a published image's provenance and SBOM from its
+  digest, and records that the attestations are unsigned: they support an
+  incident review, not a trust decision (#24).
+- `tests/ci_attest.sh` parses the image workflow and guards the attested
+  publish chain: the push step sets exactly `provenance: mode=max` and `sbom`;
+  no `load` exporter carries attestations; `:prod` moves with
+  `docker buildx imagetools create` onto the digest that was smoke-tested, and
+  only after it; the promotion proves the attestation child by parsing the index
+  children instead of grepping the text; and the login and load conditions are
+  pinned to their exact ref expressions, so no broader event can slip in. It
+  also keeps `id-token` off every permission scope and `cosign` out of the file
+  (#24).
+  Each guard is proven against a mutation it catches:
+  `load-carries-attestations`, `silent-noop-provenance`,
+  `promote-before-smoke`, `raw-docker-push`, `login-reaches-fork`,
+  `dispatch-skips-local`, and `commented-child-check`.
+- The image build pushes an attested `sha-` digest, smoke-tests that digest, and
+  promotes `prod` to it only after the gate, so provenance and an SBOM ride the
+  manifest. `docker/build-push-action` publishes with `provenance: mode=max` and
+  `sbom: true`, `docker buildx imagetools create` moves `:prod` onto the tested
+  digest, and the promotion fails the run when the promoted tag carries no
+  attestation child. Pull requests and manual runs still build and smoke locally
+  with no login and no push, and tag pushes publish `sha-` and the release tag
+  without touching `prod`.
 - The harness's pinned reference is asserted, not only observed. `vm/run-vm.sh`
   composed `repo@sha256:<digest>` inline at the boot, so the only evidence the
   rehearsal pinned the push digest rather than the fixture tag was the dogfood
