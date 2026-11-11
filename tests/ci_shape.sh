@@ -99,9 +99,13 @@ if "pull_request" in gate:
 if "event_name" in gate and "event_name == 'push'" not in gate:
     fail("the record job narrows by an event other than push: " + gate)
 
-for scope in ("contents", "pull-requests"):
+for scope in ("contents",):
     if scopes(record.get("permissions")).get(scope) != "write":
         fail("the record job cannot write " + scope)
+# The repair pushes a branch and prints a compare URL; it does not open the PR.
+# The token cannot, and asking for the scope only hides that.
+if "write" in str(scopes(record.get("permissions")).get("pull-requests", "")):
+    fail("the record job holds pull-requests write, but the repair cannot open a PR")
 for scope in ("contents", "pull-requests", "packages"):
     if "write" in str(scopes(build.get("permissions")).get(scope, "")):
         fail("the build job holds a write scope on the PR code path: " + scope)
@@ -110,6 +114,29 @@ if "image/promote-digest.sh" not in runs_in(record):
     fail("the record job does not run the digest repair script")
 if "promote-digest.sh" in runs_in(build):
     fail("the digest repair still runs inside the build job")
+
+# The repair produces an operator PR that changes only the record. A main push
+# that rewrites it must not rebuild: the new build stamps a fresh digest and
+# re-stales the record the merge just fixed. YAML 1.1 parses the key "on" as a
+# boolean, so accept either form rather than silently reading no trigger.
+triggers = doc.get(True) or doc.get("on") or {}
+paths = ((triggers.get("push") or {}).get("paths")) or []
+if "image/**" not in paths:
+    fail("a main push no longer builds the image paths")
+if "!image/prod-digest.txt" not in paths:
+    fail("a main push that only rewrites the digest record still rebuilds")
+# GitHub applies paths in order: a negation only excludes what a positive pattern
+# matched before it. Listing the exclusion first re-includes the record.
+if paths.index("!image/prod-digest.txt") < paths.index("image/**"):
+    fail("the record exclusion comes before the image paths, so it does not exclude")
+
+# The repair PR changes only the record, so its build is the only CI it gets.
+# Copying the push exclusion here would leave that PR unchecked.
+pr_paths = ((triggers.get("pull_request") or {}).get("paths")) or []
+if "image/**" not in pr_paths:
+    fail("a pull request no longer builds the image paths")
+if "!image/prod-digest.txt" in pr_paths:
+    fail("a repair pull request excludes the digest record, so it has no CI")
 PY
 
 echo "CI publishes to GHCR behind a smoke gate"
