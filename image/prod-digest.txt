@@ -1,4 +1,4 @@
 # The promoted :prod digest, recorded by a PR after a production build.
 # Never hand-edit. PENDING means no image has ever been promoted, so there is
 # nothing to roll back to yet.
-sha256:5b9d548651dade448e26ca449ec0611ffe1a0a3d77c241deead3022302f7b5ec
+sha256:8649976df3ebbd38f8b6b323b2a8522cb7de6021e969f836ed57c0cf4ab5e81a
