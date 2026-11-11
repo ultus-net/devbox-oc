@@ -146,7 +146,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `vm/tests/test_guest_assertions.sh` | the guest boot and mount parsers read the shapes the VM produces |
 | `vm/tests/test_guest_data.sh` | the data-disk repart refuses the running root device |
 | `vm/tests/test_report_agent.sh` | a truncated guest report is refused and cannot read as a pass |
-| `vm/tests/test_report_verdict.sh` | the host verdict rejects a truncated, empty or summary-less report |
+| `vm/tests/test_report_verdict.sh` | the host verdict rejects a truncated, empty or summary-less report, and a default run without the rollback PASS lines |
 
 Every guard was checked against a mutation it is meant to catch, and the mutation
 was confirmed to land before the result was trusted. The integrity test has a

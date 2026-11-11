@@ -162,4 +162,29 @@ if [ -e "$tmp/preflight-cache/vm-disk.qcow2" ]; then
   fail "T8: the preflight ran after disk work"
 fi
 
+# T9: a run that fails after the fixture starts still removes it. The stub
+#     podman starts the registry and the stubs answer the health poll, then a
+#     broken butane fails the ignition build and the EXIT trap must call down.
+mkdir -p "$tmp/fixbin"
+cat > "$tmp/fixbin/podman" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$PODMAN_LOG"
+exit 0
+EOF
+printf '#!/bin/sh\nexit 0\n' > "$tmp/fixbin/curl"
+printf '#!/bin/sh\nexit 0\n' > "$tmp/fixbin/sleep"
+chmod 0755 "$tmp/fixbin/podman" "$tmp/fixbin/curl" "$tmp/fixbin/sleep"
+
+PODMAN_LOG="$tmp/teardown.log"
+export PODMAN_LOG
+: > "$PODMAN_LOG"
+if PATH="$tmp/fixbin:$PATH" VM_CACHE="$tmp/teardown-cache" \
+  VM_BASE_IMAGE="$tmp/teardown-base.qcow2" BUTANE=/bin/false \
+  "$vm/run-vm.sh" >"$tmp/td.out" 2>"$tmp/td.err"; then
+  fail "T9: a broken butane did not fail the run"
+fi
+teardown_rm="$(grep -cx 'rm -f devbox-vm-registry' "$PODMAN_LOG" || true)"
+[ "${teardown_rm:-0}" -ge 2 ] \
+  || fail "T9: the fixture survived a failure after it started"
+
 echo "vm run command uses the harness Ignition, two disks, and no inbound forward"

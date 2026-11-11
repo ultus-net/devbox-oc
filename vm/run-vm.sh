@@ -334,7 +334,11 @@ done
 agent_cleanup
 
 rc=0
-"$here/report-verdict.sh" "$report" || rc=1
+verdict_args=()
+if [ "$fixture" = 1 ]; then
+  verdict_args=(--rollback)
+fi
+"$here/report-verdict.sh" "$report" "${verdict_args[@]}" || rc=1
 
 echo
 cat "$report"

@@ -127,8 +127,9 @@ The registry container and the VM are throwaway: the container is removed on
 every exit path, and nothing pushes to GHCR or touches the real `:prod` tag. The
 host does keep the two local tags (`127.0.0.1:5000/devbox:older` and `:newer`)
 and the registry storage under `.vm-cache/registry`, about 1 GiB. Remove them
-with `podman rmi 127.0.0.1:5000/devbox:older 127.0.0.1:5000/devbox:newer` and
-`rm -rf .vm-cache/registry` when that space matters.
+with `podman rmi 127.0.0.1:5000/devbox:older 127.0.0.1:5000/devbox:newer
+localhost/devbox-vm-registry:fedora` and `rm -rf .vm-cache/registry` when that
+space matters.
 
 ## Ignition runs once
 
@@ -249,8 +250,10 @@ harness binds `report-agent.py` to `127.0.0.1` only: there is no host port
 forward and no listener on the LAN. The guest posts its report, and the run
 script exits non-zero on any `FAIL` line or on a report that lacks the
 `SUMMARY failures=0` line the guest writes last, so a truncated post cannot read
-as a pass. The report is also left at `.vm-cache/report.txt` and
-`/srv/devbox-vm-report.txt` inside the VM.
+as a pass. A default run also requires all seven `PASS rollback-*` lines, so a
+run that silently skipped the rehearsal fails instead of passing. The report is
+also left at `.vm-cache/report.txt` and `/srv/devbox-vm-report.txt` inside the
+VM.
 
 If the check unit never runs, the harness times out and prints the last 40
 lines of `.vm-cache/serial.log`. The usual causes are a failed rebase

@@ -296,6 +296,8 @@ if [ -n "$ROLLBACK_REPO" ]; then
 
   # Re-point the tag exactly as the runbook re-points :prod: tag the local image,
   # push the tag, and keep the digest the push wrote.
+  # A digest from an earlier run must not be read as this run's.
+  : > "$report_dir/rollback-digest"
   if podman tag "$older" "$newer" >/dev/null 2>&1 \
     && podman push --tls-verify=false --digestfile "$report_dir/rollback-digest" \
       "$newer" >/dev/null 2>&1; then
@@ -326,12 +328,18 @@ if [ -n "$ROLLBACK_REPO" ]; then
   fi
 
   # Restore the timer the rehearsal stopped, and prove it came back.
-  if [ "$auto_update_state" = active ]; then
-    systemctl start podman-auto-update.timer >/dev/null 2>&1 || true
-    check rollback-timer-restored active "$(systemctl is-active podman-auto-update.timer 2>&1)"
-  else
-    pass rollback-timer-restored "was $auto_update_state, left alone"
-  fi
+  case "$auto_update_state" in
+    active)
+      systemctl start podman-auto-update.timer >/dev/null 2>&1 || true
+      check rollback-timer-restored active "$(systemctl is-active podman-auto-update.timer 2>&1)"
+      ;;
+    inactive|failed)
+      pass rollback-timer-restored "was $auto_update_state, left alone"
+      ;;
+    *)
+      fail rollback-timer-restored "unknown timer state: ${auto_update_state:-empty}"
+      ;;
+  esac
 fi
 
 # 10. The invariant that survives every layer: nothing listens on a wildcard
