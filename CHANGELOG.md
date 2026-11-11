@@ -16,9 +16,12 @@ All notable changes to this project. One entry per landed change, newest first.
   re-point to the older digest moves it, and that the running image names the
   digest the push wrote. The overlay marks only that fixture host insecure, and
   the run is the default; `--no-rollback` boots the published image instead and
-  `VM_IMAGE` skips the fixture. `vm/tests/test_fixture_registry.sh` holds the
-  loopback bind, the build-from-published-image rule, and the no-push-to-GHCR
-  rule, and `vm/tests/test_overlay_merge.sh` holds the insecure drop-in.
+  `VM_IMAGE` skips the fixture. The host refuses a default run without a working
+  podman, removes the fixture container on every exit path, and the guest
+  restores the auto-update timer it stopped. `vm/tests/test_fixture_registry.sh`
+  holds the loopback bind, the build-from-published-image rule, and the
+  no-push-to-GHCR rule, and `vm/tests/test_overlay_merge.sh` holds the insecure
+  drop-in.
 - QEMU dogfood harness. `vm/run-vm.sh` boots a pinned Fedora CoreOS QEMU
   image, applies the Ignition compiled from `os/butane/ucore.bu`, waits for the
   one-shot ucore rebase, then runs a check suite inside the guest. The guest

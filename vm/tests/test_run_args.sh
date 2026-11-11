@@ -77,7 +77,7 @@ fi
 help="$("$vm/run-vm.sh" --help)"
 printf '%s\n' "$help" | grep -q -- '--disks-only' || fail "T4d: --help does not list --disks-only"
 printf '%s\n' "$help" | grep -q 'VM_BASE_IMAGE' || fail "T4d: --help omits VM_BASE_IMAGE"
-printf '%s\n' "$help" | grep -q 'skip the download' || fail "T4d: --help stops before the last header line"
+printf '%s\n' "$help" | grep -q 'skips the fixture' || fail "T4d: --help stops before the last header line"
 
 # T5: --stop with no pidfile reports that and exits cleanly.
 "$vm/run-vm.sh" --stop >"$tmp/stop.out" 2>"$tmp/stop.err" || fail "T5: --stop failed with no VM"
@@ -117,6 +117,49 @@ printf '%s\n' "$rebuild" | grep -F 'plan: ' > "$tmp/rebuild.actual" \
   || fail "T6c: --dry-run printed no disk plan"
 if ! diff -u "$tmp/plan.expected" "$tmp/rebuild.actual"; then
   fail "T6c: --rebuild did not plan both writes"
+fi
+
+# T7: the default run resolves the guest image to the fixture tag, and both
+#     opt-outs resolve it to the published tag. The image is what the guest
+#     pulls, so an opt-out that still starts the fixture is a defect.
+default_says="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" \
+  || fail "T7: the default --dry-run failed"
+printf '%s\n' "$default_says" | grep -q '^image: 10\.0\.2\.2:5000/devbox:newer' \
+  || fail "T7: the default run does not name the fixture image"
+
+no_rollback="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run --no-rollback 2>&1 >/dev/null)" \
+  || fail "T7b: --no-rollback --dry-run failed"
+printf '%s\n' "$no_rollback" | grep -q '^image: ghcr\.io/ultus-net/devbox:prod' \
+  || fail "T7b: --no-rollback does not name the published image"
+if printf '%s\n' "$no_rollback" | grep -q '10\.0\.2\.2'; then
+  fail "T7b: --no-rollback still points at the fixture registry"
+fi
+
+override="$(VM_IMAGE=127.0.0.1:5000/devbox:newer KVM_DEVICE=/nonexistent \
+  "$vm/run-vm.sh" --dry-run 2>&1 >/dev/null)" \
+  || fail "T7c: an explicit VM_IMAGE --dry-run failed"
+printf '%s\n' "$override" | grep -q '^image: 127\.0\.0\.1:5000/devbox:newer' \
+  || fail "T7c: an explicit VM_IMAGE is not the resolved image"
+if printf '%s\n' "$override" | grep -q '10\.0\.2\.2'; then
+  fail "T7c: an explicit VM_IMAGE still starts the fixture"
+fi
+
+# T8: the default run needs a working podman for the fixture, and must refuse
+#     before it touches a disk when podman is unusable. The stub stands in for a
+#     host without one, which is every CI runner.
+mkdir -p "$tmp/badbin"
+cat > "$tmp/badbin/podman" <<'EOF'
+#!/bin/sh
+exit 1
+EOF
+chmod 0755 "$tmp/badbin/podman"
+if PATH="$tmp/badbin:$PATH" VM_CACHE="$tmp/preflight-cache" \
+  "$vm/run-vm.sh" >"$tmp/pf.out" 2>"$tmp/pf.err"; then
+  fail "T8: the default run accepted an unusable podman"
+fi
+grep -qi 'podman' "$tmp/pf.err" || fail "T8: no diagnostic names podman"
+if [ -e "$tmp/preflight-cache/vm-disk.qcow2" ]; then
+  fail "T8: the preflight ran after disk work"
 fi
 
 echo "vm run command uses the harness Ignition, two disks, and no inbound forward"

@@ -140,7 +140,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
 | `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |
 | `vm/tests/test_fixture_registry.sh` | the rollback fixture stays on loopback, builds FROM the published image, and never pushes to GHCR |
-| `vm/tests/test_run_args.sh` | the VM boots the harness Ignition with two disks, no inbound port forward, and a disk plan it would write or reuse |
+| `vm/tests/test_run_args.sh` | the VM boots the harness Ignition with two disks, no inbound port forward, a disk plan it would write or reuse, the right image for each rollback opt-out, and a podman preflight on the default path |
 | `vm/tests/test_disk_write.sh` | the disk write path creates both disks, renames them into place, cleans up a failed create, and reuses them without `--rebuild` |
 | `vm/tests/test_guest_helpers.sh` | every helper the guest check calls is defined, so an assertion cannot vanish |
 | `vm/tests/test_guest_assertions.sh` | the guest boot and mount parsers read the shapes the VM produces |

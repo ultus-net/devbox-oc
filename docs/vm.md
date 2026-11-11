@@ -41,6 +41,9 @@ break without a commit here.
 
 - `qemu-system-x86_64` and `qemu-img` (QEMU 8 or newer; tested on 11).
 - `jq`, `curl`, `python3`, `ssh-keygen`, `xz`, `sha256sum`.
+- `podman` for the default rollback rehearsal, which builds the fixture registry
+  and its two tags. `--no-rollback` and an explicit `VM_IMAGE` skip the fixture
+  and do not need it.
 - Butane 0.29.0, as `BUTANE` or `butane` on `PATH`, to compile the Ignition.
 - `socat` is optional. Without it the harness still runs, and only the serial
   console attach and the graceful shutdown are unavailable.
@@ -48,8 +51,9 @@ break without a commit here.
   the data disk is a plain file under `.vm-cache/`.
 - KVM is optional. Without a readable `/dev/kvm` the harness falls back to TCG
   and says so; the rebase then takes noticeably longer.
-- About 10 GiB of free disk space for the base image, the OS overlay, the data
-  disk, and the container layers.
+- About 11 GiB of free disk space: the base image, the OS overlay, the data
+  disk, the container layers, and about 1 GiB of fixture registry storage under
+  `.vm-cache/registry`.
 
 ## Run it
 
@@ -119,8 +123,12 @@ test it would be a production mutation, so the harness brings its own registry:
    runbook re-points `:prod`, then pulls and restarts again.
 5. It fails unless the running digest moved to the digest the push wrote.
 
-The guest fixture and the registry both stay inside the throwaway run. Nothing
-pushes to GHCR, and the real `:prod` tag is never touched.
+The registry container and the VM are throwaway: the container is removed on
+every exit path, and nothing pushes to GHCR or touches the real `:prod` tag. The
+host does keep the two local tags (`127.0.0.1:5000/devbox:older` and `:newer`)
+and the registry storage under `.vm-cache/registry`, about 1 GiB. Remove them
+with `podman rmi 127.0.0.1:5000/devbox:older 127.0.0.1:5000/devbox:newer` and
+`rm -rf .vm-cache/registry` when that space matters.
 
 ## Ignition runs once
 
@@ -209,7 +217,8 @@ ships no `cockpit.socket`.
 
 The same run rehearsed the rollback against the fixture registry and reported
 `PASS rollback-restart-stable`, `PASS rollback-pull-older`,
-`PASS rollback-repoint`, `PASS rollback-digest`, and `PASS rollback-changed`.
+`PASS rollback-repoint`, `PASS rollback-pull-newer`, `PASS rollback-digest`,
+`PASS rollback-changed`, and `PASS rollback-timer-restored`.
 
 `SUMMARY failures=0` is the line to look for. A `SKIP` is a conditional guard
 whose condition the image does not meet, and the report says which one.

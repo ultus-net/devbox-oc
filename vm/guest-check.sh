@@ -263,6 +263,8 @@ check_absent container-any-ip "[::]:" "$bindings"
 #    a normal run never touches it.
 if [ -n "$ROLLBACK_REPO" ]; then
   # The auto-update timer pulls on its own schedule and would race the steps.
+  # Record its state first, so the rehearsal restores what it borrowed.
+  auto_update_state="$(systemctl is-active podman-auto-update.timer 2>/dev/null || true)"
   systemctl stop podman-auto-update.timer >/dev/null 2>&1 || true
 
   # RepoDigests, not the image ID: the runbook proves a rollback by the digest
@@ -303,15 +305,32 @@ if [ -n "$ROLLBACK_REPO" ]; then
   fi
   expected="$(cat "$report_dir/rollback-digest" 2>/dev/null || true)"
 
-  podman pull "$newer" >/dev/null 2>&1 || true
+  if podman pull "$newer" >/dev/null 2>&1; then
+    pass rollback-pull-newer "$newer"
+  else
+    fail rollback-pull-newer "$newer"
+  fi
   systemctl restart opencode.service >/dev/null 2>&1
   wait_health opencode
   after="$(running_digests opencode)"
-  check_contains rollback-digest "$expected" "$after"
+  # An empty expected digest would compare equal to anything, so fail it here.
+  if [ -n "$expected" ]; then
+    check_contains rollback-digest "$expected" "$after"
+  else
+    fail rollback-digest "the push wrote no digest"
+  fi
   if [ -z "$before" ] || [ "$after" = "$before" ]; then
     fail rollback-changed "the digest did not move after the re-point: $after"
   else
     pass rollback-changed "$after"
+  fi
+
+  # Restore the timer the rehearsal stopped, and prove it came back.
+  if [ "$auto_update_state" = active ]; then
+    systemctl start podman-auto-update.timer >/dev/null 2>&1 || true
+    check rollback-timer-restored active "$(systemctl is-active podman-auto-update.timer 2>&1)"
+  else
+    pass rollback-timer-restored "was $auto_update_state, left alone"
   fi
 fi
 

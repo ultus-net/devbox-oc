@@ -52,14 +52,14 @@ build_registry() {
 
 start() {
   down
-  run mkdir -p "$storage"
+  run mkdir -p "$storage" || return 1
   if [ "$plan" = 0 ]; then
-    rm -rf "${storage:?}"/*
+    rm -rf "${storage:?}"/* || return 1
   fi
   run podman run -d --rm --name "$name" \
     -p "127.0.0.1:$port:5000" \
     -v "$storage:/var/lib/registry:Z" \
-    "$registry_image"
+    "$registry_image" || return 1
   if [ "$plan" = 1 ]; then
     return 0
   fi
@@ -79,7 +79,9 @@ start() {
 }
 
 seed() {
-  run podman pull "$base"
+  # Each step returns on failure: this function runs under a caller that tests
+  # its status, where set -e does not fire.
+  run podman pull "$base" || return 1
   local variant
   for variant in older newer; do
     # The label is the only difference, so both tags carry the shipped image.
@@ -88,16 +90,21 @@ seed() {
       --build-arg "BASE=$base" \
       --build-arg "VARIANT=$variant" \
       -t "$image_repo:$variant" \
-      "$here/fixtures"
-    run podman push --tls-verify=false "$image_repo:$variant"
+      "$here/fixtures" || return 1
+    run podman push --tls-verify=false "$image_repo:$variant" || return 1
   done
 }
 
 case "${1:-}" in
   up)
     build_registry
-    start
-    seed
+    # An image build or a push can fail after the container exists. Remove it on
+    # that path too, so a failed up never leaves the port held.
+    if ! start || ! seed; then
+      down
+      echo "the fixture registry setup failed; removed the container" >&2
+      exit 1
+    fi
     echo "fixture registry ready: $image_repo:newer (older tag also pushed)"
     ;;
   down)
