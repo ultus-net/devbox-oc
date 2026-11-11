@@ -151,10 +151,10 @@ The overlay only appends, and the merge is idempotent:
 - a `serial-getty@ttyS0` autologin drop-in, so the console has a shell;
 - `devbox-vm-check.service`, which runs `guest-check.sh` on the first ucore
   boot and posts its report;
-- `devbox-vm-data.service`, which prepares the blank data disk before
-  `var-srv.mount`;
 - a `registries.conf.d` drop-in that marks the fixture registry insecure, only
-  when the rollback run sets one.
+  when the rollback run sets one;
+- `devbox-vm-data.service`, which prepares the blank data disk before
+  `var-srv.mount`.
 
 The last one is the one deliberate difference from production. The real install
 prepares the data disk once from the live media (step 4.4 of
