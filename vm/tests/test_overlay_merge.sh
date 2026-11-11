@@ -102,7 +102,6 @@ jq -r '[.storage.files[] | select(.path == "/etc/devbox-vm/agent.env")][0].conte
 grep -qx 'ROLLBACK_REPO=10.0.2.2:5000/devbox' "$tmp/registry.env" \
   || fail "T2b: agent.env does not carry the rollback repo"
 
-
 # T3: a second merge of its own output is byte-identical. A non-idempotent
 #     append would duplicate a path, which Ignition rejects at boot.
 "$vm/overlay-ignition.sh" "$tmp/out.json" "$tmp/out2.json" >/dev/null \

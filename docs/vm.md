@@ -185,7 +185,7 @@ The guest check asserts, in order:
 | fail closed | with no `secrets.env`, `/etc/opencode/env` does not exist, `oc-env.service` has failed, and OpenCode is inactive |
 | boot | systemd reports a boot target wanting both quadlet units, so a reboot brings them up |
 | secrets | after a dummy `secrets.env`, both env writers are active and their files are 0600 |
-| image | the fixture tag pulls from the loopback registry; a `--no-rollback` run pulls `ghcr.io/ultus-net/devbox:prod` |
+| image | the fixture tag pulls from the loopback registry; `--no-rollback`, `--console` or an explicit `VM_IMAGE` pull `ghcr.io/ultus-net/devbox:prod` |
 | workloads | `opencode` and `hermes` are healthy, 4096, 8642, and 9119 are bound on loopback, and a connection to each loopback port succeeds |
 | rollback | a bare restart leaves the digest unchanged; a re-point moves it to the digest the push wrote |
 | invariant | no TCP listener is on `0.0.0.0` or `[::]`; the scan names the owning process |
