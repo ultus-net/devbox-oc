@@ -20,21 +20,67 @@ grep -q 'shellcheck' "$verify" || fail "verify workflow does not install shellch
 
 # The linter is pinned by version and sha256, like Butane. A package from the
 # runner image moves with that image, so the same commit can change verdict.
-grep -Eq 'SHELLCHECK_VERSION: v[0-9]+\.[0-9]+\.[0-9]+' "$verify" \
-  || fail "verify workflow does not pin SHELLCHECK_VERSION"
-grep -Eq 'SHELLCHECK_SHA256: [0-9a-f]{64}' "$verify" \
-  || fail "verify workflow does not pin SHELLCHECK_SHA256"
-grep -qF "shellcheck/releases/download/\${SHELLCHECK_VERSION}" "$verify" \
-  || fail "verify workflow does not download the pinned shellcheck release"
-grep -qF 'SHELLCHECK_SHA256}  /tmp/shellcheck.tar.gz' "$verify" \
-  || fail "verify workflow does not verify the shellcheck checksum"
-grep -qF 'SHELLCHECK_VERSION#v' "$verify" \
-  || fail "verify workflow does not assert the pinned version on PATH"
-if grep -Eq 'apt-get install -y shellcheck' "$verify"; then
-  fail "verify workflow installs shellcheck from the runner image"
-fi
-grep -q 'SHELLCHECK_VERSION' "$root/tests/verify.sh" \
-  || fail "the gate does not read the shellcheck pin"
+# Parse the workflow: a grep for the pin still passes when the line is
+# commented out, which is how a disabled checksum would ship.
+python3 - "$verify" "$root/tests/verify.sh" <<'PY'
+import re
+import sys
+
+import yaml
+
+workflow, gate = sys.argv[1], sys.argv[2]
+doc = yaml.safe_load(open(workflow))
+steps = doc["jobs"]["verify"]["steps"]
+step = next((s for s in steps if s.get("name") == "Install shellcheck"), None)
+if step is None:
+    sys.exit("FAIL: verify workflow has no Install shellcheck step")
+
+
+def fail(message):
+    print("FAIL: " + message, file=sys.stderr)
+    sys.exit(1)
+
+
+env = step.get("env") or {}
+version = env.get("SHELLCHECK_VERSION", "")
+if not re.fullmatch(r"v\d+\.\d+\.\d+", version):
+    fail("SHELLCHECK_VERSION is not a fixed semver tag: " + repr(version))
+if not re.fullmatch(r"[0-9a-f]{64}", env.get("SHELLCHECK_SHA256", "")):
+    fail("SHELLCHECK_SHA256 is not a sha256 hex digest")
+
+run = step.get("run") or ""
+
+
+def executed(text):
+    # A commented line does not run, so a "temporarily disabled" step is gone.
+    return "\n".join(
+        line for line in text.splitlines() if not line.strip().startswith("#")
+    )
+
+
+body = executed(run)
+if "set -euo pipefail" not in body:
+    fail("the shellcheck install does not fail fast")
+for needed in (
+    "shellcheck/releases/download/${SHELLCHECK_VERSION}",
+    "curl -fsSL",
+    "sha256sum -c",
+    "tar -x",
+    "/usr/local/bin/shellcheck",
+    "SHELLCHECK_VERSION#v",
+):
+    if needed not in body:
+        fail("the shellcheck install is missing: " + needed)
+
+
+for other in steps:
+    for line in executed(other.get("run") or "").splitlines():
+        if re.search(r"apt(-get)?\s+install.*shellcheck", line):
+            fail("a workflow step installs shellcheck with apt: " + line.strip())
+
+if "SHELLCHECK_VERSION" not in open(gate).read():
+    fail("the gate does not read the shellcheck pin")
+PY
 
 grep -q 'ghcr.io' "$image" || fail "image workflow does not push to GHCR"
 grep -q 'IMAGE_NAME: ghcr.io/' "$image" \

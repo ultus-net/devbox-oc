@@ -100,7 +100,8 @@ elif [ -z "$shellcheck_bin" ]; then
     rc=1
   fi
 else
-  pinned="$(sed -n 's/^ *SHELLCHECK_VERSION: *//p' .github/workflows/verify.yml | head -1)"
+  pin_file="$(dirname "$0")/../.github/workflows/verify.yml"
+  pinned="$(sed -n 's/^ *SHELLCHECK_VERSION: *//p' "$pin_file" | head -1)"
   running="$("$shellcheck_bin" --version | sed -n 's/^version: //p')"
   printf '== shellcheck (%s files, %s)\n' "${#scripts[@]}" "${running:-unknown}"
   # CI installs the release pinned in the workflow. A different local binary
