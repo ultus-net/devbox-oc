@@ -54,14 +54,19 @@ dropins="$(dropins_of cockpit.socket)"
 [ -n "$dropins" ] \
   || fail "no cockpit.socket drop-in: the shipped socket listens on 9090 on every interface"
 
-printf '%s\n' "$dropins" | grep -Eq '^[[:space:]]*ListenStream=[[:space:]]*$' \
+# A here-string, not `printf | grep`. Under `pipefail` a reader that exits
+# before printf finishes turns a match into SIGPIPE and reads as a failure.
+grep -Eq '^[[:space:]]*ListenStream=[[:space:]]*$' <<<"$dropins" \
   || fail "the cockpit.socket drop-in does not reset ListenStream, so the shipped 9090 listener stays open"
 
-printf '%s\n' "$dropins" | grep -Eq '^[[:space:]]*ListenStream=(127\.0\.0\.1|\[::1\]):9090[[:space:]]*$' \
+grep -Eq '^[[:space:]]*ListenStream=(127\.0\.0\.1|\[::1\]):9090[[:space:]]*$' <<<"$dropins" \
   || fail "the cockpit.socket drop-in does not add a loopback listener for 9090"
 
-reset_line="$(printf '%s\n' "$dropins" | grep -nE '^[[:space:]]*ListenStream=[[:space:]]*$' | head -1 | cut -d: -f1)"
-loop_line="$(printf '%s\n' "$dropins" | grep -nE '^[[:space:]]*ListenStream=(127\.0\.0\.1|\[::1\]):9090[[:space:]]*$' | head -1 | cut -d: -f1)"
+# -m1 lets grep stop on its own, so nothing downstream closes the pipe early.
+reset_line="$(grep -m1 -nE '^[[:space:]]*ListenStream=[[:space:]]*$' <<<"$dropins")"
+loop_line="$(grep -m1 -nE '^[[:space:]]*ListenStream=(127\.0\.0\.1|\[::1\]):9090[[:space:]]*$' <<<"$dropins")"
+reset_line="${reset_line%%:*}"
+loop_line="${loop_line%%:*}"
 [ "$reset_line" -lt "$loop_line" ] \
   || fail "the loopback ListenStream appears before the reset, so 9090 stays open"
 
@@ -94,16 +99,16 @@ fi
 # subcommands are not targets and are allowed. The approved set is the three
 # surfaces this repo publishes; each one is checked to proxy 127.0.0.1 only.
 serve_lines="$(sed 's/#.*//' "$tailnet" | grep -E 'tailscale[[:space:]]+serve' || true)"
-target_lines="$(printf '%s\n' "$serve_lines" \
-  | grep -vE 'tailscale[[:space:]]+serve[[:space:]]+(status|reset|drain|advertise|get-config|set-config)([[:space:]]|$)' \
-  || true)"
+readonly_sub='tailscale[[:space:]]+serve[[:space:]]+'
+readonly_sub+='(status|reset|drain|advertise|get-config|set-config)([[:space:]]|$)'
+target_lines="$(grep -vE "$readonly_sub" <<<"$serve_lines" || true)"
 approved='OC_TCP_PORT\|HERMES_DASH_TCP_PORT\|HERMES_API_TCP_PORT'
-stray_serve="$(printf '%s\n' "$target_lines" | grep -v "$approved" || true)"
+stray_serve="$(grep -v "$approved" <<<"$target_lines" || true)"
 [ -z "$stray_serve" ] \
   || fail "oc-tailnet serves a target other than an approved loopback port:
 $stray_serve"
 
-non_loopback="$(printf '%s\n' "$target_lines" | grep -v 'http://127\.0\.0\.1:' || true)"
+non_loopback="$(grep -v 'http://127\.0\.0\.1:' <<<"$target_lines" || true)"
 [ -z "$non_loopback" ] \
   || fail "oc-tailnet serves a target that is not loopback:
 $non_loopback"

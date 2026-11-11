@@ -58,7 +58,7 @@ grep -q '^Volume=/srv/hermes/data:/opt/data' "$q" \
 # Fail closed on a missing environment file, the same way OpenCode does.
 unit_section="$(awk '/^\[Unit\]/{on=1;next} /^\[/{on=0} on' "$q")"
 [ -n "$unit_section" ] || fail "hermes quadlet has no [Unit] section"
-printf '%s\n' "$unit_section" | grep -Eq '^Requires=.*hermes-env\.service' \
+grep -Eq '^Requires=.*hermes-env\.service' <<<"$unit_section" \
   || fail "hermes quadlet does not require hermes-env.service in its [Unit] section"
 
 container_section="$(awk '/^\[Container\]/{on=1;next} /^\[/{on=0} on' "$q")"
@@ -70,9 +70,8 @@ mapfile -t env_paths < <(printf '%s\n' "$container_section" | sed -n 's/^Environ
   || fail "hermes quadlet loads ${env_paths[0]}, but hermes-env writes /etc/hermes/env"
 
 # Every published port is loopback only. A bare 8642 binds every interface.
-if grep -E '^PublishPort=' "$q" | grep -vq '^PublishPort=127\.0\.0\.1:'; then
-  fail "a hermes port is not bound to loopback"
-fi
+bad_port="$(grep -E '^PublishPort=' "$q" | grep -v '^PublishPort=127\.0\.0\.1:' || true)"
+[ -z "$bad_port" ] || fail "a hermes port is not bound to loopback: $bad_port"
 grep -q '^PublishPort=127\.0\.0\.1:8642:8642$' "$q" || fail "gateway port is not published"
 grep -q '^PublishPort=127\.0\.0\.1:9119:9119$' "$q" || fail "dashboard port is not published"
 
@@ -97,7 +96,7 @@ grep -q '^Exec=gateway run$' "$q" || fail "hermes does not run the gateway serve
 
 install_section="$(awk '/^\[Install\]/{on=1;next} /^\[/{on=0} on' "$q")"
 [ -n "$install_section" ] || fail "hermes quadlet has no [Install] section"
-printf '%s\n' "$install_section" | grep -Eq '^WantedBy=default\.target$' \
+grep -Eq '^WantedBy=default\.target$' <<<"$install_section" \
   || fail "hermes quadlet is not wanted by default.target, so it will not start at boot"
 
 # The backup has to stop both SQLite stores and start both again afterwards.
