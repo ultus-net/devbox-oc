@@ -58,6 +58,23 @@ def executed(text):
     )
 
 
+def logical_lines(text):
+    # A trailing backslash continues a command onto the next line, so join those
+    # before matching. A per-line reader misses an install split after install.
+    lines, pending = [], ""
+    for line in executed(text).splitlines():
+        # Only a backslash in the last column continues the command. A trailing
+        # space escapes that space instead, so the next line runs on its own.
+        if line.endswith("\\"):
+            pending += line[:-1] + " "
+            continue
+        lines.append(pending + line)
+        pending = ""
+    if pending.strip():
+        lines.append(pending)
+    return lines
+
+
 body = executed(run)
 if "set -euo pipefail" not in body:
     fail("the shellcheck install does not fail fast")
@@ -71,6 +88,12 @@ for needed in (
     if needed not in body:
         fail("the shellcheck install is missing: " + needed)
 
+# Two limits stay, and both fail closed rather than open. The token checks read
+# text, so a checksum inside `if false` still passes; proving reachability needs
+# the step executed or its control flow parsed. CI's own `sha256sum -c` fails
+# loud, so that machinery buys nothing. The checksum match binds one spelling,
+# and a rewrite fails until this guard moves with it in the same commit, which is
+# the direction that keeps the pin checked.
 # The checksum has to be checked against the downloaded archive, by the pinned
 # variable, on a line that runs that command rather than one that just names it.
 checksum = re.search(
@@ -82,7 +105,7 @@ if checksum is None:
     fail("the shellcheck install does not check the pinned digest of the archive")
 
 for other in steps:
-    for line in executed(other.get("run") or "").splitlines():
+    for line in logical_lines(other.get("run") or ""):
         if re.search(r"apt(-get)?(\s+-\S+)*\s+install\b.*shellcheck", line):
             fail("a workflow step installs shellcheck with apt: " + line.strip())
 

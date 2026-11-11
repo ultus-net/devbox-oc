@@ -178,6 +178,14 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The CI shape guard only caught an apt-installed shellcheck when the command fit
+  on one line. `tests/ci_shape.sh` matched each physical line, so an
+  `apt-get install -y` split onto a second line with a backslash continuation
+  slipped past it. The apt check now joins backslash continuations and matches
+  the command as written. Two limits stay, and the guard records both: the token
+  checks read text, so a checksum inside `if false` still passes, and the
+  checksum match binds one spelling, so a rewrite fails until the guard moves
+  with it in the same commit.
 - The verify gate only worked from the repo root. `tests/verify.sh` resolved its
   suite paths, its script `find` and its Butane and shellcheck lookups from
   `$PWD`, so a run from anywhere else failed on paths that did not exist there.
