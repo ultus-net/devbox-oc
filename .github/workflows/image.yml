@@ -1,7 +1,9 @@
 name: image
 
-# Build the container image, smoke-gate it, then push it to GHCR. The smoke test
-# runs before any push, so a broken image never reaches the registry.
+# Build the container image, push an attested sha- digest, smoke-test that
+# digest, then promote :prod to it. The gate runs after the immutable sha- push
+# and before any :prod move, so a broken image can exist in the registry under
+# sha- only and never answers on the prod tag.
 #
 # The workflow cannot push to protected main. After promoting :prod it compares
 # the pushed digest with image/prod-digest.txt and, when the record is stale,
@@ -36,7 +38,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      digest: ${{ steps.promote.outputs.digest }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,14 +58,38 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=prod,enable={{is_default_branch}}
             type=sha,prefix=sha-
             type=ref,event=tag
 
-      # load: true keeps the image local so the smoke test runs before a push.
-      # Attestations are not set here on purpose: the docker exporter used by
-      # load does not carry them, so claiming provenance here would be false.
-      - name: Build
+      # The version comes from the Dockerfile, so the gate compares the built
+      # binary with the pin instead of accepting any semver. An empty value must
+      # fail here, not turn the pin off.
+      - name: Resolve the smoke pin
+        id: pin
+        run: |
+          set -euo pipefail
+          pin="$(sed -n 's/^ARG OC_VERSION=//p' image/Dockerfile)"
+          [ -n "$pin" ] || { echo "no OC_VERSION in image/Dockerfile" >&2; exit 1; }
+          echo "SMOKE_OC_VERSION=$pin" >> "$GITHUB_ENV"
+
+      - name: Build and push the attested digest
+        id: build
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+        uses: docker/build-push-action@v6
+        with:
+          context: image
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+
+      # The docker exporter used by load drops attestations silently, so this
+      # step does not claim them. This path also keeps a PR build local: it
+      # never logs in and never pushes.
+      - name: Build for the local smoke test
+        id: build-local
+        if: github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
         uses: docker/build-push-action@v6
         with:
           context: image
@@ -71,33 +97,44 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Smoke test
+      - name: Pull and smoke-test the published digest
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          ENGINE: docker
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE_REF"
+          ./image/smoke.sh "$IMAGE_REF"
+
+      - name: Smoke-test the local build
+        if: github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
         env:
           ENGINE: docker
         run: |
           set -euo pipefail
-          # The version comes from the Dockerfile, so the gate compares the built
-          # binary with the pin instead of accepting any semver. An empty value
-          # must fail here, not turn the pin off.
-          SMOKE_OC_VERSION="$(sed -n 's/^ARG OC_VERSION=//p' image/Dockerfile)"
-          [ -n "$SMOKE_OC_VERSION" ] || { echo "no OC_VERSION in image/Dockerfile" >&2; exit 1; }
-          export SMOKE_OC_VERSION
-          ./image/smoke.sh "$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -1)"
+          IMAGE_REF="$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -1)"
+          ./image/smoke.sh "$IMAGE_REF"
 
-      - name: Push
-        # A manual run on a feature branch builds and smoke-tests but never
-        # publishes, so an unreviewed commit cannot land in the registry.
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-        run: docker image push --all-tags "${IMAGE_NAME}"
-
-      - name: Read the promoted digest
-        id: promote
+      # The promoted tag must follow the digest the gate just tested. imagetools
+      # copies the source index, so the attestation child travels with it; the
+      # check fails the run if it does not.
+      - name: Promote prod to the tested digest
         if: github.ref == 'refs/heads/main'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
-          repo_digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE_NAME}:prod")"
-          # The record wants the bare digest; the RepoDigest form is repo@sha256:...
-          echo "digest=${repo_digest##*@}" >> "$GITHUB_OUTPUT"
+          docker buildx imagetools create -t "${IMAGE_NAME}:prod" "${IMAGE_NAME}@${DIGEST}"
+          manifest="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${IMAGE_NAME}:prod")"
+          case "$manifest" in
+            *attestation-manifest*) ;;
+            *) echo "promoted ${IMAGE_NAME}:prod carries no attestation manifest" >&2; exit 1 ;;
+          esac
+          {
+            echo "Promoted ${IMAGE_NAME}:prod to ${DIGEST}"
+            echo "The attested digest is the sha- tag; image/prod-digest.txt records the rollback point."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   record-digest:
     # A separate job, because GitHub has no step-level permissions: this is the

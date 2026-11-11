@@ -14,6 +14,14 @@ All notable changes to this project. One entry per landed change, newest first.
   `vm/tests/test_run_args.sh` stubs the push's `--digestfile`, runs the real
   path, and requires the exact `image: 10.0.2.2:5000/devbox@sha256:<digest>`
   line, so reverting to the tag fails the suite.
+- The image build pushes an attested `sha-` digest, smoke-tests that digest, and
+  promotes `prod` to it only after the gate, so provenance and an SBOM ride the
+  manifest. `docker/build-push-action` publishes with `provenance: mode=max` and
+  `sbom: true`, `docker buildx imagetools create` moves `:prod` onto the tested
+  digest, and the promotion fails the run when the promoted tag carries no
+  attestation child. Pull requests and manual runs still build and smoke locally
+  with no login and no push, and tag pushes publish `sha-` and the release tag
+  without touching `prod`.
 - The VM harness rehearses the container rollback. The procedure was documented
   but never executed, and moving the recorded digest to test it would need new
   media and a reinstall. `vm/fixture-registry.sh` now runs a Fedora registry
