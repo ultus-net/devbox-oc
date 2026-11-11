@@ -98,6 +98,12 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- The linter is pinned. The verify workflow installed shellcheck from the runner
+  image, so CI reported `SC2329` on a head the local 0.10.0 gate passed. The
+  workflow now downloads v0.11.0 and checks its sha256, `tests/verify.sh` fails
+  when the binary it finds is not that release, and `tests/ci_shape.sh` holds the
+  version, the checksum and the absence of the apt install. `.tools/shellcheck`
+  is the same release.
 - The toolbox base is the released Fedora stream, not a rawhide snapshot. The
   pin moves from the `fedora-toolbox` digest behind the `46` tag, whose config
   label reads `rawhide` and which was built 2026-10-23, to the digest behind `45`
