@@ -28,11 +28,17 @@ be failed. Join it from the console first.
 both containers as `healthy`. `findmnt` must name the data device, not the OS
 disk.
 
-`healthy` means the image's own health command answered, not that a binary ran.
-`devbox-health` requests `http://127.0.0.1:4096/api/info` and accepts `401`, so
-the server is up and asking for the password. It also accepts `200`, which means
-the API answered with authentication off. A container that boots but never serves
-stays unhealthy, and `podman auto-update` refuses to keep the new image.
+`healthy` means the health command the quadlet runs answered, not that a binary
+ran. For OpenCode, `devbox-health` requests `http://127.0.0.1:4096/api/info` and
+accepts `401`, so the server is up and asking for the password. It also accepts
+`200`, which means the API answered with authentication off. For Hermes,
+`hermes-health.sh` requests `http://127.0.0.1:8642/health` inside the container
+and requires a `200` whose body names the `hermes-agent` platform. A redirect or
+an error status is unhealthy even when its body looks healthy. The image ships no
+health check, so Ignition writes the script and the quadlet mounts it read-only
+at the same path. `/health/detailed` needs the Bearer key, so the probe uses the
+unauthenticated path. A container that boots but never serves stays unhealthy,
+and `podman auto-update` refuses to keep the new image.
 
 ## Remote web access
 
