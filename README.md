@@ -139,6 +139,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `tests/ci_shape.sh` | CI publishes to GHCR behind a smoke gate |
 | `tests/docs_complete.sh` | the install and recovery topics stay written down |
 | `vm/tests/test_overlay_merge.sh` | the VM overlay appends to the shipped Ignition, is idempotent, and never rewrites the base |
+| `vm/tests/test_fixture_registry.sh` | the rollback fixture stays on loopback, builds FROM the published image, and never pushes to GHCR |
 | `vm/tests/test_run_args.sh` | the VM boots the harness Ignition with two disks, no inbound port forward, and a disk plan it would write or reuse |
 | `vm/tests/test_disk_write.sh` | the disk write path creates both disks, renames them into place, cleans up a failed create, and reuses them without `--rebuild` |
 | `vm/tests/test_guest_helpers.sh` | every helper the guest check calls is defined, so an assertion cannot vanish |
@@ -169,9 +170,12 @@ mostly the rebase download.
 
 This is step 0 of `docs/install.md`, and the rehearsal for every host change.
 Nothing in `os/butane/`, `host/`, `image/` or a quadlet should reach the Mini
-without a passing run. Ignition is first-boot only, so use `--rebuild` after a
-change. `--console` attaches the serial console, and `--stop` powers the VM down.
-The full procedure, the checks, and the limits are in `docs/vm.md`.
+without a passing run. The default run also rehearses the container rollback
+against two local fixture tags, so the documented re-point path is executed, not
+assumed. Ignition is first-boot only, so use `--rebuild` after a change.
+`--console` attaches the serial console, `--stop` powers the VM down, and
+`--no-rollback` skips the fixture. The full procedure, the checks, and the
+limits are in `docs/vm.md`.
 
 ## What is not verified here
 

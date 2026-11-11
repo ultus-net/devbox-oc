@@ -11,6 +11,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 agent_url="${VM_AGENT_URL:-http://10.0.2.2:8123}"
 hostname="${VM_HOSTNAME:-devbox-vm}"
 image="${VM_IMAGE:-ghcr.io/ultus-net/devbox:prod}"
+registry="${VM_REGISTRY:-}"
+rollback_repo="${VM_ROLLBACK_REPO:-}"
 
 if [ "$#" -ne 2 ]; then
   echo "usage: overlay-ignition.sh BASE.ign OUT.ign" >&2
@@ -73,6 +75,16 @@ Label=data
 Format=ext4
 '
 
+# The rollback rehearsal pulls from a plain-HTTP registry on the host loopback,
+# reached at the qemu user-network address. Only the harness sets this.
+registry_conf=''
+if [ -n "$registry" ]; then
+  registry_conf="[[registry]]
+location = \"$registry\"
+insecure = true
+"
+fi
+
 staged="$out.staged.$$"
 trap 'rm -f "$staged"' EXIT
 
@@ -81,6 +93,9 @@ jq --rawfile check "$here/guest-check.sh" \
   --arg agent_url "$agent_url" \
   --arg hostname "$hostname" \
   --arg image "$image" \
+  --arg registry "$registry" \
+  --arg registry_conf "$registry_conf" \
+  --arg rollback_repo "$rollback_repo" \
   --arg serial "$serial_getty" \
   --arg unit "$check_unit" \
   --arg data_unit "$data_unit" \
@@ -91,6 +106,7 @@ jq --rawfile check "$here/guest-check.sh" \
              or . == "/etc/devbox-vm/devbox-vm-data"
              or . == "/etc/devbox-vm/agent.env"
              or . == "/etc/devbox-vm/repart/10-data.conf"
+             or . == "/etc/containers/registries.conf.d/000-devbox-vm-registry.conf"
              or . == "/etc/systemd/system/serial-getty@ttyS0.service.d/10-autologin.conf";
 
   .storage.files = ((.storage.files // []) | map(select(.path | own_file | not)))
@@ -120,14 +136,19 @@ jq --rawfile check "$here/guest-check.sh" \
         mode: 420,
         contents: {source: ("data:;base64," + (("AGENT_URL=" + $agent_url
           + "\nEXPECTED_HOSTNAME=" + $hostname
-          + "\nEXPECTED_IMAGE=" + $image + "\n") | @base64))}
+          + "\nEXPECTED_IMAGE=" + $image
+          + "\nROLLBACK_REPO=" + $rollback_repo + "\n") | @base64))}
       },
       {
         path: "/etc/systemd/system/serial-getty@ttyS0.service.d/10-autologin.conf",
         mode: 420,
         contents: {source: ("data:;base64," + ($serial | @base64))}
       }
-    ]
+    ] + (if $registry == "" then [] else [{
+        path: "/etc/containers/registries.conf.d/000-devbox-vm-registry.conf",
+        mode: 420,
+        contents: {source: ("data:;base64," + ($registry_conf | @base64))}
+      }] end)
   | .storage.links += [{
       path: "/etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service",
       target: "/usr/lib/systemd/system/serial-getty@ttyS0.service",
@@ -157,10 +178,11 @@ jq -e --slurpfile base "$base" '
   and (($base[0].systemd.units | map(.name)) - (.systemd.units | map(.name)) | length == 0)
 ' "$staged" >/dev/null || { echo "overlay dropped base entries" >&2; exit 1; }
 
-jq -e '
+jq -e --arg registry "$registry" '
   (.storage.files | map(select(.path == "/usr/local/sbin/devbox-vm-check")) | length == 1)
   and (.storage.files | map(select(.path == "/etc/devbox-vm/devbox-vm-data")) | length == 1)
   and (.storage.files | map(select(.path == "/etc/devbox-vm/agent.env")) | length == 1)
+  and (.storage.files | map(select(.path == "/etc/containers/registries.conf.d/000-devbox-vm-registry.conf")) | length == (if $registry == "" then 0 else 1 end))
   and (.storage.links | map(select(.path == "/etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service")) | length == 1)
   and (.systemd.units | map(select(.name == "devbox-vm-check.service")) | length == 1)
   and (.systemd.units | map(select(.name == "devbox-vm-data.service")) | length == 1)

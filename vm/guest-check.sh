@@ -53,6 +53,7 @@ fi
 AGENT_URL="${AGENT_URL:-http://10.0.2.2:8123}"
 EXPECTED_HOSTNAME="${EXPECTED_HOSTNAME:-devbox-vm}"
 EXPECTED_IMAGE="${EXPECTED_IMAGE:-ghcr.io/ultus-net/devbox:prod}"
+ROLLBACK_REPO="${ROLLBACK_REPO:-}"
 
 # The host starts the agent before qemu, but the guest's network is only up
 # after the boot completes. Wait for it rather than racing it.
@@ -257,9 +258,66 @@ done
 check_absent container-wildcard "0.0.0.0:" "$bindings"
 check_absent container-any-ip "[::]:" "$bindings"
 
-# 9. The invariant that survives every layer: nothing listens on a wildcard
-#    address. Run last so the containers are included. Name the owning process,
-#    because a wildcard listener here is either ours or an OS daemon to disable.
+# 9. Rehearse the rollback: a tag re-point moves the digest the host runs.
+#    Only the harness sets ROLLBACK_REPO, to a loopback registry it controls, so
+#    a normal run never touches it.
+if [ -n "$ROLLBACK_REPO" ]; then
+  # The auto-update timer pulls on its own schedule and would race the steps.
+  systemctl stop podman-auto-update.timer >/dev/null 2>&1 || true
+
+  # RepoDigests, not the image ID: the runbook proves a rollback by the digest
+  # the tag now names.
+  running_digests() {
+    local id
+    id="$(podman inspect --format '{{.Image}}' "$1" 2>/dev/null || true)"
+    [ -n "$id" ] || return 0
+    podman image inspect --format '{{join .RepoDigests " "}}' "$id" 2>/dev/null || true
+  }
+
+  newer="$ROLLBACK_REPO:newer"
+  older="$ROLLBACK_REPO:older"
+
+  before="$(running_digests opencode)"
+  if [ -n "$before" ]; then
+    systemctl restart opencode.service >/dev/null 2>&1
+    wait_health opencode
+    check rollback-restart-stable "$before" "$(running_digests opencode)"
+  else
+    fail rollback-running "no RepoDigests for the running opencode image"
+  fi
+
+  if podman pull "$older" >/dev/null 2>&1; then
+    pass rollback-pull-older "$older"
+  else
+    fail rollback-pull-older "$older"
+  fi
+
+  # Re-point the tag exactly as the runbook re-points :prod: tag the local image,
+  # push the tag, and keep the digest the push wrote.
+  if podman tag "$older" "$newer" >/dev/null 2>&1 \
+    && podman push --tls-verify=false --digestfile "$report_dir/rollback-digest" \
+      "$newer" >/dev/null 2>&1; then
+    pass rollback-repoint "$newer"
+  else
+    fail rollback-repoint "$newer"
+  fi
+  expected="$(cat "$report_dir/rollback-digest" 2>/dev/null || true)"
+
+  podman pull "$newer" >/dev/null 2>&1 || true
+  systemctl restart opencode.service >/dev/null 2>&1
+  wait_health opencode
+  after="$(running_digests opencode)"
+  check_contains rollback-digest "$expected" "$after"
+  if [ -z "$before" ] || [ "$after" = "$before" ]; then
+    fail rollback-changed "the digest did not move after the re-point: $after"
+  else
+    pass rollback-changed "$after"
+  fi
+fi
+
+# 10. The invariant that survives every layer: nothing listens on a wildcard
+#     address. Run last so the containers are included. Name the owning process,
+#     because a wildcard listener here is either ours or an OS daemon to disable.
 wildcards="$(ss -ltnp 2>/dev/null | awk 'NR > 1 && ($4 ~ /^0\.0\.0\.0:/ || $4 ~ /^\[::\]:/) { print $4, $6 }')"
 if [ -z "$wildcards" ]; then
   pass no-wildcard-listeners "none"

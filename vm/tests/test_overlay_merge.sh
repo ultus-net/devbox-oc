@@ -79,12 +79,40 @@ grep -qx 'EXPECTED_IMAGE=ghcr.io/ultus-net/devbox:prod' "$tmp/agent.env" \
   || fail "T2: agent.env does not name the published image"
 grep -qx 'EXPECTED_HOSTNAME=devbox-vm' "$tmp/agent.env" \
   || fail "T2: agent.env does not name the VM hostname"
+grep -qx 'ROLLBACK_REPO=' "$tmp/agent.env" \
+  || fail "T2: a normal run must not ask the guest for a rollback"
+
+# T2b: a rollback run carries the fixture registry and marks it insecure, since
+#      the guest reaches it over plain HTTP on the qemu user network.
+VM_REGISTRY="10.0.2.2:5000" VM_ROLLBACK_REPO="10.0.2.2:5000/devbox" \
+  "$vm/overlay-ignition.sh" "$tmp/base.json" "$tmp/registry.json" >/dev/null \
+  || fail "T2b: overlay merge with a fixture registry failed"
+conf="/etc/containers/registries.conf.d/000-devbox-vm-registry.conf"
+jq -e --arg p "$conf" '[.storage.files[] | select(.path == $p)] | length == 1' \
+  "$tmp/registry.json" >/dev/null || fail "T2b: the registry drop-in is missing"
+jq -r --arg p "$conf" '[.storage.files[] | select(.path == $p)][0].contents.source' \
+  "$tmp/registry.json" | sed 's/^data:;base64,//' | base64 -d > "$tmp/registry.conf" \
+  || fail "T2b: the registry drop-in is not a base64 data URL"
+grep -qx 'location = "10.0.2.2:5000"' "$tmp/registry.conf" \
+  || fail "T2b: the drop-in does not name the fixture host"
+grep -qx 'insecure = true' "$tmp/registry.conf" \
+  || fail "T2b: the drop-in does not mark the fixture host insecure"
+jq -r '[.storage.files[] | select(.path == "/etc/devbox-vm/agent.env")][0].contents.source' \
+  "$tmp/registry.json" | sed 's/^data:;base64,//' | base64 -d > "$tmp/registry.env"
+grep -qx 'ROLLBACK_REPO=10.0.2.2:5000/devbox' "$tmp/registry.env" \
+  || fail "T2b: agent.env does not carry the rollback repo"
+
 
 # T3: a second merge of its own output is byte-identical. A non-idempotent
 #     append would duplicate a path, which Ignition rejects at boot.
 "$vm/overlay-ignition.sh" "$tmp/out.json" "$tmp/out2.json" >/dev/null \
   || fail "T3: second merge failed"
 cmp -s "$tmp/out.json" "$tmp/out2.json" || fail "T3: merge is not idempotent"
+VM_REGISTRY="10.0.2.2:5000" VM_ROLLBACK_REPO="10.0.2.2:5000/devbox" \
+  "$vm/overlay-ignition.sh" "$tmp/registry.json" "$tmp/registry2.json" >/dev/null \
+  || fail "T3: second registry merge failed"
+cmp -s "$tmp/registry.json" "$tmp/registry2.json" \
+  || fail "T3: the registry merge is not idempotent"
 
 # T4: invalid input fails before an output file is published.
 echo '{}' > "$tmp/bad.json"

@@ -84,6 +84,7 @@ Useful flags:
 | `--rebuild` | discard the OS overlay and the data disk, then repeat first boot |
 | `--stop` | power down the running VM |
 | `--stop-after-check` | power down as soon as the report arrives |
+| `--no-rollback` | boot the published image and skip the rollback fixture |
 | `--timeout SECONDS` | how long to wait for the report (default 2400) |
 | `--dry-run` | print the disk plan (each step it would write or reuse) and the exact qemu command, then exit; touches nothing |
 | `--disks-only` | create or reuse the two disks, then exit before QEMU; the gate's disk write test uses it |
@@ -96,8 +97,30 @@ path that moves the base image.
 Environment overrides: `VM_CACHE`, `VM_MEM` (default 4096), `VM_CPUS` (4),
 `VM_DISK_SIZE` (32G), `VM_DATA_SIZE` (8G), `VM_AGENT_PORT` (8123), `VM_TIMEOUT`
 (2400), `VM_HOSTNAME` (`devbox-vm`), `VM_AGENT_URL` (baked into the Ignition),
-`VM_IMAGE` (default `ghcr.io/ultus-net/devbox:prod`), `VM_BASE_IMAGE` (a base
-image path, used to skip the download), `KVM_DEVICE`, `QEMU`.
+`VM_BASE_IMAGE` (a base image path, used to skip the download), `KVM_DEVICE`,
+`QEMU`. `VM_ROLLBACK` (default 1) toggles the fixture, `VM_REGISTRY_PORT`
+(default 5000) is where it listens on host loopback, and `VM_IMAGE` overrides
+the image and skips the fixture.
+
+## The rollback fixture
+
+The rollback procedure was never exercised. Re-pointing the real `:prod` tag to
+test it would be a production mutation, so the harness brings its own registry:
+
+1. `vm/fixture-registry.sh` builds a Fedora registry image (`docker-distribution`
+   from the Fedora repositories) and runs it on `127.0.0.1:5000`.
+2. It pulls `ghcr.io/ultus-net/devbox:prod`, then builds two tags FROM it with a
+   different fixture file and pushes them as `devbox:older` and `devbox:newer`.
+   The workload is the shipped image; only that file and its label differ.
+3. The guest reaches the registry at `10.0.2.2:5000`, the qemu user-network
+   address of host loopback, and the overlay marks that one host insecure.
+4. The guest pulls `:newer`, records the digest it runs, proves a bare restart
+   leaves it unchanged, re-points `:newer` at the older digest exactly as the
+   runbook re-points `:prod`, then pulls and restarts again.
+5. It fails unless the running digest moved to the digest the push wrote.
+
+The guest fixture and the registry both stay inside the throwaway run. Nothing
+pushes to GHCR, and the real `:prod` tag is never touched.
 
 ## Ignition runs once
 
@@ -120,7 +143,9 @@ The overlay only appends, and the merge is idempotent:
 - `devbox-vm-check.service`, which runs `guest-check.sh` on the first ucore
   boot and posts its report;
 - `devbox-vm-data.service`, which prepares the blank data disk before
-  `var-srv.mount`.
+  `var-srv.mount`;
+- a `registries.conf.d` drop-in that marks the fixture registry insecure, only
+  when the rollback run sets one.
 
 The last one is the one deliberate difference from production. The real install
 prepares the data disk once from the live media (step 4.4 of
@@ -151,8 +176,9 @@ The guest check asserts, in order:
 | fail closed | with no `secrets.env`, `/etc/opencode/env` does not exist, `oc-env.service` has failed, and OpenCode is inactive |
 | boot | systemd reports a boot target wanting both quadlet units, so a reboot brings them up |
 | secrets | after a dummy `secrets.env`, both env writers are active and their files are 0600 |
-| image | the published `ghcr.io/ultus-net/devbox:prod` pulls |
+| image | the fixture tag pulls from the loopback registry; a `--no-rollback` run pulls `ghcr.io/ultus-net/devbox:prod` |
 | workloads | `opencode` and `hermes` are healthy, 4096, 8642, and 9119 are bound on loopback, and a connection to each loopback port succeeds |
+| rollback | a bare restart leaves the digest unchanged; a re-point moves it to the digest the push wrote |
 | invariant | no TCP listener is on `0.0.0.0` or `[::]`; the scan names the owning process |
 
 The dummy secrets are `vm-dogfood-not-a-secret` values written inside the
@@ -165,10 +191,11 @@ quadlet's `[Install]` section when it writes the unit, so the check reads
 systemd's `WantedBy` property rather than a symlink under `/etc`. Without a boot
 target the box comes up serving nothing, so the check fails rather than noting it.
 
-`vm/tests/` holds the host-side guards: the overlay merge, the boot command and
-its disk plan, the disk write path, the guest helpers, the guest parsers, the
-report agent and verdict, and the data-disk script that must refuse the device
-backing `/`. The README suite table names what each one protects.
+`vm/tests/` holds the host-side guards: the overlay merge, the rollback
+fixture, the boot command and its disk plan, the disk write path, the guest
+helpers, the guest parsers, the report agent and verdict, and the data-disk
+script that must refuse the device backing `/`. The README suite table names
+what each one protects.
 
 ## The run that proved it
 
@@ -179,6 +206,10 @@ boot on Fedora CoreOS, the rebase to `ucore-minimal:stable`, the second boot,
 from `/var`, a dummy `secrets.env`, both containers healthy, and all three
 loopback ports. It reported one `SKIP`: `cockpit-loopback`, because the image
 ships no `cockpit.socket`.
+
+The same run rehearsed the rollback against the fixture registry and reported
+`PASS rollback-restart-stable`, `PASS rollback-pull-older`,
+`PASS rollback-repoint`, `PASS rollback-digest`, and `PASS rollback-changed`.
 
 `SUMMARY failures=0` is the line to look for. A `SKIP` is a conditional guard
 whose condition the image does not meet, and the report says which one.
@@ -200,6 +231,7 @@ These were found by running the harness, not by reading the config:
 | the version check rejected the real output | `opencode --version` prints `opencode v2.1.4`, and an anchored regex failed it | the regex accepts a semver token anywhere in the line |
 | `podman port` takes one container | passing two names made the second a port and printed nothing | the check calls it once per container |
 | the Hermes dashboard answers 404 to a bare GET | a reachability probe read 404 as down | the check opens a TCP connection, with a retry until the port binds |
+| the two fixture tags collapsed to one digest | the registry served `sha256:92755c…` for both `older` and `newer`; the label-only build came from cache | the fixture writes a real variant layer, and `test_fixture_registry.sh` holds it |
 
 ## How the host sees the result
 

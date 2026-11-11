@@ -11,6 +11,9 @@
 # repeat the whole path. --disks-only stops after the disk steps, so the gate can
 # exercise the write path without QEMU. VM_BASE_IMAGE replaces the pinned base
 # image with a path of your own; the disk test uses it to skip the download.
+# By default the run also seeds two local tags and rehearses the image rollback;
+# --no-rollback boots the published image instead. VM_IMAGE overrides the image
+# and skips the fixture.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -32,12 +35,15 @@ dry_run=0
 disks_only=0
 stop_after=0
 stop_only=0
+rollback="${VM_ROLLBACK:-1}"
+registry_port="${VM_REGISTRY_PORT:-5000}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --rebuild) rebuild=1 ;;
     --console) console=1 ;;
     --dry-run) dry_run=1 ;;
     --disks-only) disks_only=1 ;;
+    --no-rollback) rollback=0 ;;
     --stop-after-check) stop_after=1 ;;
     --stop) stop_only=1 ;;
     --timeout)
@@ -50,7 +56,7 @@ while [ "$#" -gt 0 ]; do
       esac
       timeout="$1"
       ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -160,6 +166,21 @@ create_data_disk() {
   [ "$dry_run" = 1 ] || mv "$dest" "$data"
 }
 
+# Rehearse the rollback against two local tags unless the operator brings an
+# image. The guest pulls the fixture, so no published tag is mutated, and the
+# fixture is built FROM the image the host runs.
+registry_up=0
+if [ "$rollback" = 1 ] && [ "$disks_only" = 0 ] && [ -z "${VM_IMAGE:-}" ]; then
+  registry_host="10.0.2.2:$registry_port"
+  export VM_REGISTRY="$registry_host"
+  export VM_ROLLBACK_REPO="$registry_host/devbox"
+  export VM_IMAGE="$registry_host/devbox:newer"
+  if [ "$dry_run" = 0 ]; then
+    "$here/fixture-registry.sh" up >&2
+    registry_up=1
+  fi
+fi
+
 if [ "$dry_run" = 1 ]; then
   base="${base_image:-$("$here/fetch-fcos.sh" --print-base)}"
 else
@@ -238,7 +259,17 @@ agent_cleanup() {
     rm -f "$agent_pid"
   fi
 }
-trap agent_cleanup EXIT
+
+# The fixture registry is only needed until the guest has reported. Stop it on
+# every exit path, or a failed run leaves it holding the port.
+# shellcheck disable=SC2317  # invoked by the EXIT trap
+cleanup() {
+  agent_cleanup
+  if [ "${registry_up:-0}" = 1 ]; then
+    "$here/fixture-registry.sh" down >&2 || true
+  fi
+}
+trap cleanup EXIT
 
 echo "booting the VM (serial log: $serial_log)" >&2
 "$qemu" "${qemu_args[@]}"
