@@ -84,7 +84,7 @@ Useful flags:
 
 | Flag | Effect |
 |---|---|
-| `--console` | boot, then attach the serial console in the foreground |
+| `--console` | boot, then attach the serial console in the foreground; skips the rollback fixture, because the run exits at detach |
 | `--rebuild` | discard the OS overlay and the data disk, then repeat first boot |
 | `--stop` | power down the running VM |
 | `--stop-after-check` | power down as soon as the report arrives |
@@ -250,10 +250,10 @@ harness binds `report-agent.py` to `127.0.0.1` only: there is no host port
 forward and no listener on the LAN. The guest posts its report, and the run
 script exits non-zero on any `FAIL` line or on a report that lacks the
 `SUMMARY failures=0` line the guest writes last, so a truncated post cannot read
-as a pass. A default run also requires all seven `PASS rollback-*` lines, so a
-run that silently skipped the rehearsal fails instead of passing. The report is
-also left at `.vm-cache/report.txt` and `/srv/devbox-vm-report.txt` inside the
-VM.
+as a pass. A run whose guest pulled the fixture image also requires all seven
+`PASS rollback-*` lines, so a run that silently skipped the rehearsal fails
+instead of passing. The report is also left at `.vm-cache/report.txt` and
+`/srv/devbox-vm-report.txt` inside the VM.
 
 If the check unit never runs, the harness times out and prints the last 40
 lines of `.vm-cache/serial.log`. The usual causes are a failed rebase

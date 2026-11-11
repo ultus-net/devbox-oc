@@ -48,10 +48,11 @@ if ! bash "$mutated" "$tmp/partial.txt" 2>/dev/null; then
   fail "mutation survived: the partial report was still rejected without the summary check"
 fi
 
-# A default run must not pass without the rollback rehearsal. A report that lost
-# the rollback lines is a silent regression, which is what #34 exists to stop.
+# A report that pulled the fixture image must carry the rollback checks. The
+# fixture host is the harness registry, so its pull says the rehearsal was
+# expected; a published-image report does not require it.
 cat > "$tmp/rollback.txt" <<'EOF'
-PASS booted-image: ucore-minimal
+PASS image-pull: 10.0.2.2:5000/devbox:newer
 PASS rollback-restart-stable: 10.0.2.2:5000/devbox@sha256:aaa
 PASS rollback-pull-older: 10.0.2.2:5000/devbox:older
 PASS rollback-repoint: 10.0.2.2:5000/devbox:newer
@@ -61,17 +62,30 @@ PASS rollback-changed: 10.0.2.2:5000/devbox@sha256:bbb
 PASS rollback-timer-restored: active
 SUMMARY failures=0
 EOF
-"$verdict" "$tmp/pass.txt" || fail "a clean report without --rollback was rejected"
-"$verdict" "$tmp/rollback.txt" --rollback || fail "a full rollback report was rejected"
-if "$verdict" "$tmp/pass.txt" --rollback 2>/dev/null; then
-  fail "a report with no rollback lines passed a --rollback verdict"
+cat > "$tmp/fixture-no-rollback.txt" <<'EOF'
+PASS image-pull: 10.0.2.2:5000/devbox:newer
+SUMMARY failures=0
+EOF
+cat > "$tmp/published.txt" <<'EOF'
+PASS image-pull: ghcr.io/ultus-net/devbox:prod
+SUMMARY failures=0
+EOF
+"$verdict" "$tmp/rollback.txt" || fail "a full fixture report was rejected"
+"$verdict" "$tmp/published.txt" || fail "a published-image report without rollback lines was rejected"
+if "$verdict" "$tmp/fixture-no-rollback.txt" 2>/dev/null; then
+  fail "a fixture report with no rollback lines was accepted"
+fi
+grep -v '^PASS rollback-timer-restored:' "$tmp/rollback.txt" > "$tmp/rollback-missing.txt"
+if "$verdict" "$tmp/rollback-missing.txt" 2>/dev/null; then
+  fail "a fixture report missing one rollback line was accepted"
 fi
 
-# Teeth: skip the rollback requirement and the rollback-less report must pass.
+# Teeth: skip the fixture requirement and the rollback-less fixture report must
+# pass, so the assertion above cannot be satisfied by an unrelated check.
 mutated="$tmp/verdict-norollback.sh"
-sed 's|require_rollback" = 1|require_rollback" = 2|' "$verdict" > "$mutated"
+sed 's|image-pull: 10|image-pull: 99|' "$verdict" > "$mutated"
 cmp -s "$verdict" "$mutated" && fail "rollback mutation did not land"
-if ! bash "$mutated" "$tmp/pass.txt" --rollback 2>/dev/null; then
+if ! bash "$mutated" "$tmp/fixture-no-rollback.txt" 2>/dev/null; then
   fail "mutation survived: the rollback requirement was not enforced"
 fi
 

@@ -144,6 +144,16 @@ if printf '%s\n' "$override" | grep -q '10\.0\.2\.2'; then
   fail "T7c: an explicit VM_IMAGE still starts the fixture"
 fi
 
+# T7d: --console exits at detach, so the cleanup trap would take the registry
+#      down before the guest reaches the rehearsal. That run skips the fixture.
+console_image="$(KVM_DEVICE=/nonexistent "$vm/run-vm.sh" --dry-run --console 2>&1 >/dev/null)" \
+  || fail "T7d: --console --dry-run failed"
+printf '%s\n' "$console_image" | grep -q '^image: ghcr\.io/ultus-net/devbox:prod' \
+  || fail "T7d: --console does not name the published image"
+if printf '%s\n' "$console_image" | grep -q '10\.0\.2\.2'; then
+  fail "T7d: --console still points at the fixture registry"
+fi
+
 # T8: the default run needs a working podman for the fixture, and must refuse
 #     before it touches a disk when podman is unusable. The stub stands in for a
 #     host without one, which is every CI runner.

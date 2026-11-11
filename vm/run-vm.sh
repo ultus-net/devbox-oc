@@ -113,9 +113,11 @@ fi
 
 # One decision, three readers: the preflight, the dry-run report and the fixture
 # start. A rollback run against the published tag would be a production mutation,
-# so the fixture runs unless the operator brings an image.
+# so the fixture runs unless the operator brings an image. A console attach skips
+# it: that run exits at detach, before the guest reaches the rehearsal.
 fixture=0
-if [ "$rollback" = 1 ] && [ "$disks_only" = 0 ] && [ -z "${VM_IMAGE:-}" ]; then
+if [ "$rollback" = 1 ] && [ "$console" = 0 ] && [ "$disks_only" = 0 ] \
+  && [ -z "${VM_IMAGE:-}" ]; then
   fixture=1
 fi
 
@@ -334,11 +336,7 @@ done
 agent_cleanup
 
 rc=0
-verdict_args=()
-if [ "$fixture" = 1 ]; then
-  verdict_args=(--rollback)
-fi
-"$here/report-verdict.sh" "$report" "${verdict_args[@]}" || rc=1
+"$here/report-verdict.sh" "$report" || rc=1
 
 echo
 cat "$report"
