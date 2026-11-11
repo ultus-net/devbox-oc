@@ -62,7 +62,8 @@ digest, so `:prod` moving in the registry cannot change what the box runs, and a
 new build lands by a reviewed commit and a rebuilt Ignition. The Hermes waiver
 image still follows its upstream tag: `podman-auto-update.timer` restarts it when
 that tag moves, and keeps the new image only if the health probe passes. That
-follow is an accepted risk, reviewed on 2026-11-11 (decision 14).
+follow is an accepted risk, reviewed on 2026-11-11 and due again by 2027-02-11
+(decision 14).
 
 ## Secrets
 
