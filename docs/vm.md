@@ -108,9 +108,9 @@ the image and skips the fixture.
 
 ## The rollback fixture
 
-The rollback procedure was documented but never run. Moving the recorded digest
-to test it would need new media and a reinstall, so the harness brings its own
-registry:
+The rollback procedure was documented but had no rehearsal. Moving the recorded
+digest to test it would need new media and a reinstall, so the harness brings its
+own registry:
 
 1. `vm/fixture-registry.sh` builds a Fedora registry image (`docker-distribution`
    from the Fedora repositories) and runs it on `127.0.0.1:5000`.
