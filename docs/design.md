@@ -109,14 +109,17 @@ design rejected and this one keeps rejected.
    by label. On the 800 G4 the second M.2 slot needs no caddy; on either model a
    2.5 inch SATA SSD in a caddy works. If Ignition owned the disk it
    would re-run on a reinstall and wipe the data, which is the failure this
-   invariant exists to prevent.
+   invariant exists to prevent. A hypervisor host satisfies this with a separate
+   volume rather than a second device, which weakens the guarantee to the
+   hypervisor's; decision 16 records the difference.
 
 6. **Always on. No idle deallocation and no scheduled stop.** The box is in a
    server room and the marginal cost is electricity. Suspend and hibernate are
    masked, and logind sets `IdleAction=ignore`. An external UPS bridges a short
    outage and the firmware powers the box back on after a long one. This replaces
    the Azure idle gate, the Logic App wake path, and the `oc` wrapper that called
-   `az vm start`.
+   `az vm start`. Under a hypervisor, decision 16 moves both the idle policy
+   and the power-on behaviour to the host.
 
 7. **Secrets never enter git or the image.** The OpenCode password, the Hermes
    gateway key, the model provider key and the restic credentials live in
@@ -231,6 +234,20 @@ design rejected and this one keeps rejected.
     committed placeholder artifact. The shipped media is built by
     `os/butane/build.sh`, which never sets it. The pin itself is what
     `os/butane/tests/test_image_pin.sh` asserts.
+
+16. **A hypervisor-hosted guest is a recorded option, not the shipped target.**
+    The Mini is already owned, and the bare-metal path is the one the harness
+    rehearses. A future move may run the same Ignition-built guest under a
+    hypervisor on other hardware, and `docs/vm-host.md` records what that keeps,
+    what it changes, and what has to be added first. The move earns its cost only
+    at spare capacity on a host that already runs 24/7 behind a UPS. Two
+    decisions weaken under it: decision 5 becomes a separate volume on storage
+    the hypervisor owns, and decision 6's power policy moves to the host, so
+    neither may be assumed unchanged. Decision 9 holds in full, because
+    `tailscale serve` stays inside the guest. A second tailnet identity on the
+    host, or a proxy through it, would break the no-public-listener proof rather
+    than extend it. The option stays unverified until a guest boots on the real
+    hypervisor.
 
 ## Secrets
 

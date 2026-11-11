@@ -6,6 +6,11 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- `docs/vm-host.md` records a hypervisor-hosted guest as an option, not a
+  shipped target: what the move keeps, what it changes (the data-disk
+  guarantee, power policy, the console door, and Ignition delivery), what has to
+  be added before it can be attempted, and the conditions that would justify the
+  spend. Decision 16 records the option, and decisions 5 and 6 point at it.
 - The runbook shows how to read a published image's provenance and SBOM from its
   digest, and records that the attestations are unsigned: they support an
   incident review, not a trust decision (#24).

@@ -10,7 +10,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 for f in README.md CHANGELOG.md docs/design.md docs/install.md docs/runbook.md \
-  docs/web-access.md docs/vm.md; do
+  docs/web-access.md docs/vm.md docs/vm-host.md; do
   [ -s "$root/$f" ] || fail "missing or empty: $f"
 done
 
@@ -140,5 +140,18 @@ for topic in "imagetools inspect" "unsigned"; do
   grep -Fqi -- "$topic" "$runbook" \
     || fail "runbook does not cover the image attestations: $topic"
 done
+
+# The hypervisor-hosted option only earns its place by naming what a move
+# breaks, so the page must stay linked and keep the four load-bearing rows.
+host_doc="$root/docs/vm-host.md"
+grep -Fq "docs/vm-host.md" "$root/README.md" \
+  || fail "README does not link the vm-host doc"
+for topic in "| Data disk (decision 5) |" "| Power (decision 6) |" \
+  "| Console (decision 13) |" "| Snapshots |"; do
+  grep -Fq -- "$topic" "$host_doc" \
+    || fail "vm-host doc dropped the row: $topic"
+done
+grep -Fq "A hypervisor-hosted guest is a recorded option" "$root/docs/design.md" \
+  || fail "design doc does not record the hypervisor-hosted option"
 
 echo "docs complete"
