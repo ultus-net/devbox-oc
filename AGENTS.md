@@ -69,7 +69,9 @@ One gate runs everything:
 ```
 
 It must end with `VERIFY: all suites pass`. It is a real gate, not a formality:
-it fails rather than skips when `shellcheck` or PyYAML is missing.
+it fails rather than skips when `shellcheck` or PyYAML is missing, and it fails
+when the local shellcheck is not the release pinned in
+`.github/workflows/verify.yml`.
 
 `./vm/run-vm.sh --rebuild` is the end-to-end rehearsal, and it runs before bare
 metal rather than after. The same Ignition, the ucore rebase, the data-disk

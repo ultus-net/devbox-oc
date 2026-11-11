@@ -21,8 +21,23 @@ jobs:
       - name: Install PyYAML
         run: python3 -m pip install --disable-pip-version-check pyyaml
 
+      # Pinned by version and sha256, like Butane. An apt shellcheck moves with
+      # the runner image, so CI can fail a head the local gate passed.
       - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          SHELLCHECK_SHA256: b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6
+        run: |
+          set -euo pipefail
+          url="https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.gz"
+          curl -fsSL -o /tmp/shellcheck.tar.gz "$url"
+          echo "${SHELLCHECK_SHA256}  /tmp/shellcheck.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/shellcheck.tar.gz -C /tmp
+          sudo install -m 0755 "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
+          # The gate compares this binary with the pin, so prove the right one
+          # resolved on PATH rather than an apt copy earlier in the search order.
+          [ "$(shellcheck --version | awk '/^version:/ {print $2}')" = "${SHELLCHECK_VERSION#v}" ]
 
       # Pinned by version and sha256. The artifact reproducibility check reads
       # BUTANE, and without it that check silently skips.

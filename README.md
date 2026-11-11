@@ -102,6 +102,11 @@ Everything the repo asserts runs through one gate:
 It runs every suite and then `shellcheck` over all shell scripts. It ends with
 `VERIFY: all suites pass`.
 
+The linter is pinned: the version in `.github/workflows/verify.yml` is the one
+CI installs, and the gate fails when the local binary differs rather than linting
+with a version that would give a different answer. Put the pinned release at
+`.tools/shellcheck` or on `PATH`.
+
 Set `BUTANE` when you change anything under `os/butane/`, or the artifact
 reproducibility check skips:
 

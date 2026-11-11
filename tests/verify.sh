@@ -100,8 +100,21 @@ elif [ -z "$shellcheck_bin" ]; then
     rc=1
   fi
 else
-  printf '== shellcheck (%s files)\n' "${#scripts[@]}"
-  if "$shellcheck_bin" "${scripts[@]}"; then
+  pinned="$(sed -n 's/^ *SHELLCHECK_VERSION: *//p' .github/workflows/verify.yml | head -1)"
+  running="$("$shellcheck_bin" --version | sed -n 's/^version: //p')"
+  printf '== shellcheck (%s files, %s)\n' "${#scripts[@]}" "${running:-unknown}"
+  # CI installs the release pinned in the workflow. A different local binary
+  # reports different warnings, so a green local run can still fail CI.
+  if [ -z "$pinned" ]; then
+    printf '   FAILED: .github/workflows/verify.yml pins no SHELLCHECK_VERSION\n'
+    printf '   add the env pin so the gate has one defined linter version\n'
+    rc=1
+  elif [ "$running" != "${pinned#v}" ]; then
+    printf '   FAILED: %s reports %s, the pin is %s\n' \
+      "$shellcheck_bin" "${running:-nothing}" "$pinned"
+    printf '   install the pinned release at .tools/shellcheck or on PATH\n'
+    rc=1
+  elif "$shellcheck_bin" "${scripts[@]}"; then
     printf '   ok\n'
   else
     printf '   FAILED\n'

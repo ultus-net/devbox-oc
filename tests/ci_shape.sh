@@ -18,6 +18,24 @@ grep -q './tests/verify.sh' "$verify" || fail "verify workflow does not run the 
 grep -q 'butane' "$verify" || fail "verify workflow does not install Butane"
 grep -q 'shellcheck' "$verify" || fail "verify workflow does not install shellcheck"
 
+# The linter is pinned by version and sha256, like Butane. A package from the
+# runner image moves with that image, so the same commit can change verdict.
+grep -Eq 'SHELLCHECK_VERSION: v[0-9]+\.[0-9]+\.[0-9]+' "$verify" \
+  || fail "verify workflow does not pin SHELLCHECK_VERSION"
+grep -Eq 'SHELLCHECK_SHA256: [0-9a-f]{64}' "$verify" \
+  || fail "verify workflow does not pin SHELLCHECK_SHA256"
+grep -qF "shellcheck/releases/download/\${SHELLCHECK_VERSION}" "$verify" \
+  || fail "verify workflow does not download the pinned shellcheck release"
+grep -qF 'SHELLCHECK_SHA256}  /tmp/shellcheck.tar.gz' "$verify" \
+  || fail "verify workflow does not verify the shellcheck checksum"
+grep -qF 'SHELLCHECK_VERSION#v' "$verify" \
+  || fail "verify workflow does not assert the pinned version on PATH"
+if grep -Eq 'apt-get install -y shellcheck' "$verify"; then
+  fail "verify workflow installs shellcheck from the runner image"
+fi
+grep -q 'SHELLCHECK_VERSION' "$root/tests/verify.sh" \
+  || fail "the gate does not read the shellcheck pin"
+
 grep -q 'ghcr.io' "$image" || fail "image workflow does not push to GHCR"
 grep -q 'IMAGE_NAME: ghcr.io/' "$image" \
   || fail "the image name does not resolve to a GHCR repository"
