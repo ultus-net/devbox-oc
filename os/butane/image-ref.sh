@@ -14,8 +14,9 @@
 #   <repo>@sha256:..  that digest, when it is the recorded one
 #   <repo>:<tag>      refused, because a tag can move after the media is written
 #
-# ALLOW_UNPINNED_IMAGE=1 accepts a tag or an unrecorded digest. Only the VM
-# harness sets it, for the local fixture tags; a real build never does.
+# ALLOW_UNPINNED_IMAGE=1 accepts a tag or an unrecorded digest. The VM harness
+# sets it for the fixture image and build-placeholder.sh sets it for the
+# non-bootable artifact; a real build never does.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 record="${PROD_DIGEST_FILE:-$here/../../image/prod-digest.txt}"
@@ -27,6 +28,7 @@ ref="${1:-$default_repo}"
 [ -n "$ref" ] || fail "the image reference is empty"
 case "$ref" in
   *[[:space:]]*) fail "the image reference holds whitespace: $ref" ;;
+  */) fail "the image reference ends in a slash: $ref" ;;
 esac
 
 # The last path segment carries the tag or digest; the registry host and its
@@ -52,6 +54,7 @@ fi
 
 case "$form" in
   digest)
+    [ -n "${ref%%@*}" ] || fail "the image reference names no repository: $ref"
     printf '%s' "${digest#sha256:}" | grep -qE '^[0-9a-f]{64}$' \
       || fail "the image digest is not 64 hex characters: $ref"
     if [ -z "$recorded" ]; then

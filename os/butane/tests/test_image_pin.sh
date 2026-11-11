@@ -93,9 +93,30 @@ case "$err" in
   *) fail "a malformed digest line was not ignored: $err" ;;
 esac
 
+printf 'sha256:%s\n' "$digest" > "$record"
+
+# A trailing slash would emit repo/@sha256:<digest>, which names no repository.
+if err="$("$pin" "$repo/" 2>&1 >/dev/null)"; then
+  fail "a trailing-slash reference was accepted"
+fi
+case "$err" in
+  *"ends in a slash"*) ;;
+  *) fail "the trailing-slash refusal does not name the cause: $err" ;;
+esac
+
+# A digest with no repository would emit @sha256:<digest>, which podman cannot
+# pull. Match on the refusal, not on the shape, so a later parser still has to
+# say why.
+if err="$("$pin" "@sha256:$digest" 2>&1 >/dev/null)"; then
+  fail "a digest with no repository was accepted"
+fi
+case "$err" in
+  *"names no repository"*) ;;
+  *) fail "the empty-repository refusal does not name the cause: $err" ;;
+esac
+
 # build.sh resolves the reference before it compiles, so a tag fails without
 # Butane and without touching the committed artifact.
-printf 'sha256:%s\n' "$digest" > "$record"
 if err="$(SSH_PUBKEY=x IMAGE="$repo:prod" BUTANE=/bin/false \
   "$build" "$tmp/ucore.ign" 2>&1)"; then
   fail "build.sh accepted a tag image"
