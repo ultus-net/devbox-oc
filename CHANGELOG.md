@@ -101,6 +101,13 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- Following the Hermes tag is recorded as an accepted risk.
+  `podman auto-update` pulls whatever
+  `docker.io/nousresearch/hermes-agent:latest` serves, unattended and as root,
+  and only the health probe rejects a bad image. Decision 14 now says so with a
+  review date (2027-02-11), and the README and the runbook repeat it. A digest
+  pin was rejected because it would freeze another team's releases until a
+  reviewed commit, and this image is consumed as published.
 - The container image is pinned by digest. The media baked
   `ghcr.io/ultus-net/devbox:prod`, so whatever GHCR served under that tag when
   the host first started was what it ran, and `AutoUpdate=registry` kept pulling
