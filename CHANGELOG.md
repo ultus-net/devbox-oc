@@ -138,6 +138,21 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Changed
 
+- `docs/install.md` is a checkable procedure. Every numbered step now gives the
+  exact command, the output that means success, and the recovery when it fails.
+  The destructive data-disk step no longer carries a `REPLACE_ME` placeholder
+  into the command: the operator sets both by-id paths first, and the script
+  refuses a placeholder, a partition, or the same device for both roles. The
+  data disk is prepared with the `systemd-repart` definition the VM harness runs
+  (`vm/guest-data.sh`), after a no-write preview. It adds `--empty=force` so a
+  first install replaces a stale table, and the page states that divergence. The
+  media step verifies the
+  SHA-256, the boot step names the HP keys and the Secure Boot block, the
+  Ignition file is staged over USB or HTTP and checked by hash, and the finish
+  checks are a pass/fail table. The runbook's data-disk replacement points at
+  that one procedure instead of restating it. `tests/docs_complete.sh` now fails
+  a numbered step that loses its Expect or If it fails line, and both failure
+  paths were exercised before the commit.
 - The gap list says what the first attested publish produced when read by hand:
   an index with an `attestation-manifest` child, SLSA provenance naming the
   builder run and the Fedora toolbox base digest, and an SPDX 2.3 SBOM with 456

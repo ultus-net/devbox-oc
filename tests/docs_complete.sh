@@ -44,6 +44,29 @@ grep -q "Do not run install step 4.4" "$root/docs/runbook.md" \
 grep -q "First install only" "$root/docs/install.md" \
   || fail "install doc does not mark data-disk preparation as first-install only"
 
+# A procedure nobody has run before cannot rely on the reader to infer success.
+# Every numbered step carries a check and a recovery, and a step that loses
+# either fails here rather than on the Mini. A numbered section with numbered
+# subsections is a container, so the substeps carry the pair.
+awk '
+  /^## [0-9]/ { n++; cur = n; lvl[n] = 2; hd[n] = $0; parent = n; next }
+  /^### [0-9]/ { n++; cur = n; lvl[n] = 3; hd[n] = $0; child[parent]++; next }
+  /^## / { cur = 0; parent = 0; next }
+  /^\*\*Expect:\*\*/ { if (cur) saw_expect[cur] = 1 }
+  /^\*\*If it fails:\*\*/ { if (cur) saw_fail[cur] = 1 }
+  END {
+    bad = 0
+    for (i = 1; i <= n; i++) {
+      if (lvl[i] == 2 && child[i] > 0) continue
+      if (!saw_expect[i] || !saw_fail[i]) {
+        printf "install doc step lacks Expect or If it fails: %s\n", hd[i] > "/dev/stderr"
+        bad = 1
+      }
+    }
+    exit bad
+  }
+' "$root/docs/install.md" || fail "an install step does not say what success looks like"
+
 # The only shell path is Tailscale SSH. The docs must say sshd is masked, or an
 # operator will look for it and think the box is broken.
 grep -riq "sshd is masked\|masked" "$root/docs/design.md" \
