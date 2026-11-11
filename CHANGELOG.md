@@ -183,11 +183,10 @@ All notable changes to this project. One entry per landed change, newest first.
   matched each physical line, so an `apt-get install -y` split onto a second line
   with a backslash continuation slipped past it, and a checksum inside
   `if false; then ... fi` passed as though it ran. The guard now joins backslash
-  continuations and compares the `Install shellcheck` step to the pinned
-  sequence, so a branch, a chain, an early `exit`, a redefined command or an
-  extra line fails until that list moves with it in the same commit. A text
-  reader still cannot prove a command runs, and the guard says so beside the
-  list; CI runs the step on every pull request.
+  continuations, compares the `Install shellcheck` step to the pinned command
+  sequence, and runs that step against stubs to record the calls it makes, so a
+  branch, a redefinition, an early `exit` or a rewritten command fails. A call
+  the stubs do not record cannot hide behind matching text.
 - The verify gate only worked from the repo root. `tests/verify.sh` resolved its
   suite paths, its script `find` and its Butane and shellcheck lookups from
   `$PWD`, so a run from anywhere else failed on paths that did not exist there.

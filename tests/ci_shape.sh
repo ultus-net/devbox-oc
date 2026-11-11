@@ -23,8 +23,11 @@ grep -q 'shellcheck' "$verify" || fail "verify workflow does not install shellch
 # Parse the workflow: a grep for the pin still passes when the line is
 # commented out, which is how a disabled checksum would ship.
 python3 - "$verify" "$root/tests/verify.sh" <<'PY'
+import os
 import re
+import subprocess
 import sys
+import tempfile
 
 import yaml
 
@@ -77,11 +80,8 @@ def logical_lines(text):
 
 body = executed(run)
 
-# The install step is a fixed sequence, so compare it to that sequence instead
-# of blocklisting constructs. A text reader cannot prove a command runs, and any
-# extra line can shadow a command or skip the checksum, so an unlisted line
-# fails here until this list moves with it in the same commit. Proving execution
-# needs the step run, which CI does on every pull request.
+# The install step has to be the pinned command sequence, so an extra line, a
+# reorder or a rewrite fails until this list moves with it in the same commit.
 PINNED = (
     r"set -euo pipefail",
     r'url="https://github\.com/koalaman/shellcheck/releases/download/'
@@ -105,7 +105,72 @@ if len(lines) != len(PINNED):
     )
 for number, (line, pattern) in enumerate(zip(lines, PINNED), start=1):
     if not re.fullmatch(pattern, line):
-        fail("the shellcheck install line %d is not the pinned command: %s" % (number, line))
+        fail(
+            "the shellcheck install line %d is not the pinned command: %s"
+            % (number, line)
+        )
+
+# Text that matches still proves nothing ran, so run the step against stubs and
+# compare the calls it made. A branch, a redefinition or a PATH prefix either
+# fails the step or skips a call. The body is repo-controlled, like the suites.
+STUBS = {
+    "curl": 'printf "curl %s\\n" "$*" >> "$STUB_LOG"',
+    "sha256sum": 'cat > /dev/null\nprintf "sha256sum %s\\n" "$*" >> "$STUB_LOG"',
+    "tar": 'printf "tar %s\\n" "$*" >> "$STUB_LOG"',
+    "install": 'printf "install %s\\n" "$*" >> "$STUB_LOG"',
+    "shellcheck": 'printf "shellcheck %s\\n" "$*" >> "$STUB_LOG"\n'
+    'printf "version: %s\\n" "${SHELLCHECK_VERSION#v}"',
+    "sudo": 'exec "$@"',
+}
+archive = (
+    "https://github.com/koalaman/shellcheck/releases/download/"
+    + version
+    + "/shellcheck-"
+    + version
+    + ".linux.x86_64.tar.gz"
+)
+expected = [
+    "curl -fsSL -o /tmp/shellcheck.tar.gz " + archive,
+    "sha256sum -c -",
+    "tar -xzf /tmp/shellcheck.tar.gz -C /tmp",
+    "install -m 0755 /tmp/shellcheck-"
+    + version
+    + "/shellcheck /usr/local/bin/shellcheck",
+    "shellcheck --version",
+    "shellcheck --version",
+]
+with tempfile.TemporaryDirectory() as stubs:
+    for name, text in STUBS.items():
+        path = os.path.join(stubs, name)
+        with open(path, "w") as handle:
+            handle.write("#!/bin/sh\n" + text + "\n")
+        os.chmod(path, 0o755)
+    log = os.path.join(stubs, "calls.log")
+    open(log, "w").close()
+    witness = {
+        "PATH": stubs + ":" + os.environ.get("PATH", ""),
+        "HOME": stubs,
+        "SHELLCHECK_VERSION": version,
+        "SHELLCHECK_SHA256": env.get("SHELLCHECK_SHA256", ""),
+        "STUB_LOG": log,
+    }
+    result = subprocess.run(
+        ["bash", "-c", body],
+        env=witness,
+        cwd=stubs,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        fail(
+            "the shellcheck install failed against stubs: "
+            + (result.stderr.strip() or "no output")
+        )
+    calls = open(log).read().splitlines()
+
+if calls != expected:
+    fail("the shellcheck install called %r, the pin expects %r" % (calls, expected))
 
 for other in steps:
     for line in logical_lines(other.get("run") or ""):
