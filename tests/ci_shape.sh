@@ -89,18 +89,17 @@ for needed in (
         fail("the shellcheck install is missing: " + needed)
 
 # A check can match this text and still never run, so the install step has to
-# stay straight-line shell. A branch, an `&&` chain or a function nobody calls
-# fails here rather than passing as text that is never executed.
+# stay straight-line shell. A branch, an `&&` chain, an `exit` before the work or
+# a function nobody calls fails here rather than passing as text that is never
+# executed. Quoted text is checked too, because `"$(...)"` still runs.
 CONTROL = re.compile(
     r"(^|[\s;|&()])(if|then|elif|else|fi|for|while|until|do|done|case|esac"
-    r"|select|function|eval)(?=$|[\s;|&()])"
+    r"|select|function|eval|exit|return)(?=$|[\s;|&()])"
 )
 for line in logical_lines(body):
-    # Operators inside quotes are data, not control flow.
-    bare = re.sub(r"'[^']*'|\"(\\.|[^\"\\])*\"", "", line)
-    if CONTROL.search(bare):
+    if CONTROL.search(line):
         fail("the shellcheck install is not straight-line shell: " + line.strip())
-    if re.search(r"&&|\|\||;|(?<![&>])&(?![&])", bare):
+    if re.search(r"&&|\|\||;|(?<![&>])&(?![&])", line):
         fail("the shellcheck install chains commands: " + line.strip())
 
 # The checksum match binds one spelling, so a rewrite fails until this guard
