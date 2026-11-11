@@ -141,13 +141,14 @@ All notable changes to this project. One entry per landed change, newest first.
   writes `host/bin/hermes-health.sh` to `/usr/local/bin`, and the quadlet mounts
   that one file read-only at the same path. The probe requests
   `http://127.0.0.1:8642/health` inside the container and requires a `200` whose
-  body names the `hermes-agent` platform; `/health/detailed` needs the Bearer key,
-  so the unauthenticated path is the probe. `host/tests/test_hermes_health.sh`
-  runs the script against a real loopback server and rejects a `401`, a foreign
-  body, and a refused port. `host/tests/test_quadlet_health.sh` now covers both
-  quadlets and ties each command to how its script is installed, and
-  `host/tests/test_hermes_quadlet.sh` allows only the read-only same-path mount
-  beyond the `/srv` state.
+  body names the `hermes-agent` platform; a redirect or error status fails even
+  with a healthy-looking body, and `/health/detailed` needs the Bearer key, so the
+  unauthenticated path is the probe. `host/tests/test_hermes_health.sh` runs the
+  script against a real loopback server and rejects a `302`, a `401`, a `500`, a
+  body naming another platform, and a refused port.
+  `host/tests/test_quadlet_health.sh` now covers both quadlets and ties each
+  command to how its script is installed, and `host/tests/test_hermes_quadlet.sh`
+  allows only the read-only same-path mount beyond the `/srv` state.
 - The digest repair path could not succeed. The workflow token is not permitted
   to open a pull request, so every main build pushed a `chore/prod-digest` branch
   and then failed at `gh pr create`, and the open-PR guard could not see the

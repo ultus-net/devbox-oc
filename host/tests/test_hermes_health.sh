@@ -4,7 +4,7 @@
 # The Hermes health command decides whether podman auto-update keeps a new image,
 # so it has to answer for the API, not for the binary. This runs the script
 # against a real HTTP server on loopback: a 200 with the gateway payload is
-# healthy, and a 401, a wrong body, or nothing listening is not.
+# healthy, and a 3xx, a 4xx, a 5xx, a wrong body, or nothing listening is not.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/../bin/hermes-health.sh"
@@ -20,8 +20,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Three routes: the healthy answer, a 401 that carries the same body (so a
-# missing -f would pass), and a 200 with a body from some other server.
+# Routes that must fail: a 401 and a 302 that carry the healthy body, a 500 that
+# carries it, a 200 with no platform, and a 200 whose platform is another agent
+# while the string hermes-agent appears elsewhere.
 cat > "$tmp/server.py" <<'PY'
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -29,7 +30,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 ROUTES = {
     "/health": (200, b'{"status": "ok", "platform": "hermes-agent"}'),
     "/health-unauthorized": (401, b'{"status": "ok", "platform": "hermes-agent"}'),
+    "/health-redirect": (302, b'{"status": "ok", "platform": "hermes-agent"}'),
+    "/health-error": (500, b'{"status": "ok", "platform": "hermes-agent"}'),
     "/health-wrong": (200, b'{"status": "ok"}'),
+    "/health-foreign": (200, b'{"platform": "other", "name": "hermes-agent"}'),
 }
 
 
@@ -67,8 +71,17 @@ HERMES_HEALTH_URL="$base/health" sh "$script" \
 if HERMES_HEALTH_URL="$base/health-unauthorized" sh "$script" >/dev/null 2>&1; then
   fail "a 401 must be unhealthy, even when the body looks healthy"
 fi
+if HERMES_HEALTH_URL="$base/health-redirect" sh "$script" >/dev/null 2>&1; then
+  fail "a 302 must be unhealthy, even when the body looks healthy"
+fi
+if HERMES_HEALTH_URL="$base/health-error" sh "$script" >/dev/null 2>&1; then
+  fail "a 500 must be unhealthy, even when the body looks healthy"
+fi
 if HERMES_HEALTH_URL="$base/health-wrong" sh "$script" >/dev/null 2>&1; then
-  fail "a 200 from another server must be unhealthy"
+  fail "a 200 with no platform must be unhealthy"
+fi
+if HERMES_HEALTH_URL="$base/health-foreign" sh "$script" >/dev/null 2>&1; then
+  fail "a 200 naming another platform must be unhealthy"
 fi
 # Port 1 on loopback is not listening, which is what a gateway that never bound
 # its port leaves behind.
@@ -82,12 +95,14 @@ mkdir -p "$tmp/bin"
 cat > "$tmp/bin/curl" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "$FAKE_ARGS"
-printf '%s' '{"status": "ok", "platform": "hermes-agent"}'
+printf '%s\n200' '{"status": "ok", "platform": "hermes-agent"}'
 EOF
 chmod 0755 "$tmp/bin/curl"
 FAKE_ARGS="$tmp/args" PATH="$tmp/bin:$PATH" sh "$script" \
   || fail "the default probe did not accept the gateway payload"
-grep -Fq 'http://127.0.0.1:8642/health' "$tmp/args" \
-  || fail "the default probe is not http://127.0.0.1:8642/health: $(cat "$tmp/args")"
+# The URL is the final argument, so this compares it whole: a substring match
+# would accept /health/detailed, which needs a Bearer key the probe does not have.
+[ "$(awk '{print $NF}' "$tmp/args")" = "http://127.0.0.1:8642/health" ] \
+  || fail "the default probe is not exactly http://127.0.0.1:8642/health: $(cat "$tmp/args")"
 
 echo "the Hermes health command accepts the gateway API and rejects everything else"
