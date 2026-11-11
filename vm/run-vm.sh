@@ -156,7 +156,7 @@ agent_cleanup() {
     rm -f "$agent_pid"
   fi
 }
-# shellcheck disable=SC2317  # invoked by the EXIT trap
+# shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap
 cleanup() {
   agent_cleanup
   if [ "${registry_up:-0}" = 1 ]; then
