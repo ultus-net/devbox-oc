@@ -108,20 +108,24 @@ the image and skips the fixture.
 
 ## The rollback fixture
 
-The rollback procedure was never exercised. Re-pointing the real `:prod` tag to
-test it would be a production mutation, so the harness brings its own registry:
+The rollback procedure was never exercised. Moving the recorded digest to test it
+would need new media and a reinstall, so the harness brings its own registry:
 
 1. `vm/fixture-registry.sh` builds a Fedora registry image (`docker-distribution`
    from the Fedora repositories) and runs it on `127.0.0.1:5000`.
 2. It pulls `ghcr.io/ultus-net/devbox:prod`, then builds two tags FROM it with a
-   different fixture file and pushes them as `devbox:older` and `devbox:newer`.
-   The workload is the shipped image; only that file and its label differ.
+   different fixture file and pushes them as `devbox:older` and `devbox:newer`,
+   keeping the digest each push wrote. The workload is the shipped image; only
+   that file and its label differ.
 3. The guest reaches the registry at `10.0.2.2:5000`, the qemu user-network
-   address of host loopback, and the overlay marks that one host insecure.
-4. The guest pulls `:newer`, records the digest it runs, proves a bare restart
-   leaves it unchanged, re-points `:newer` at the older digest exactly as the
-   runbook re-points `:prod`, then pulls and restarts again.
-5. It fails unless the running digest moved to the digest the push wrote.
+   address of host loopback, and the overlay marks that one host insecure. The
+   harness pins the `:newer` push digest, so the booted quadlet carries a digest
+   exactly as the media does.
+4. The guest records the digest it runs, proves a bare restart leaves it
+   unchanged, pulls `:older`, and rewrites `Image=` to that digest the way
+   `docs/runbook.md` rolls a host back. It then reloads the generator and
+   restarts, the steps that make a pinned unit move.
+5. It fails unless the running digest moved to the older digest.
 
 The rehearsal boots an image the record does not name, so `vm/build-ignition.sh`
 sets `ALLOW_UNPINNED_IMAGE` for the build; the shipped media never does. The pin

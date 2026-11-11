@@ -52,18 +52,17 @@ fi
 # fixture host is the harness registry, so its pull says the rehearsal was
 # expected; a published-image report does not require it.
 cat > "$tmp/rollback.txt" <<'EOF'
-PASS image-pull: 10.0.2.2:5000/devbox:newer
+PASS image-pull: 10.0.2.2:5000/devbox@sha256:aaa
 PASS rollback-restart-stable: 10.0.2.2:5000/devbox@sha256:aaa
 PASS rollback-pull-older: 10.0.2.2:5000/devbox:older
-PASS rollback-repoint: 10.0.2.2:5000/devbox:newer
-PASS rollback-pull-newer: 10.0.2.2:5000/devbox:newer
-PASS rollback-digest: sha256:aaa
+PASS rollback-pin: 10.0.2.2:5000/devbox@sha256:bbb
+PASS rollback-digest: sha256:bbb
 PASS rollback-changed: 10.0.2.2:5000/devbox@sha256:bbb
 PASS rollback-timer-restored: active
 SUMMARY failures=0
 EOF
 cat > "$tmp/fixture-no-rollback.txt" <<'EOF'
-PASS image-pull: 10.0.2.2:5000/devbox:newer
+PASS image-pull: 10.0.2.2:5000/devbox@sha256:aaa
 SUMMARY failures=0
 EOF
 cat > "$tmp/published.txt" <<'EOF'

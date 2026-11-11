@@ -110,6 +110,10 @@ All notable changes to this project. One entry per landed change, newest first.
   reviewed commit plus a rebuilt Ignition, and `docs/runbook.md` documents the
   in-place unit edit a rollback needs. The Hermes waiver image still follows its
   upstream tag.
+- The VM rollback rehearsal follows the pinned unit. It boots the digest the
+  fixture push wrote and rewrites `Image=` to the older digest, then reloads the
+  generator and restarts, instead of re-pointing a tag the pinned host no longer
+  follows. `docs/vm.md` describes the steps and the digest the harness keeps.
 - The linter is pinned. The verify workflow installed shellcheck from the runner
   image, so CI reported `SC2329` on a head the local 0.10.0 gate passed. The
   workflow now downloads v0.11.0 and checks its sha256, `tests/verify.sh` fails
