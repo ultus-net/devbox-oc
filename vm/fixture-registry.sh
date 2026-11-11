@@ -82,7 +82,7 @@ seed() {
   # Each step returns on failure: this function runs under a caller that tests
   # its status, where set -e does not fire.
   run podman pull "$base" || return 1
-  local variant
+  local variant digestfile
   for variant in older newer; do
     # The label is the only difference, so both tags carry the shipped image.
     run podman build \
@@ -91,7 +91,14 @@ seed() {
       --build-arg "VARIANT=$variant" \
       -t "$image_repo:$variant" \
       "$here/fixtures" || return 1
-    run podman push --tls-verify=false "$image_repo:$variant" || return 1
+    # The push writes the digest the harness pins in the guest. Truncate first,
+    # so a digest from an earlier run cannot be read as this one's.
+    digestfile="$cache/fixture-$variant.digest"
+    if [ "$plan" = 0 ]; then
+      : > "$digestfile" || return 1
+    fi
+    run podman push --tls-verify=false --digestfile "$digestfile" \
+      "$image_repo:$variant" || return 1
   done
 }
 
@@ -106,6 +113,9 @@ case "${1:-}" in
       exit 1
     fi
     echo "fixture registry ready: $image_repo:newer (older tag also pushed)"
+    if [ "$plan" = 0 ]; then
+      echo "fixture digests: newer $(cat "$cache/fixture-newer.digest") older $(cat "$cache/fixture-older.digest")"
+    fi
     ;;
   down)
     down

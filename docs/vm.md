@@ -108,20 +108,30 @@ the image and skips the fixture.
 
 ## The rollback fixture
 
-The rollback procedure was never exercised. Re-pointing the real `:prod` tag to
-test it would be a production mutation, so the harness brings its own registry:
+The rollback procedure was documented but had no rehearsal. Moving the recorded
+digest to test it would need new media and a reinstall, so the harness brings its
+own registry:
 
 1. `vm/fixture-registry.sh` builds a Fedora registry image (`docker-distribution`
    from the Fedora repositories) and runs it on `127.0.0.1:5000`.
 2. It pulls `ghcr.io/ultus-net/devbox:prod`, then builds two tags FROM it with a
-   different fixture file and pushes them as `devbox:older` and `devbox:newer`.
-   The workload is the shipped image; only that file and its label differ.
+   different fixture file and pushes them as `devbox:older` and `devbox:newer`,
+   keeping the digest each push wrote. The workload is the shipped image; only
+   that file and its label differ.
 3. The guest reaches the registry at `10.0.2.2:5000`, the qemu user-network
-   address of host loopback, and the overlay marks that one host insecure.
-4. The guest pulls `:newer`, records the digest it runs, proves a bare restart
-   leaves it unchanged, re-points `:newer` at the older digest exactly as the
-   runbook re-points `:prod`, then pulls and restarts again.
-5. It fails unless the running digest moved to the digest the push wrote.
+   address of host loopback, and the overlay marks that one host insecure. The
+   harness pins the `:newer` push digest, so the booted quadlet carries a digest
+   exactly as the media does.
+4. The guest records the digest it runs, proves a bare restart leaves it
+   unchanged, pulls `:older`, and rewrites `Image=` to that digest the way
+   `docs/runbook.md` rolls a host back. It then reloads the generator and
+   restarts, the steps that make a pinned unit move.
+5. It fails unless the running digest moved to the older digest.
+
+The rehearsal boots an image the record does not name, so `vm/build-ignition.sh`
+sets `ALLOW_UNPINNED_IMAGE` for the build; the shipped media never does. The pin
+itself is what `os/butane/tests/test_image_pin.sh` asserts, because no fixture
+can carry the recorded digest.
 
 The registry container and the VM are throwaway: the container is removed on
 every exit path, and nothing pushes to GHCR or touches the real `:prod` tag. The
@@ -185,9 +195,9 @@ The guest check asserts, in order:
 | fail closed | with no `secrets.env`, `/etc/opencode/env` does not exist, `oc-env.service` has failed, and OpenCode is inactive |
 | boot | systemd reports a boot target wanting both quadlet units, so a reboot brings them up |
 | secrets | after a dummy `secrets.env`, both env writers are active and their files are 0600 |
-| image | the fixture tag pulls from the loopback registry; `--no-rollback`, `--console` or an explicit `VM_IMAGE` pull `ghcr.io/ultus-net/devbox:prod` |
+| image | the harness boots the digest the fixture `:newer` push wrote; `--no-rollback`, `--console` or an explicit `VM_IMAGE` use the reference they were given, `ghcr.io/ultus-net/devbox:prod` by default |
 | workloads | `opencode` and `hermes` are healthy, 4096, 8642, and 9119 are bound on loopback, and a connection to each loopback port succeeds |
-| rollback | a bare restart leaves the digest unchanged; a re-point moves it to the digest the push wrote |
+| rollback | a bare restart leaves the digest unchanged; rewriting `Image=` to the older digest, then a generator reload and restart, moves it |
 | invariant | no TCP listener is on `0.0.0.0` or `[::]`; the scan names the owning process |
 
 The dummy secrets are `vm-dogfood-not-a-secret` values written inside the
@@ -218,8 +228,9 @@ ships no `cockpit.socket`.
 
 The same run rehearsed the rollback against the fixture registry and reported
 `PASS rollback-restart-stable`, `PASS rollback-pull-older`,
-`PASS rollback-repoint`, `PASS rollback-pull-newer`, `PASS rollback-digest`,
-`PASS rollback-changed`, and `PASS rollback-timer-restored`.
+`PASS rollback-pin`, `PASS rollback-digest`, `PASS rollback-changed`, and
+`PASS rollback-timer-restored`. It booted `sha256:dca354f8…` from the `:newer`
+push digest and rolled back to the `:older` digest `sha256:98238d00…`.
 
 `SUMMARY failures=0` is the line to look for. A `SKIP` is a conditional guard
 whose condition the image does not meet, and the report says which one.
@@ -250,7 +261,7 @@ harness binds `report-agent.py` to `127.0.0.1` only: there is no host port
 forward and no listener on the LAN. The guest posts its report, and the run
 script exits non-zero on any `FAIL` line or on a report that lacks the
 `SUMMARY failures=0` line the guest writes last, so a truncated post cannot read
-as a pass. A run whose guest pulled the fixture image also requires all seven
+as a pass. A run whose guest pulled the fixture image also requires all six
 `PASS rollback-*` lines, so a run that silently skipped the rehearsal fails
 instead of passing. The report is also left at `.vm-cache/report.txt` and
 `/srv/devbox-vm-report.txt` inside the VM.

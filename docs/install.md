@@ -74,13 +74,20 @@ before the USB is written.
 export SSH_PUBKEY="$(cat ~/.ssh/id_ed25519.pub)"
 read -rsp 'Tailscale auth key (empty for keyless): ' TS_AUTHKEY; export TS_AUTHKEY
 export OC_HOSTNAME=devbox
-export IMAGE=ghcr.io/ultus-net/devbox:prod
+export IMAGE=ghcr.io/ultus-net/devbox
 
 BUTANE=/path/to/butane ./os/butane/build.sh
 ```
 
-`IMAGE` must name the package the workflow publishes (it derives the owner from
-`github.repository_owner`). GHCR packages are private by default, and the host
+`IMAGE` names the package the workflow publishes (it derives the owner from
+`github.repository_owner`). The build appends the digest recorded in
+`image/prod-digest.txt` and bakes `<repo>@sha256:<digest>` into the quadlet, so
+the host runs one content digest rather than a tag that can move. The build
+refuses a tag, a reference with an empty path component, a digest that is not the
+recorded one, and a record that holds no digest; promote a build before writing
+the USB.
+
+GHCR packages are private by default, and the host
 pulls anonymously, so set the package visibility to public before installing.
 If it must stay private, add a read-only token and a `podman login ghcr.io` step;
 the container cannot start after an OS reinstall otherwise.

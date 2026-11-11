@@ -59,8 +59,8 @@ for variant in older newer; do
     || fail "the $variant build does not use the published image"
   grep -Fq -- "--build-arg VARIANT=$variant" "$tmp/steps" \
     || fail "the plan does not build the $variant variant"
-  grep -Fqx "plan: podman push --tls-verify=false 127.0.0.1:5099/devbox:$variant" "$tmp/steps" \
-    || fail "the plan does not push $variant to the fixture"
+  grep -Fqx "plan: podman push --tls-verify=false --digestfile $tmp/fixture-$variant.digest 127.0.0.1:5099/devbox:$variant" "$tmp/steps" \
+    || fail "the plan does not push $variant to the fixture with its digest file"
 done
 
 # A push to the real registry would be a production mutation.

@@ -258,7 +258,8 @@ done
 check_absent container-wildcard "0.0.0.0:" "$bindings"
 check_absent container-any-ip "[::]:" "$bindings"
 
-# 9. Rehearse the rollback: a tag re-point moves the digest the host runs.
+# 9. Rehearse the rollback: pinning another digest in the quadlet moves the
+#    digest the host runs.
 #    Only the harness sets ROLLBACK_REPO, to a loopback registry it controls, so
 #    a normal run never touches it.
 if [ -n "$ROLLBACK_REPO" ]; then
@@ -268,7 +269,7 @@ if [ -n "$ROLLBACK_REPO" ]; then
   systemctl stop podman-auto-update.timer >/dev/null 2>&1 || true
 
   # RepoDigests, not the image ID: the runbook proves a rollback by the digest
-  # the tag now names.
+  # the unit now pins.
   running_digests() {
     local id
     id="$(podman inspect --format '{{.Image}}' "$1" 2>/dev/null || true)"
@@ -276,8 +277,8 @@ if [ -n "$ROLLBACK_REPO" ]; then
     podman image inspect --format '{{join .RepoDigests " "}}' "$id" 2>/dev/null || true
   }
 
-  newer="$ROLLBACK_REPO:newer"
   older="$ROLLBACK_REPO:older"
+  unit=/etc/containers/systemd/opencode.container
 
   before="$(running_digests opencode)"
   if [ -n "$before" ]; then
@@ -294,35 +295,34 @@ if [ -n "$ROLLBACK_REPO" ]; then
     fail rollback-pull-older "$older"
   fi
 
-  # Re-point the tag exactly as the runbook re-points :prod: tag the local image,
-  # push the tag, and keep the digest the push wrote.
-  # A digest from an earlier run must not be read as this run's.
-  : > "$report_dir/rollback-digest"
-  if podman tag "$older" "$newer" >/dev/null 2>&1 \
-    && podman push --tls-verify=false --digestfile "$report_dir/rollback-digest" \
-      "$newer" >/dev/null 2>&1; then
-    pass rollback-repoint "$newer"
+  # Roll back the way the runbook does: pin the older digest in the quadlet, let
+  # the generator read it, and restart. A restart alone keeps the digest the unit
+  # already names, so the pin is the step that moves the host.
+  older_digest="$(podman image inspect --format '{{index .RepoDigests 0}}' "$older" 2>/dev/null || true)"
+  older_digest="${older_digest##*@}"
+  pinned="$ROLLBACK_REPO@$older_digest"
+  if [ -n "$older_digest" ] \
+    && sed "s|^Image=.*|Image=$pinned|" "$unit" > "$unit.new" \
+    && grep -qxF "Image=$pinned" "$unit.new" \
+    && install -m 0644 "$unit.new" "$unit"; then
+    pass rollback-pin "$pinned"
   else
-    fail rollback-repoint "$newer"
+    fail rollback-pin "could not pin $pinned in $unit"
   fi
-  expected="$(cat "$report_dir/rollback-digest" 2>/dev/null || true)"
+  rm -f "$unit.new"
 
-  if podman pull "$newer" >/dev/null 2>&1; then
-    pass rollback-pull-newer "$newer"
-  else
-    fail rollback-pull-newer "$newer"
-  fi
+  systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl restart opencode.service >/dev/null 2>&1
   wait_health opencode
   after="$(running_digests opencode)"
-  # An empty expected digest would compare equal to anything, so fail it here.
-  if [ -n "$expected" ]; then
-    check_contains rollback-digest "$expected" "$after"
+  # An empty digest would compare as a substring of anything, so fail it here.
+  if [ -n "$older_digest" ]; then
+    check_contains rollback-digest "$older_digest" "$after"
   else
-    fail rollback-digest "the push wrote no digest"
+    fail rollback-digest "the older tag names no digest"
   fi
   if [ -z "$before" ] || [ "$after" = "$before" ]; then
-    fail rollback-changed "the digest did not move after the re-point: $after"
+    fail rollback-changed "the digest did not move after the pin: $after"
   else
     pass rollback-changed "$after"
   fi

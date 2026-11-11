@@ -214,14 +214,25 @@ if [ "$fixture" = 1 ]; then
   registry_host="10.0.2.2:$registry_port"
   export VM_REGISTRY="$registry_host"
   export VM_ROLLBACK_REPO="$registry_host/devbox"
-  export VM_IMAGE="$registry_host/devbox:newer"
   if [ "$dry_run" = 1 ]; then
-    echo "image: $VM_IMAGE (fixture registry)" >&2
+    # The digest only exists once the push has run, so the plan names the ref the
+    # guest resolves and says where the digest comes from.
+    export VM_IMAGE="$registry_host/devbox:newer"
+    echo "image: $VM_IMAGE (fixture registry, digest from the push)" >&2
   else
     # Mark the container as ours before it exists, so a failed start still runs
     # the cleanup trap.
     registry_up=1
     "$here/fixture-registry.sh" up >&2
+    # The guest boots the digest the push wrote, not the tag, so the rehearsal
+    # runs the same pinned reference the media bakes.
+    newer_digest="$(cat "$cache/fixture-newer.digest" 2>/dev/null || true)"
+    if [ -z "$newer_digest" ]; then
+      echo "the fixture push wrote no newer digest in $cache" >&2
+      exit 1
+    fi
+    export VM_IMAGE="$registry_host/devbox@$newer_digest"
+    echo "image: $VM_IMAGE (fixture registry)" >&2
   fi
 elif [ "$dry_run" = 1 ] && [ "$disks_only" = 0 ]; then
   echo "image: ${VM_IMAGE:-ghcr.io/ultus-net/devbox:prod} (published)" >&2

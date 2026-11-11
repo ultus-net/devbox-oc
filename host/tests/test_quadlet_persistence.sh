@@ -66,6 +66,12 @@ fi
 grep -q '^Image=__IMAGE__$' "$q" \
   || fail "the quadlet image is not the build-substituted placeholder"
 
+# The build writes a digest, and no timer may move it: AutoUpdate=registry pulls
+# whatever the tag now names, which is the content the digest pin refuses.
+if grep -Eq '^AutoUpdate=' "$q"; then
+  fail "the quadlet sets AutoUpdate, so an unattended pull can change the image"
+fi
+
 # The Azure registry is gone with the rest of the Azure design.
 if grep -qi 'azurecr\|azure' "$q"; then
   fail "the quadlet still names an Azure registry"

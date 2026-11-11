@@ -51,15 +51,17 @@ flowchart LR
 | Layer | Built by | Updated by |
 |---|---|---|
 | OS (`ucore-minimal`) | upstream, installed from Fedora CoreOS media then rebased once | `rpm-ostreed-automatic.timer`, staged, applies on next boot |
-| Container image | `.github/workflows/image.yml` into GHCR | `podman auto-update` on the `:prod` tag, kept only if the health check passes |
+| Container image | `.github/workflows/image.yml` into GHCR | a reviewed commit moves the digest in `image/prod-digest.txt`; the media bakes it, and podman verifies the pull against it |
 | Data (`/srv`) | not built | nightly restic backup to an off-box repository |
 
 Fusing the first two would make every OpenCode release an OS rebuild plus a
 reboot. They stay separate on purpose.
 
-The container update is not gated on idleness. `podman-auto-update.timer` fires
-on its own schedule and restarts the container when `:prod` moves. The health
-check decides whether a new image is kept, not whether a session is running.
+The OpenCode container does not update on its own. The Ignition bakes one image
+digest, so `:prod` moving in the registry cannot change what the box runs, and a
+new build lands by a reviewed commit and a rebuilt Ignition. The Hermes waiver
+image still follows its upstream tag: `podman-auto-update.timer` restarts it when
+that tag moves, and keeps the new image only if the health probe passes.
 
 ## Secrets
 
@@ -131,6 +133,7 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `os/butane/tests/test_no_azure.sh` | no Azure endpoint or deleted module survives |
 | `os/butane/tests/test_tailscale_enabled.sh` | `tailscaled` is enabled and orders the join |
 | `os/butane/tests/test_keyless_build.sh` | a keyless build ships no key and keeps the console autologin |
+| `os/butane/tests/test_image_pin.sh` | the build pins the recorded digest and refuses a tag, a foreign digest, and an unpromoted record |
 | `os/butane/tests/test_units_have_scripts.sh` | every unit runs a shipped script, and the artifact reproduces |
 | `os/butane/tests/test_data_mount.sh` | the data disk is mounted by a canonical path, not the `/srv` symlink |
 | `image/tests/test_integrity_logic.sh` | the OpenCode artifact's sha512 is verified, with a negative control |
@@ -176,8 +179,10 @@ mostly the rebase download.
 This is step 0 of `docs/install.md`, and the rehearsal for every host change.
 Nothing in `os/butane/`, `host/`, `image/` or a quadlet should reach the Mini
 without a passing run. The default run also rehearses the container rollback
-against two local fixture tags, so the documented re-point path is executed, not
-assumed. Ignition is first-boot only, so use `--rebuild` after a change.
+against a local fixture registry: it boots the digest the fixture push wrote and
+rewrites `Image=` to the older digest the way the runbook does, so the documented
+rollback is executed, not assumed. Ignition is first-boot only, so use
+`--rebuild` after a change.
 `--console` attaches the serial console and skips the fixture, `--stop` powers
 the VM down, and `--no-rollback` boots the published image. The full procedure,
 the checks, and the limits are in `docs/vm.md`.

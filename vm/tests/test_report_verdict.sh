@@ -52,18 +52,17 @@ fi
 # fixture host is the harness registry, so its pull says the rehearsal was
 # expected; a published-image report does not require it.
 cat > "$tmp/rollback.txt" <<'EOF'
-PASS image-pull: 10.0.2.2:5000/devbox:newer
+PASS image-pull: 10.0.2.2:5000/devbox@sha256:aaa
 PASS rollback-restart-stable: 10.0.2.2:5000/devbox@sha256:aaa
 PASS rollback-pull-older: 10.0.2.2:5000/devbox:older
-PASS rollback-repoint: 10.0.2.2:5000/devbox:newer
-PASS rollback-pull-newer: 10.0.2.2:5000/devbox:newer
-PASS rollback-digest: sha256:aaa
+PASS rollback-pin: 10.0.2.2:5000/devbox@sha256:bbb
+PASS rollback-digest: sha256:bbb
 PASS rollback-changed: 10.0.2.2:5000/devbox@sha256:bbb
 PASS rollback-timer-restored: active
 SUMMARY failures=0
 EOF
 cat > "$tmp/fixture-no-rollback.txt" <<'EOF'
-PASS image-pull: 10.0.2.2:5000/devbox:newer
+PASS image-pull: 10.0.2.2:5000/devbox@sha256:aaa
 SUMMARY failures=0
 EOF
 cat > "$tmp/published.txt" <<'EOF'
@@ -78,6 +77,13 @@ fi
 grep -v '^PASS rollback-timer-restored:' "$tmp/rollback.txt" > "$tmp/rollback-missing.txt"
 if "$verdict" "$tmp/rollback-missing.txt" 2>/dev/null; then
   fail "a fixture report missing one rollback line was accepted"
+fi
+
+# Every required line is load-bearing, so prove it for the pin step too rather
+# than for the last name in the loop alone.
+grep -v '^PASS rollback-pin:' "$tmp/rollback.txt" > "$tmp/rollback-no-pin.txt"
+if "$verdict" "$tmp/rollback-no-pin.txt" 2>/dev/null; then
+  fail "a fixture report with no rollback-pin line was accepted"
 fi
 
 # Teeth: skip the fixture requirement and the rollback-less fixture report must

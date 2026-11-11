@@ -25,7 +25,7 @@ fi
 # caller could forget.
 if grep -q '^PASS image-pull: 10\.0\.2\.2:' "$report"; then
   missing=""
-  for name in restart-stable pull-older repoint pull-newer digest changed timer-restored; do
+  for name in restart-stable pull-older pin digest changed timer-restored; do
     grep -q "^PASS rollback-$name:" "$report" || missing="$missing rollback-$name"
   done
   if [ -n "$missing" ]; then
