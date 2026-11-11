@@ -90,19 +90,27 @@ section() {
     f' "$web"
 }
 
+# Match in the shell, not through `printf | grep -q`. Under `pipefail` that
+# pipeline fails when grep exits at the first match and printf is still writing:
+# SIGPIPE, which reads as a missing phrase. CI failed on exactly that while the
+# same check passed locally. A here-string has the same race on a long body.
+contains() { # $1 haystack, $2 fixed needle, case-insensitive
+  [[ "${1,,}" == *"${2,,}"* ]]
+}
+
 invariant="$(section "## The invariant:")"
 [ -n "$invariant" ] || fail "web-access doc has no invariant section"
 for term in "tailscale funnel" "pair --remote" "service set remote" desktop \
   internet; do
-  printf '%s\n' "$invariant" | grep -Fqi -- "$term" \
+  contains "$invariant" "$term" \
     || fail "web-access invariant does not name: $term"
 done
 
 # The prohibition must be inside the invariant and must stay a prohibition. A
 # rewrite that recommends the routes, or moves the warning elsewhere, fails.
-printf '%s\n' "$invariant" | grep -Fqi "remote access stays off" \
+contains "$invariant" "remote access stays off" \
   || fail "web-access invariant does not keep remote access off"
-printf '%s\n' "$invariant" | grep -Fqi "never use them" \
+contains "$invariant" "never use them" \
   || fail "web-access invariant does not prohibit the OpenTunnel routes"
 grep -Eq 'Never run .opencode pair --remote.' "$web" \
   || fail "web-access doc does not prohibit opencode pair --remote"
@@ -117,14 +125,14 @@ for topic in "tailscale funnel status" "serve reset" "--cors"; do
     "--cors") body="$cors" ;;
     *) body="$verify" ;;
   esac
-  printf '%s\n' "$body" | grep -Fq -- "$topic" \
+  contains "$body" "$topic" \
     || fail "web-access section does not cover: $topic"
 done
 for topic in "api/info" "not on the tailnet"; do
-  printf '%s\n' "$verify" | grep -Fq -- "$topic" \
+  contains "$verify" "$topic" \
     || fail "web-access verify section does not cover: $topic"
 done
-printf '%s\n' "$verify" | grep -Fqi "Available on the internet" \
+contains "$verify" "Available on the internet" \
   || fail "web-access verify does not give the funnel pass condition"
 grep -Fqi "tailnet only" "$web" \
   || fail "web-access doc does not scope the publication to the tailnet"

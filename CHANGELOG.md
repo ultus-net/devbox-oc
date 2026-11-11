@@ -152,7 +152,10 @@ All notable changes to this project. One entry per landed change, newest first.
   checks are a pass/fail table. The runbook's data-disk replacement points at
   that one procedure instead of restating it. `tests/docs_complete.sh` now fails
   a numbered step that loses its Expect or If it fails line, and both failure
-  paths were exercised before the commit.
+  paths were exercised before the commit. Its section checks also match in the
+  shell rather than through `printf | grep -q`, which fails under `pipefail`
+  when grep exits at the first match and printf is still writing. CI failed on
+  that SIGPIPE while the same check passed locally.
 - The gap list says what the first attested publish produced when read by hand:
   an index with an `attestation-manifest` child, SLSA provenance naming the
   builder run and the Fedora toolbox base digest, and an SPDX 2.3 SBOM with 456
