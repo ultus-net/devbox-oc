@@ -178,6 +178,16 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Fixed
 
+- The verify gate only worked from the repo root. `tests/verify.sh` resolved its
+  suite paths, its script `find` and its Butane and shellcheck lookups from
+  `$PWD`, so a run from anywhere else failed on paths that did not exist there.
+  The gate now resolves the repository root from its own path, changes to it, and
+  reads the linter pin and local tools from that root. `tests/test_gate_cwd.sh`
+  runs the gate twice, from the repository root and from a throwaway directory,
+  and requires the same suite lines, the lint step and a pass from both, so a cwd
+  run that found only a subset fails. The child prints its skipped suite instead
+  of dropping it silently, and the suite fails if a workflow ever sets
+  `VERIFY_INNER`.
 - The Hermes health check proved nothing about the workload. `HealthCmd=hermes
   --version` answered whenever the binary ran, so a gateway that never served
   still reported healthy, and `podman auto-update` would keep that image. The
