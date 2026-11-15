@@ -108,14 +108,44 @@ run_apply "$tmp/two-root" "$tmp/two" >/dev/null 2>&1 || rc=$?
 [ "$rc" -ne 0 ] || fail "T5 apply accepted a record with two digests"
 
 # T6: a quadlet carrying a placeholder the renderer does not know fails before it
-# is installed, so no unit with a literal placeholder reaches the generator.
-mkdir -p "$tmp/tree"
-cp -r "$here/../bin" "$here/../quadlet" "$here/../units" "$here/../config" "$tmp/tree/"
-printf '[Container]\nImage=__UNRENDERED__\n' >"$tmp/tree/quadlet/zz-bad.container"
+# is installed, so no unit with a literal placeholder reaches the generator. The
+# tree has the same shape the script requires: host/bin, host/quadlet, host/units.
+mkdir -p "$tmp/tree/host"
+cp -r "$here/../bin" "$here/../quadlet" "$here/../units" "$here/../config" \
+  "$tmp/tree/host/"
+# Positive control first: the same fixture without the bad quadlet must succeed,
+# or the negative case would pass for the wrong reason.
+run_apply "$tmp/control-root" "$tmp/record" "$tmp/tree" >/dev/null \
+  || fail "T6 the fixture tree is rejected before the placeholder check"
+printf '[Container]\nImage=__UNRENDERED__\n' >"$tmp/tree/host/quadlet/zz-bad.container"
 rc=0
 run_apply "$tmp/placeholder-root" "$tmp/record" "$tmp/tree" >/dev/null 2>&1 || rc=$?
 [ "$rc" -ne 0 ] || fail "T6 apply accepted a placeholder it cannot render"
 [ ! -e "$tmp/placeholder-root/etc/containers/systemd/zz-bad.container" ] \
   || fail "T6 apply installed a unit with an unrendered placeholder"
+
+# T7: activation from inside the unit must not block on the workloads it is
+# ordered before, and a manual run must block so the operator sees them up.
+mkdir -p "$tmp/stub"
+cat >"$tmp/stub/systemctl" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >>"$SYSTEMCTL_LOG"
+STUB
+chmod +x "$tmp/stub/systemctl"
+
+activate() {
+  env -u INVOCATION_ID DEVBOX_ROOT="$1" DEVBOX_DIGEST_FILE="$tmp/record" \
+    PATH="$tmp/stub:$PATH" SYSTEMCTL_LOG="$2" "${@:3}" "$script"
+}
+
+activate "$tmp/manual-root" "$tmp/manual.log" >/dev/null \
+  || fail "T7 the manual activation run exited non-zero"
+grep -qx 'start opencode.service hermes.service' "$tmp/manual.log" \
+  || fail "T7 the manual run does not block on the workloads"
+
+activate "$tmp/unit-root" "$tmp/unit.log" INVOCATION_ID=test >/dev/null \
+  || fail "T7 the unit activation run exited non-zero"
+grep -qx 'start --no-block opencode.service hermes.service' "$tmp/unit.log" \
+  || fail "T7 the unit run blocks on a job ordered after it"
 
 echo "devbox-apply renders, masks the doors, and is idempotent"

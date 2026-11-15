@@ -30,8 +30,10 @@ All notable changes to this project. One entry per landed change, newest first.
   inline in the Butane document, so `devbox-apply` has one place to read them.
 - `host/bin/oc-paths` becomes a file rather than an inline here-document.
 - `host/units/devbox-apply.service` re-applies the tree on boot, gated on the tree
-  being present, so a committed change lands by reboot. The first run stays
-  manual, because the unit is installed by the script it runs.
+  being present and ordered before the workloads. It starts them with
+  `--no-block` from inside the unit, because a blocking start would wait on a job
+  ordered after itself; a manual run keeps the blocking start. The first run
+  stays manual, because the unit is installed by the script it runs.
 - `docs/install.md` leads with the Fedora Server procedure: the two sticks, the
   `inst.ks` line, the console tailnet join, the tree clone, the secrets file, the
   apply run, and the reinstall. The ucore procedure stays below it, marked

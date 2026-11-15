@@ -112,8 +112,13 @@ systemctl start srv.mount
 systemctl enable --now oc-paths.service oc-env.service hermes-env.service \
   oc-tailnet.service oc-backup.timer
 # The quadlets declare [Install] WantedBy=default.target, so podman's generator
-# owns their enablement. They need a start, not an enable.
-systemctl start opencode.service hermes.service
+# owns their enablement. They need a start, not an enable. This unit runs before
+# them in the boot order, so a blocking start would wait on its own job and be
+# killed at the timeout. systemd sets INVOCATION_ID for a unit run; a manual run
+# has none and keeps the blocking start, so the operator sees them up.
+start=(systemctl start)
+[ -n "${INVOCATION_ID:-}" ] && start+=(--no-block)
+"${start[@]}" opencode.service hermes.service
 # Hermes follows an upstream tag, so its update is unattended but health-gated.
 systemctl enable --now podman-auto-update.timer
 # Installed by this run, so it can only be enabled now. It re-applies the tree on
