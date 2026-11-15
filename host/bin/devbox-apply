@@ -16,7 +16,7 @@ set -euo pipefail
 TREE="${DEVBOX_TREE:-$(cd "$(dirname "$0")/../.." && pwd)}"
 ROOT="${DEVBOX_ROOT:-}"
 DIGEST_FILE="${DEVBOX_DIGEST_FILE:-$TREE/image/prod-digest.txt}"
-IMAGE_REPO="${DEVBOX_IMAGE_REPO:-ghcr.io/ultus-net/devbox-oc}"
+IMAGE_REPO="${DEVBOX_IMAGE_REPO:-ghcr.io/ultus-net/devbox}"
 # Decision 14: the Hermes control plane is consumed as published and follows its
 # upstream tag. Every other image is pinned by digest.
 HERMES_IMAGE="${DEVBOX_HERMES_IMAGE:-docker.io/nousresearch/hermes-agent:latest}"
@@ -28,15 +28,23 @@ fail() { echo "devbox-apply: $1" >&2; exit 1; }
 [ -d "$TREE/host/quadlet" ] || fail "no quadlets at $TREE/host/quadlet"
 [ -d "$TREE/host/units" ] || fail "no units at $TREE/host/units"
 
-# The digest is the one value the tree cannot carry, because it comes from the
-# build. A tag, an empty file, or a short value fails here rather than at boot.
-digest="$(tr -d '[:space:]' <"$DIGEST_FILE" 2>/dev/null || true)"
-[ -n "$digest" ] || fail "no image digest in $DIGEST_FILE"
-case "$digest" in
-  *[!0-9a-f]*) fail "image digest is not hexadecimal: $digest" ;;
-esac
-[ "${#digest}" -eq 64 ] || fail "image digest is not 64 characters: $digest"
-image="$IMAGE_REPO@sha256:$digest"
+# The data partition must be a mount. /srv exists as a plain directory when
+# srv.mount fails, and writing the layout there would put state on the partition
+# a reinstall wipes. A scratch root is the test fixture, not a boot.
+if [ -z "$ROOT" ]; then
+  mountpoint -q /srv \
+    || fail "/srv is not a mountpoint; the data partition is not mounted"
+fi
+
+# The record is a commented file, not a bare digest: one `sha256:<64 hex>` line
+# under `#` comments. os/butane/image-ref.sh owns that format, so parse the same
+# shape here and refuse anything else. A tag, an empty file, or two digests
+# fails here rather than at boot.
+digest="$(grep -E '^sha256:[0-9a-f]{64}$' "$DIGEST_FILE" 2>/dev/null || true)"
+[ -n "$digest" ] || fail "no promoted digest in $DIGEST_FILE"
+[ "$(printf '%s\n' "$digest" | grep -c .)" -eq 1 ] \
+  || fail "$DIGEST_FILE holds more than one digest"
+image="$IMAGE_REPO@$digest"
 
 install_dir() { install -d -m 0755 "$ROOT$1"; }
 install_file() {
@@ -62,12 +70,13 @@ for f in "$TREE"/host/quadlet/*.container "$TREE"/host/quadlet/*.network; do
   [ -e "$f" ] || continue
   sed -e "s|__IMAGE__|$image|g" -e "s|__HERMES_IMAGE__|$HERMES_IMAGE|g" \
     "$f" >"$render"
-  grep -q '__IMAGE__\|__HERMES_IMAGE__' "$render" \
+  grep -qE '__[A-Z_]+__' "$render" \
     && fail "unrendered placeholder in $(basename "$f")"
   install_file 0644 "$render" "/etc/containers/systemd/$(basename "$f")"
 done
 
-for f in "$TREE"/host/units/*.service; do
+for f in "$TREE"/host/units/*.service "$TREE"/host/units/*.timer; do
+  [ -e "$f" ] || continue
   install_file 0644 "$f" "/etc/systemd/system/$(basename "$f")"
 done
 
@@ -79,7 +88,15 @@ install_file 0644 "$TREE/host/config/10-devbox-resolved.conf" \
 install_file 0644 "$TREE/host/config/10-devbox-cockpit.conf" \
   /etc/systemd/system/cockpit.socket.d/10-devbox.conf
 
-for unit in sleep.target suspend.target hibernate.target hybrid-sleep.target; do
+for unit in sleep.target suspend.target hibernate.target hybrid-sleep.target \
+  suspend-then-hibernate.target; do
+  ln -sfn /dev/null "$ROOT/etc/systemd/system/$unit"
+done
+
+# Decision 17: the console is the only door before the tailnet join, so sshd is
+# masked as well. A root password set in the installer would otherwise open the
+# server firewall profile's SSH port to the LAN.
+for unit in sshd.service sshd.socket; do
   ln -sfn /dev/null "$ROOT/etc/systemd/system/$unit"
 done
 
@@ -93,10 +110,12 @@ systemctl daemon-reload
 # started rather than enabled: systemd-fstab-generator owns its enablement.
 systemctl start srv.mount
 systemctl enable --now oc-paths.service oc-env.service hermes-env.service \
-  oc-tailnet.service
+  oc-tailnet.service oc-backup.timer
 # The quadlets declare [Install] WantedBy=default.target, so podman's generator
 # owns their enablement. They need a start, not an enable.
 systemctl start opencode.service hermes.service
+# Hermes follows an upstream tag, so its update is unattended but health-gated.
+systemctl enable --now podman-auto-update.timer
 # Installed by this run, so it can only be enabled now. It re-applies the tree on
 # boot, which is what makes a committed change land without a second command.
 systemctl enable devbox-apply.service

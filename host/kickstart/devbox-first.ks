@@ -6,7 +6,7 @@
 #
 # The disk is addressed by name rather than by id because the kickstart runs
 # before the operator can inspect it. Confirm the device in the installer with
-# `lsblk` and edit the three `nvme0n1` references if it differs.
+# `lsblk` and edit the five `nvme0n1` references if it differs.
 #
 # Deliberately absent: rootpw, user, and any key. Anaconda prompts for the root
 # password on the console, and the box has no SSH key because the only shell

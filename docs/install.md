@@ -19,14 +19,14 @@ One disk, four partitions, no secret on any install media. The kickstarts live i
 Write the Fedora Server ISO to one stick. Write `host/kickstart/devbox-first.ks`
 to a FAT32 stick labelled `KICKSTART`.
 
-**Success:** `lsblk -o NAME,LABEL` shows `KICKSTART` on the second stick.
+**Expect:** `lsblk -o NAME,LABEL` shows `KICKSTART` on the second stick.
 
-**Failure:** Anaconda reports "no such file" in F2. Recheck the label, not the
-path, because the kickstart is addressed by label.
+**If it fails:** Anaconda reports "no such file" in F2. Recheck the label, not
+the path, because the kickstart is addressed by label.
 
 ### F2. Install from the ISO
 
-Before starting, read the device names with `lsblk` and edit the three
+Before starting, read the device names with `lsblk` and edit the five
 `nvme0n1` references in `devbox-first.ks` if the disk differs. At the boot menu
 press `e` and append:
 
@@ -37,10 +37,10 @@ inst.ks=hd:LABEL=KICKSTART:/devbox-first.ks
 Anaconda runs unattended until it asks for the root password. Type one; it is not
 on any media.
 
-**Success:** the installer finishes and `reboot` reaches a login prompt.
+**Expect:** the installer finishes and `reboot` reaches a login prompt.
 
-**Failure:** a missing package stops the transaction. The kickstart installs only
-Fedora's own packages; Tailscale is added in F3.
+**If it fails:** a missing package stops the transaction. The kickstart installs
+only Fedora's own packages; Tailscale is added in F3.
 
 ### F3. Join the tailnet from the console
 
@@ -54,10 +54,11 @@ systemctl enable --now tailscaled
 tailscale up --ssh --hostname devbox
 ```
 
-**Success:** `tailscale status` lists the node, and the tailnet shows it.
+**Expect:** `tailscale status` lists the node, and the tailnet shows it.
 
-**Failure:** with no tailnet the console remains the only door. Fix the network
-at the keyboard; the recovery path for a revoked node is the same console.
+**If it fails:** with no tailnet the console remains the only door. Fix the
+network at the keyboard; the recovery path for a revoked node is the same
+console.
 
 ### F4. Put the tree on the data partition
 
@@ -66,20 +67,20 @@ install -d -o 1000 -g 1000 /srv/repos
 git clone https://github.com/ultus-net/devbox-oc /srv/repos/devbox-oc
 ```
 
-**Success:** `git -C /srv/repos/devbox-oc log -1` prints a commit, and
+**Expect:** `git -C /srv/repos/devbox-oc log -1` prints a commit, and
 `findmnt /srv` names the fourth partition.
 
-**Failure:** if `/srv` is not a mount, stop. `devbox-apply` refuses to build the
-layout on the OS disk, and `mountpoint -q /srv` is the check.
+**If it fails:** if `/srv` is not a mount, stop. `devbox-apply` refuses to build
+the layout on the OS disk, and `mountpoint -q /srv` is the check.
 
 ### F5. Write the secrets file
 
 Create `/etc/devbox/secrets.env` at mode 0600 with `OPENCODE_PASSWORD`,
 `API_SERVER_KEY` and at least one model provider key.
 
-**Success:** `stat -c %a /etc/devbox/secrets.env` prints `600`.
+**Expect:** `stat -c %a /etc/devbox/secrets.env` prints `600`.
 
-**Failure:** `oc-env` and `hermes-env` fail closed, and both quadlets are
+**If it fails:** `oc-env` and `hermes-env` fail closed, and both quadlets are
 `Requires=` on them, so a missing key stops the workload instead of serving an
 unauthenticated one.
 
@@ -89,12 +90,12 @@ unauthenticated one.
 /srv/repos/devbox-oc/host/bin/devbox-apply
 ```
 
-**Success:** `systemctl is-active opencode.service hermes.service` prints `active`
-twice, and `ss -ltn` shows 4096 on `127.0.0.1` only. `systemctl status
-devbox-apply.service` is enabled, so a later commit lands by reboot.
+**Expect:** `systemctl is-active opencode.service hermes.service` prints `active`
+twice, and `ss -ltn` shows 4096 on `127.0.0.1` only. `devbox-apply.service` is
+enabled, so a later commit lands on the next boot.
 
-**Failure:** the script prints the reason and exits non-zero. It writes nothing
-part-way through a quadlet render.
+**If it fails:** the script prints the reason and exits non-zero. It writes
+nothing part-way through a quadlet render.
 
 ### F7. Publish the surfaces
 
@@ -102,10 +103,10 @@ part-way through a quadlet render.
 systemctl start oc-tailnet.service
 ```
 
-**Success:** `tailscale serve status` lists 443, 8443 and 10000, and the OpenCode
+**Expect:** `tailscale serve status` lists 443, 8443 and 10000, and the OpenCode
 URL answers from another tailnet node.
 
-**Failure:** a serve mount without a TLS certificate means the tailnet has no
+**If it fails:** a serve mount without a TLS certificate means the tailnet has no
 HTTPS names enabled. Turn that on in the admin console; nothing falls back to a
 public listener.
 
@@ -113,8 +114,9 @@ public listener.
 
 Use `devbox-reinstall.ks` with the same `inst.ks=` line. It resets no partition
 table, addresses every partition with `--onpart`, and mounts `/srv` with
-`--noformat --useexisting`, so it formats the OS partition only. Run F4 onwards
-again.
+`--noformat --useexisting`, so it formats the OS partition only. Run F3 onwards
+again: the tailnet package, its state, and the tree all lived on the partition
+the reinstall replaced.
 
 ## Superseded: the ucore procedure
 

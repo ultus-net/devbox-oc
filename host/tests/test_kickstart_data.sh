@@ -38,9 +38,11 @@ case "$data_line" in
 esac
 
 # T3: every partition the reinstall touches is addressed explicitly, so a
-# layout change cannot silently move a format onto the data partition.
+# layout change cannot silently move a format onto the data partition. Count
+# occurrences, not lines: two --onpart flags on one line must not pass.
 parts="$(grep -ac '^part ' "$reinstall")"
-onpart="$(grep -ac -- '--onpart=' "$reinstall")"
+onpart="$(grep -ao -- '--onpart=' "$reinstall" | wc -l)"
+onpart="${onpart//[[:space:]]/}"
 [ "$parts" -eq 4 ] || fail "T3 the reinstall declares $parts partitions, not 4"
 [ "$onpart" -eq "$parts" ] || fail "T3 a reinstall partition is not pinned with --onpart"
 

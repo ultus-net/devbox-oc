@@ -50,7 +50,7 @@ grep -q "First install only" "$root/docs/install.md" \
 # subsections is a container, so the substeps carry the pair.
 awk '
   /^## [0-9]/ { n++; cur = n; lvl[n] = 2; hd[n] = $0; parent = n; next }
-  /^### [0-9]/ { n++; cur = n; lvl[n] = 3; hd[n] = $0; child[parent]++; next }
+  /^### ([0-9]|F[0-9])/ { n++; cur = n; lvl[n] = 3; hd[n] = $0; child[parent]++; next }
   /^## / { cur = 0; parent = 0; next }
   /^\*\*Expect:\*\*/ { if (cur) saw_expect[cur] = 1 }
   /^\*\*If it fails:\*\*/ { if (cur) saw_fail[cur] = 1 }

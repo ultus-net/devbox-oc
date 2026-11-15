@@ -16,12 +16,16 @@ All notable changes to this project. One entry per landed change, newest first.
   file, and that the install disk is pinned.
 - `host/bin/devbox-apply` is the single writer of host configuration, replacing
   the Ignition document that carried the host layer. It installs `host/bin` into
-  `/usr/local/sbin`, renders the pinned image digest into the quadlets, installs
-  `host/units`, writes the always-on and single-door drop-ins, and masks the
-  sleep targets. It fails closed on a digest that is not 64 hex characters, and
-  a second run with the same tree changes nothing. `host/tests/test_apply.sh`
-  proves that by running it twice against a scratch root, including that a
-  failed run writes nothing.
+  `/usr/local/sbin`, renders the promoted digest into the quadlets, installs
+  `host/units`, writes the always-on and single-door drop-ins, masks the sleep
+  targets and `sshd`, and refuses to run when `/srv` is not a mount. It reads the
+  digest in the same `sha256:<64 hex>` shape `os/butane/image-ref.sh` parses, so a
+  commented record or two digests fail closed, and a second run over the same root
+  changes no content or mode. `host/tests/test_apply.sh` proves all of that
+  against a scratch root, including that a failed run writes nothing.
+- `host/units/oc-backup.service` and `.timer` bring the nightly backup to the
+  Fedora path, and `devbox-apply` enables `podman-auto-update.timer` so the
+  Hermes image that follows an upstream tag is refreshed and health-gated.
 - `host/units/` and `host/config/` hold the units and drop-ins that used to be
   inline in the Butane document, so `devbox-apply` has one place to read them.
 - `host/bin/oc-paths` becomes a file rather than an inline here-document.
