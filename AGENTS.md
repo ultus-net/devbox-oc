@@ -8,13 +8,14 @@ two disagree.
 
 ## What this repo is
 
-One always-on HP EliteDesk G4 35W Desktop Mini, two disks, two images. The host
-is ucore-minimal, a Fedora CoreOS derived image consumed from upstream. The
-toolchain runs in a Fedora toolbox container under podman. Two workloads share a
-private podman network: OpenCode, the interactive dev server, and Hermes, the
-assistant that schedules and delegates work to it. Both are reached over a
-private tailnet with no public listener. The data disk is `/srv`, separate from
-the OS disk.
+One always-on HP EliteDesk G4 35W Desktop Mini, one disk, two images. The host is
+Fedora Server, installed from `host/kickstart/` and configured by
+`host/bin/devbox-apply`. The toolchain runs in a Fedora toolbox container under
+podman. Two workloads share a private podman network: OpenCode, the interactive
+dev server, and Hermes, the assistant that schedules and delegates work to it.
+Both are reached over a private tailnet with no public listener. The data
+partition is `/srv`, on the same device as the OS and never formatted after
+creation.
 
 This repo is the source of truth for the host configuration and the container
 image. It ships no cloud infrastructure.
@@ -40,25 +41,29 @@ preference.
 - **Always on. No scheduled stop and no idle deallocation.** Sleep targets are
   masked and logind sets `IdleAction=ignore`. A UPS and firmware power-on after
   AC loss are required. `host/tests/test_nosleep.sh` guards the sleep policy.
-- **The data disk is a separate physical device.** Reinstalling the OS must never
-  destroy `/srv`. It is prepared once from the live media and addressed by
-  `/dev/disk/by-id` then mounted by its `data` label. Ignition never partitions
-  or formats it.
+- **The data partition is written once and never again.** One physical disk holds
+  four partitions, and `/srv` is the labelled fourth. A reinstall uses
+  `clearpart --none`, addresses every partition with `--onpart`, and mounts the
+  data partition with `--noformat --useexisting`.
+  `host/tests/test_kickstart_data.sh` guards all three, so a kickstart that
+  formats `/srv` fails the gate rather than the operator's data.
 - **Runtime secrets come from `/etc/devbox/secrets.env` at first boot.** No
   shipped file may define `OPENCODE_PASSWORD`, `API_SERVER_KEY` or a model
-  provider key by any route, because Ignition ships as the install media's config
-  and stays readable. Only the scoped Tailscale auth key
-  rides the install media, and only in a keyed build. A keyless build
-  (`TS_AUTHKEY` unset) ships no key and the operator joins from the console.
-  `oc-env` writes `/etc/opencode/env` and `hermes-env` writes `/etc/hermes/env`;
-  each fails closed on a missing key and each is `Requires=` by its quadlet.
+  provider key by any route, and no install media carries a secret at all: the
+  operator sets the root password in the installer and joins the tailnet from the
+  console. `oc-env` writes `/etc/opencode/env` and `hermes-env` writes
+  `/etc/hermes/env`; each fails closed on a missing key and each is `Requires=`
+  by its quadlet.
 
-- **A keyless build keeps a console door.** Ignition writes a `getty@tty1`
-  autologin drop-in for `core`, because a keyless box has no tailnet and `sshd`
-  is masked. `os/butane/tests/test_keyless_build.sh` guards the empty key and the
-  drop-in.
-- **Retention stays manual.** `oc-backup` never calls `restic forget` or
-  `restic prune`.
+- **The console is the only door before the tailnet join.** The installer asks for
+  a root password and `devbox-apply` masks `sshd`, so a box with no tailnet is
+  reachable only at the keyboard. That is also the recovery path for a revoked
+  node.
+- **Backups leave by git push to a branch, never to the default branch.** Nothing
+  in this repo pushes: lares measures whether each repository is in sync and
+  queues an operator when it is not. Never force, never rewrite history, never
+  touch a tag, and create the backup branch once per host then reuse it. The
+  git-push backup is tracked by #72; until it lands `oc-backup` still runs restic.
 
 ## Verification
 

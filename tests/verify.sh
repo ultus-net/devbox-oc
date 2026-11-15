@@ -31,6 +31,8 @@ run "tailnet join"           ./host/tests/test_tailnet_up.sh
 run "cockpit loopback"       ./host/tests/test_cockpit_loopback.sh
 run "no LAN listener"        ./host/tests/test_no_lan_listener.sh
 run "no suspend"             ./host/tests/test_nosleep.sh
+run "host apply"             ./host/tests/test_apply.sh
+run "kickstart data"         ./host/tests/test_kickstart_data.sh
 run "quadlet persistence"    ./host/tests/test_quadlet_persistence.sh
 run "quadlet health"         ./host/tests/test_quadlet_health.sh
 run "hermes health probe"    ./host/tests/test_hermes_health.sh

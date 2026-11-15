@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# host/bin/devbox-apply
+#
+# Render the host configuration from this repository into the running host.
+#
+# This script replaces the Ignition document that used to carry the host layer.
+# Ignition runs once per install, so every change to a unit or a script cost a
+# rebuilt image and a reinstall. Here the repository is the source and this
+# script is the only writer, so a change is a commit plus one run.
+#
+# It is idempotent: every file is installed by replacement, never appended, and
+# a second run with the same tree changes nothing. host/tests/test_apply.sh
+# asserts both properties by running it twice against a scratch root.
+set -euo pipefail
+
+TREE="${DEVBOX_TREE:-$(cd "$(dirname "$0")/../.." && pwd)}"
+ROOT="${DEVBOX_ROOT:-}"
+DIGEST_FILE="${DEVBOX_DIGEST_FILE:-$TREE/image/prod-digest.txt}"
+IMAGE_REPO="${DEVBOX_IMAGE_REPO:-ghcr.io/ultus-net/devbox-oc}"
+# Decision 14: the Hermes control plane is consumed as published and follows its
+# upstream tag. Every other image is pinned by digest.
+HERMES_IMAGE="${DEVBOX_HERMES_IMAGE:-docker.io/nousresearch/hermes-agent:latest}"
+NO_ACTIVATE="${DEVBOX_NO_ACTIVATE:-0}"
+
+fail() { echo "devbox-apply: $1" >&2; exit 1; }
+
+[ -d "$TREE/host/bin" ] || fail "no host tree at $TREE/host"
+[ -d "$TREE/host/quadlet" ] || fail "no quadlets at $TREE/host/quadlet"
+[ -d "$TREE/host/units" ] || fail "no units at $TREE/host/units"
+
+# The digest is the one value the tree cannot carry, because it comes from the
+# build. A tag, an empty file, or a short value fails here rather than at boot.
+digest="$(tr -d '[:space:]' <"$DIGEST_FILE" 2>/dev/null || true)"
+[ -n "$digest" ] || fail "no image digest in $DIGEST_FILE"
+case "$digest" in
+  *[!0-9a-f]*) fail "image digest is not hexadecimal: $digest" ;;
+esac
+[ "${#digest}" -eq 64 ] || fail "image digest is not 64 characters: $digest"
+image="$IMAGE_REPO@sha256:$digest"
+
+install_dir() { install -d -m 0755 "$ROOT$1"; }
+install_file() {
+  local mode="$1" src="$2" dst="$3"
+  install -D -m "$mode" "$src" "$ROOT$dst"
+}
+
+for dir in /usr/local/sbin /etc/systemd/system /etc/containers/systemd \
+  /etc/devbox /etc/systemd/logind.conf.d /etc/systemd/resolved.conf.d \
+  /etc/systemd/system/cockpit.socket.d; do
+  install_dir "$dir"
+done
+
+for f in "$TREE"/host/bin/*; do
+  install_file 0755 "$f" "/usr/local/sbin/$(basename "$f")"
+done
+
+# Quadlets are rendered into a temporary file first, so a failure part-way
+# through cannot leave a unit with a placeholder image name on disk.
+render="$(mktemp)"
+trap 'rm -f "$render"' EXIT
+for f in "$TREE"/host/quadlet/*.container "$TREE"/host/quadlet/*.network; do
+  [ -e "$f" ] || continue
+  sed -e "s|__IMAGE__|$image|g" -e "s|__HERMES_IMAGE__|$HERMES_IMAGE|g" \
+    "$f" >"$render"
+  grep -q '__IMAGE__\|__HERMES_IMAGE__' "$render" \
+    && fail "unrendered placeholder in $(basename "$f")"
+  install_file 0644 "$render" "/etc/containers/systemd/$(basename "$f")"
+done
+
+for f in "$TREE"/host/units/*.service; do
+  install_file 0644 "$f" "/etc/systemd/system/$(basename "$f")"
+done
+
+# Always on. Decision 6: this host never suspends or idles down.
+install_file 0644 "$TREE/host/config/10-devbox-login.conf" \
+  /etc/systemd/logind.conf.d/10-devbox-login.conf
+install_file 0644 "$TREE/host/config/10-devbox-resolved.conf" \
+  /etc/systemd/resolved.conf.d/10-devbox-resolved.conf
+install_file 0644 "$TREE/host/config/10-devbox-cockpit.conf" \
+  /etc/systemd/system/cockpit.socket.d/10-devbox.conf
+
+for unit in sleep.target suspend.target hibernate.target hybrid-sleep.target; do
+  ln -sfn /dev/null "$ROOT/etc/systemd/system/$unit"
+done
+
+if [ "$NO_ACTIVATE" = "1" ]; then
+  echo "devbox-apply: wrote configuration under ${ROOT:-/}, activation skipped"
+  exit 0
+fi
+
+systemctl daemon-reload
+# The data mount comes from /etc/fstab, which the installer writes, so it is
+# started rather than enabled: systemd-fstab-generator owns its enablement.
+systemctl start srv.mount
+systemctl enable --now oc-paths.service oc-env.service hermes-env.service \
+  oc-tailnet.service
+# The quadlets declare [Install] WantedBy=default.target, so podman's generator
+# owns their enablement. They need a start, not an enable.
+systemctl start opencode.service hermes.service
+# Installed by this run, so it can only be enabled now. It re-applies the tree on
+# boot, which is what makes a committed change land without a second command.
+systemctl enable devbox-apply.service
+echo "devbox-apply: host configuration applied"

@@ -1,16 +1,126 @@
 # Install the devbox on the HP EliteDesk Mini
 
-**Status:** the recorded first-install procedure. No step here has run on the
-Mini. The VM rehearsal in step 0 runs the same Ignition, and it passes.
+**Status:** two procedures live here. The Fedora Server path below is the current
+one and has not run on the Mini. The ucore path from `## 0. Rehearse in a VM`
+downward is superseded and is deleted in #73.
 
-This is the first install path. It assumes physical access, a wired network, two
-disks, and a second machine to prepare the USB sticks and reach the box later.
 Read `docs/design.md` first; the decisions there explain why the steps are in
-this order.
+this order. Every step has three parts: the command, what success looks like, and
+what to do when it fails. Run the steps in order, and do not skip a check. A
+command that prints an error is a stop, not a warning.
 
-Every step has three parts: the command, what success looks like, and what to do
-when it fails. Run the steps in order, and do not skip a check. A command that
-prints an error is a stop, not a warning.
+## Fedora Server install (current path)
+
+One disk, four partitions, no secret on any install media. The kickstarts live in
+`host/kickstart/` and `host/tests/test_kickstart_data.sh` guards the reinstall.
+
+### F1. Prepare two USB sticks
+
+Write the Fedora Server ISO to one stick. Write `host/kickstart/devbox-first.ks`
+to a FAT32 stick labelled `KICKSTART`.
+
+**Success:** `lsblk -o NAME,LABEL` shows `KICKSTART` on the second stick.
+
+**Failure:** Anaconda reports "no such file" in F2. Recheck the label, not the
+path, because the kickstart is addressed by label.
+
+### F2. Install from the ISO
+
+Before starting, read the device names with `lsblk` and edit the three
+`nvme0n1` references in `devbox-first.ks` if the disk differs. At the boot menu
+press `e` and append:
+
+```
+inst.ks=hd:LABEL=KICKSTART:/devbox-first.ks
+```
+
+Anaconda runs unattended until it asks for the root password. Type one; it is not
+on any media.
+
+**Success:** the installer finishes and `reboot` reaches a login prompt.
+
+**Failure:** a missing package stops the transaction. The kickstart installs only
+Fedora's own packages; Tailscale is added in F3.
+
+### F3. Join the tailnet from the console
+
+Log in as `root` at the console. There is no SSH listener: `devbox-apply` masks
+`sshd`, and the tailnet is the only door after this step.
+
+```sh
+dnf config-manager addrepo --from-repofile=https://pkgs.tailscale.com/stable/fedora/repo
+dnf install -y tailscale
+systemctl enable --now tailscaled
+tailscale up --ssh --hostname devbox
+```
+
+**Success:** `tailscale status` lists the node, and the tailnet shows it.
+
+**Failure:** with no tailnet the console remains the only door. Fix the network
+at the keyboard; the recovery path for a revoked node is the same console.
+
+### F4. Put the tree on the data partition
+
+```sh
+install -d -o 1000 -g 1000 /srv/repos
+git clone https://github.com/ultus-net/devbox-oc /srv/repos/devbox-oc
+```
+
+**Success:** `git -C /srv/repos/devbox-oc log -1` prints a commit, and
+`findmnt /srv` names the fourth partition.
+
+**Failure:** if `/srv` is not a mount, stop. `devbox-apply` refuses to build the
+layout on the OS disk, and `mountpoint -q /srv` is the check.
+
+### F5. Write the secrets file
+
+Create `/etc/devbox/secrets.env` at mode 0600 with `OPENCODE_PASSWORD`,
+`API_SERVER_KEY` and at least one model provider key.
+
+**Success:** `stat -c %a /etc/devbox/secrets.env` prints `600`.
+
+**Failure:** `oc-env` and `hermes-env` fail closed, and both quadlets are
+`Requires=` on them, so a missing key stops the workload instead of serving an
+unauthenticated one.
+
+### F6. Apply the host configuration
+
+```sh
+/srv/repos/devbox-oc/host/bin/devbox-apply
+```
+
+**Success:** `systemctl is-active opencode.service hermes.service` prints `active`
+twice, and `ss -ltn` shows 4096 on `127.0.0.1` only. `systemctl status
+devbox-apply.service` is enabled, so a later commit lands by reboot.
+
+**Failure:** the script prints the reason and exits non-zero. It writes nothing
+part-way through a quadlet render.
+
+### F7. Publish the surfaces
+
+```sh
+systemctl start oc-tailnet.service
+```
+
+**Success:** `tailscale serve status` lists 443, 8443 and 10000, and the OpenCode
+URL answers from another tailnet node.
+
+**Failure:** a serve mount without a TLS certificate means the tailnet has no
+HTTPS names enabled. Turn that on in the admin console; nothing falls back to a
+public listener.
+
+### Reinstall
+
+Use `devbox-reinstall.ks` with the same `inst.ks=` line. It resets no partition
+table, addresses every partition with `--onpart`, and mounts `/srv` with
+`--noformat --useexisting`, so it formats the OS partition only. Run F4 onwards
+again.
+
+## Superseded: the ucore procedure
+
+Everything below describes the ucore-minimal host that decisions 17-20 replace.
+It is kept until #73 deletes it, so the diff that removes it is reviewable.
+
 
 ## Before you start
 

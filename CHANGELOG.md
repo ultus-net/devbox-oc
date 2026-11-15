@@ -6,6 +6,46 @@ All notable changes to this project. One entry per landed change, newest first.
 
 ### Added
 
+- The host is Fedora Server on one disk, and the box is disposable.
+  `host/kickstart/` holds the first-install and reinstall kickstarts: four
+  partitions, the fourth a labelled data partition mounted at `/srv`. The
+  reinstall pins `clearpart --none`, addresses every partition with `--onpart`,
+  and mounts the data partition with `--noformat --useexisting`, so a reinstall
+  formats the OS partition only. `host/tests/test_kickstart_data.sh` parses both
+  documents and asserts those three properties, that no credential rides either
+  file, and that the install disk is pinned.
+- `host/bin/devbox-apply` is the single writer of host configuration, replacing
+  the Ignition document that carried the host layer. It installs `host/bin` into
+  `/usr/local/sbin`, renders the pinned image digest into the quadlets, installs
+  `host/units`, writes the always-on and single-door drop-ins, and masks the
+  sleep targets. It fails closed on a digest that is not 64 hex characters, and
+  a second run with the same tree changes nothing. `host/tests/test_apply.sh`
+  proves that by running it twice against a scratch root, including that a
+  failed run writes nothing.
+- `host/units/` and `host/config/` hold the units and drop-ins that used to be
+  inline in the Butane document, so `devbox-apply` has one place to read them.
+- `host/bin/oc-paths` becomes a file rather than an inline here-document.
+- `host/units/devbox-apply.service` re-applies the tree on boot, gated on the tree
+  being present, so a committed change lands by reboot. The first run stays
+  manual, because the unit is installed by the script it runs.
+- `docs/install.md` leads with the Fedora Server procedure: the two sticks, the
+  `inst.ks` line, the console tailnet join, the tree clone, the secrets file, the
+  apply run, and the reinstall. The ucore procedure stays below it, marked
+  superseded, until #73 deletes it.
+- The Hermes health script is installed to `/usr/local/sbin`, matching where
+  `devbox-apply` puts every other host script. The quadlet's bind mount and
+  health command move with it.
+
+### Changed
+
+- These changes supersede parts of decisions 2, 5, 8, 10, 11, 13 and the host
+  half of 15 in `docs/design.md`. The ucore layer those describe is deleted in
+  the follow-up tracked by #73, which also rebuilds `vm/` on the kickstart and
+  rewrites `docs/install.md` and `docs/runbook.md`. Until that lands, the ucore
+  procedure remains the shipped one and this path is written but unrun.
+- Decision 20 records git-push backups and lares verification. The migration
+  from restic is tracked by #72, so `oc-backup` still runs restic until it lands.
+
 - `docs/vm-host.md` records a hypervisor-hosted guest as an option, not a
   shipped target: what the move keeps, what it changes (the data-disk
   guarantee, power policy, the console door, and Ignition delivery), what has to

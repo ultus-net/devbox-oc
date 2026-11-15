@@ -1,0 +1,12 @@
+[Unit]
+Description=Write the OpenCode environment file from secrets.env
+Requires=srv.mount
+After=srv.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/oc-env
+
+[Install]
+WantedBy=multi-user.target

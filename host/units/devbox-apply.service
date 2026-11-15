@@ -1,0 +1,18 @@
+[Unit]
+Description=Re-apply host configuration from the tracked repository
+# Convergence on boot, not the first install. The tree is a git clone on the data
+# partition, so a host whose tree is absent or moved skips cleanly instead of
+# failing the boot. The first run is always manual: this unit is installed by the
+# same script it runs, so it cannot exist before one run has completed.
+ConditionPathExists=/srv/repos/devbox-oc/host/bin/devbox-apply
+After=network-online.target srv.mount
+Wants=network-online.target
+Requires=srv.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/srv/repos/devbox-oc/host/bin/devbox-apply
+
+[Install]
+WantedBy=multi-user.target
