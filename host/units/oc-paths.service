@@ -1,0 +1,13 @@
+[Unit]
+Description=Create the persistent directory layout on the data partition
+Requires=srv.mount
+After=srv.mount
+Before=opencode.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/oc-paths
+
+[Install]
+WantedBy=multi-user.target

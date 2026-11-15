@@ -128,6 +128,8 @@ BUTANE=/path/to/butane ./tests/verify.sh
 | `host/tests/test_cockpit_loopback.sh` | a shipped Cockpit socket is bound to loopback and is not published |
 | `host/tests/test_no_lan_listener.sh` | sshd is masked and no unit declares a non-loopback listener |
 | `host/tests/test_nosleep.sh` | sleep targets are masked and `IdleAction=ignore` is set |
+| `host/tests/test_apply.sh` | `devbox-apply` renders the digest, masks the sleep targets, writes the always-on and single-door drop-ins, and is idempotent |
+| `host/tests/test_kickstart_data.sh` | the reinstall kickstart resets no partition table, pins every partition with `--onpart`, and never formats `/srv` |
 | `host/tests/test_quadlet_persistence.sh` | persistent data is on the data disk and the workload fails closed |
 | `host/tests/test_quadlet_health.sh` | both quadlet health commands probe the API each workload serves, not a version print |
 | `host/tests/test_hermes_health.sh` | the Hermes probe accepts only a 200 with the gateway platform and rejects 3xx, 4xx, 5xx, a foreign body, or a refused port |

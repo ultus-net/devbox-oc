@@ -1,0 +1,12 @@
+#!/bin/sh
+# host/bin/oc-paths
+#
+# Create the persistent directory layout on the data partition. The quadlets bind
+# these paths, so a missing directory is a container that starts with an empty
+# writable layer and loses state on the next restart.
+set -eu
+
+install -d -o 1000 -g 1000 \
+  /srv/repos \
+  /srv/opencode/share /srv/opencode/config /srv/opencode/state \
+  /srv/hermes/data

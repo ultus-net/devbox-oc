@@ -12,7 +12,7 @@
 # Serve only accepts 443, 8443 and 10000 for HTTPS, which is why those three.
 # Each invocation sets one mount, and running it again is idempotent.
 #
-# Cockpit ships with ucore but is rebound to loopback by an Ignition drop-in and
+# Cockpit ships with Fedora Server but is rebound to loopback by a drop-in and
 # is deliberately not published here. Use Tailscale SSH for a shell.
 set -euo pipefail
 

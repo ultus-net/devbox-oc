@@ -29,7 +29,7 @@ Volume=/srv/opencode/config:/home/dev/.config/opencode:Z
 Volume=/srv/opencode/state:/home/dev/.local/state/opencode:Z
 # No AutoUpdate=registry: the image reference is a digest, so no timer can move
 # it, and an unattended pull would run content the operator never reviewed. The
-# pin moves by a reviewed commit, a rebuilt Ignition, and a reinstall.
+# pin moves by a reviewed commit and one devbox-apply run.
 
 # The health command is what defines "up" for the guest check and for an
 # operator. It probes /api/info and treats 401 as healthy, which is the server up

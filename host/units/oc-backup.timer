@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly restic backup of the data partition
+# Decision 20 replaces this with git pushes to a per-host branch (#72). Until
+# that lands the timer keeps the shipped restic path running.
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

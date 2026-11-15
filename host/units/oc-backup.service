@@ -1,0 +1,18 @@
+[Unit]
+Description=Back up the data partition with restic
+After=srv.mount network-online.target
+Wants=network-online.target
+Requires=srv.mount
+
+[Service]
+Type=oneshot
+Nice=10
+IOSchedulingClass=idle
+# Stop the workloads so neither SQLite store is captured mid-write. The leading -
+# keeps the backup running if the stop already happened.
+ExecStartPre=-/usr/bin/systemctl stop hermes.service
+ExecStartPre=-/usr/bin/systemctl stop opencode.service
+ExecStart=/usr/local/sbin/oc-backup
+# Run after success or failure, so a failed backup never leaves a server down.
+ExecStopPost=-/usr/bin/systemctl start opencode.service
+ExecStopPost=-/usr/bin/systemctl start hermes.service

@@ -35,9 +35,11 @@ health_bin() {
   # failure this guard exists to prevent.
   [ "$cmd" = "$bin" ] || fail "the $label health command carries extra arguments: $cmd"
 
+  # Host scripts live in /usr/local/sbin and the image-owned ones in
+  # /usr/local/bin. Both are absolute, so both are acceptable.
   case "$bin" in
-    /usr/local/bin/*) ;;
-    *) fail "the $label health command is not an absolute path under /usr/local/bin: $bin" ;;
+    /usr/local/bin/* | /usr/local/sbin/*) ;;
+    *) fail "the $label health command is not an absolute path under /usr/local/{bin,sbin}: $bin" ;;
   esac
   printf '%s\n' "$bin"
 }

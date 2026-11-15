@@ -249,6 +249,46 @@ design rejected and this one keeps rejected.
     than extend it. The option stays unverified until a guest boots on the real
     hypervisor.
 
+17. **The host is Fedora Server, and the box is disposable.** This supersedes 1,
+    2, 8, 13, and the host half of 15. There is no host image, no rebase, and no
+    Butane document: the installer runs from `host/kickstart/` and the host comes
+    up on Fedora Server with podman. Recovery is a reinstall, which takes minutes
+    and preserves `/srv` (decision 19). Secure Boot stays on with Fedora's signed
+    shim and kernel, which the ucore path could not offer until its signing key
+    was enrolled. No key rides the install media: the operator joins the tailnet
+    from the console, so the clear-text key warning at `docs/install.md:257`
+    disappears with the media path. Decision 6's always-on policy, decision 7's
+    secrets file and decision 9's single door are unchanged.
+
+18. **Host configuration is applied from the repository, not from an install
+    artifact.** This supersedes 11. `host/bin/devbox-apply` is the only writer:
+    it installs the scripts, units, quadlets, and drop-ins under `host/`, renders
+    the pinned digest (decision 15), and changes nothing on a second run. A host
+    change is a commit and one run, not a rebuilt image and a reinstall, which is
+    the cost Ignition charged for every unit edit. The script is small on
+    purpose: it is a host shell script, so it stays shellcheck-clean and a
+    behaviour that needs more room belongs in the container instead.
+
+19. **One disk, four partitions; only the first three are the OS.** This
+    supersedes 5. The ESP, `/boot`, and `/` are reformatted on every reinstall.
+    The fourth partition is labelled `data`, mounted at `/srv`, and the reinstall
+    kickstart mounts it with `--noformat --useexisting` and resets no partition
+    table. The guarantee is now procedural rather than physical, so
+    `host/tests/test_kickstart_data.sh` guards the document, and a drive failure
+    is covered only by decision 20. That trade was made deliberately: one disk
+    is one device to fit, and every payload that matters is tracked in git.
+
+20. **Backups leave the box by git push, and lares verifies them.** This
+    supersedes 10. Scheduled pushes move tracked repositories to a branch on a
+    remote, created once per host and reused. Nothing pushes to the default
+    branch, forces, or rewrites history, and the branch namespace keeps a backup
+    out of the review flow. lares measures whether each repository is in sync
+    and queues an operator when it is not; it does not perform the push. The
+    migration is tracked by #72: until it lands, `oc-backup` still runs restic
+    and `secrets.env` still carries its credentials. State that git cannot hold,
+    chiefly the OpenCode session database, is out of scope by decision and is
+    expected to die with the disk.
+
 ## Secrets
 
 | Secret | Where it lives | Written by |

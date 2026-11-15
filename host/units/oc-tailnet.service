@@ -1,0 +1,13 @@
+[Unit]
+Description=Join the tailnet and serve the workloads over TLS
+After=network-online.target tailscaled.service
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/oc-tailnet-up
+ExecStart=/usr/local/sbin/oc-tailnet
+
+[Install]
+WantedBy=multi-user.target
